@@ -6,10 +6,16 @@ Aplicativo em Next.js que conecta vídeos, apostilas, metas, sessões de foco e 
 
 - envio de vídeo ou áudio e link público do Google Drive;
 - transcrição em português pela OpenAI;
-- leitura de apostilas em PDF;
+- leitura de apostilas em PDF diretamente no navegador, sem limite de envio da Vercel;
 - comparação entre a aula e a apostila, com tópicos cobertos, parciais e lacunas;
 - timer flip de 50 minutos e pausa de 10 minutos;
 - metas persistidas no navegador;
+- visual “black edition” com navegação responsiva;
+- criação de planos de estudo personalizados por prazo, frequência, duração e prioridades;
+- sistema Ascensão com níveis, XP, ranks e histórico de esforço;
+- registro integrado de corrida, força, leitura, estudo, projetos e comunicação;
+- seis atributos de desenvolvimento: Corpo, Intelecto, Disciplina, Comunicação, Capital e Liderança;
+- quatro arquétipos de longo prazo, com requisitos, marcos e rotas de 3 a 6 anos;
 - quizzes e flashcards gerados a partir do material;
 - tutor contextual conectado à aula, apostila e mapeamento;
 - layout responsivo para computador e celular.
@@ -37,4 +43,4 @@ Depois da primeira conexão, cada atualização enviada para a branch `main` ger
 
 - O arquivo enviado para transcrição deve ter até 25 MB.
 - O link do Google Drive precisa estar liberado como “qualquer pessoa com o link”.
-- A apostila precisa conter texto pesquisável. PDFs apenas digitalizados precisam de OCR.
+- A apostila pode ter até 40 MB e precisa conter texto pesquisável. PDFs apenas digitalizados precisam de OCR.
