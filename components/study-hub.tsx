@@ -48,6 +48,8 @@ import {
   Zap,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { RankAssessment } from "@/components/rank-assessment";
+import type { AssessmentResult, SkillKey, SkillLevels } from "@/lib/assessment";
 
 type Tab = "dashboard" | "evolution" | "sessions" | "mapping" | "plans" | "review";
 type TopicStatus = "planned" | "covered" | "partial" | "gap";
@@ -81,8 +83,7 @@ type PlanSession = {
   done: boolean;
 };
 type StudyWeek = { week: number; theme: string; sessions: PlanSession[] };
-type SkillKey = "body" | "knowledge" | "discipline" | "communication" | "capital" | "leadership";
-type SkillLevels = Record<SkillKey, number>;
+type StudyPlanRecord = { id: string; name: string; createdAt: string; weeks: StudyWeek[] };
 type EvolutionLog = {
   id: number;
   sourceId?: string;
@@ -102,6 +103,8 @@ type Archetype = {
   requirements: Partial<SkillLevels>;
   milestones: string[];
   phases: { period: string; name: string; actions: string[] }[];
+  dailyProtocol: string[];
+  weeklyPath: { day: string; focus: string; actions: string[] }[];
 };
 
 const initialMapping: Mapping = {
@@ -167,12 +170,12 @@ const skillMeta: Record<SkillKey, { label: string; description: string }> = {
 };
 
 const initialSkills: SkillLevels = {
-  body: 34,
-  knowledge: 29,
-  discipline: 31,
-  communication: 24,
-  capital: 18,
-  leadership: 16,
+  body: 0,
+  knowledge: 0,
+  discipline: 0,
+  communication: 0,
+  capital: 0,
+  leadership: 0,
 };
 
 const activityTypes: Record<EvolutionLog["type"], { label: string; skill: SkillKey; xpRate: number }> = {
@@ -200,6 +203,16 @@ const archetypes: Archetype[] = [
       { period: "18–36 meses", name: "Construtor", actions: ["Criar mapas entre áreas", "Ensinar publicamente", "Produzir análises autorais mensais"] },
       { period: "3–5 anos", name: "Sábio", actions: ["Publicar um sistema próprio", "Formar outras pessoas", "Ser referência por profundidade, não volume"] },
     ],
+    dailyProtocol: ["45 min de leitura profunda", "20 min de notas conectadas", "Explicar uma ideia sem consulta", "10 min de revisão e pergunta aberta"],
+    weeklyPath: [
+      { day: "Segunda", focus: "Fundamentos", actions: ["Estudar um conceito-base", "Criar 3 notas permanentes"] },
+      { day: "Terça", focus: "Conexões", actions: ["Relacionar duas áreas", "Desenhar um mapa mental"] },
+      { day: "Quarta", focus: "Argumentação", actions: ["Escrever uma tese curta", "Buscar uma objeção forte"] },
+      { day: "Quinta", focus: "Ensino", actions: ["Explicar por 10 minutos", "Corrigir pontos de dúvida"] },
+      { day: "Sexta", focus: "Síntese", actions: ["Resumir a semana em uma página", "Escolher a próxima pergunta"] },
+      { day: "Sábado", focus: "Obra longa", actions: ["90 min de projeto autoral", "Organizar referências"] },
+      { day: "Domingo", focus: "Reflexão", actions: ["Revisar notas", "Planejar o ciclo seguinte"] },
+    ],
   },
   {
     id: "entrepreneur",
@@ -215,6 +228,16 @@ const archetypes: Archetype[] = [
       { period: "6–18 meses", name: "Operador", actions: ["Vender uma oferta validada", "Documentar processos", "Acompanhar margem, retenção e caixa"] },
       { period: "18–36 meses", name: "Construtor", actions: ["Criar receita previsível", "Delegar operações", "Formar reserva e reinvestir com critério"] },
       { period: "3–5 anos", name: "Empresário", actions: ["Liderar por indicadores", "Criar vantagem competitiva", "Desenvolver novos líderes"] },
+    ],
+    dailyProtocol: ["Conversar com 1 cliente ou usuário", "60 min construindo ou vendendo", "Revisar caixa e indicador principal", "Registrar uma decisão e seu motivo"],
+    weeklyPath: [
+      { day: "Segunda", focus: "Mercado", actions: ["Entrevistar cliente", "Atualizar lista de problemas"] },
+      { day: "Terça", focus: "Oferta", actions: ["Melhorar proposta de valor", "Fazer 5 contatos comerciais"] },
+      { day: "Quarta", focus: "Produto", actions: ["Entregar melhoria mensurável", "Observar uso real"] },
+      { day: "Quinta", focus: "Vendas", actions: ["Apresentar oferta", "Tratar objeções por escrito"] },
+      { day: "Sexta", focus: "Números", actions: ["Revisar receita, margem e caixa", "Eliminar um desperdício"] },
+      { day: "Sábado", focus: "Sistema", actions: ["Documentar um processo", "Automatizar uma tarefa"] },
+      { day: "Domingo", focus: "Direção", actions: ["Revisar aprendizados", "Definir uma aposta da semana"] },
     ],
   },
   {
@@ -232,6 +255,16 @@ const archetypes: Archetype[] = [
       { period: "18–36 meses", name: "Competidor", actions: ["Executar ciclos específicos", "Aumentar volume com segurança", "Dominar estratégia de prova"] },
       { period: "3–4 anos", name: "Atleta", actions: ["Sustentar alto desempenho", "Transformar disciplina em identidade", "Ajudar outros pelo exemplo"] },
     ],
+    dailyProtocol: ["10 min de mobilidade", "Executar o treino do ciclo ou recuperação ativa", "Registrar carga e percepção de esforço", "Proteger sono, hidratação e alimentação"],
+    weeklyPath: [
+      { day: "Segunda", focus: "Força", actions: ["Treino de força principal", "Mobilidade de quadril e tornozelo"] },
+      { day: "Terça", focus: "Base aeróbica", actions: ["Cardio leve", "Respiração e recuperação"] },
+      { day: "Quarta", focus: "Técnica", actions: ["Treino técnico", "Core e estabilidade"] },
+      { day: "Quinta", focus: "Intensidade", actions: ["Sessão de qualidade adequada ao nível", "Registrar resposta corporal"] },
+      { day: "Sexta", focus: "Recuperação", actions: ["Caminhada ou mobilidade", "Revisar sono e fadiga"] },
+      { day: "Sábado", focus: "Longo", actions: ["Sessão longa progressiva", "Nutrição e hidratação planejadas"] },
+      { day: "Domingo", focus: "Reconstrução", actions: ["Descanso", "Planejar cargas da próxima semana"] },
+    ],
   },
   {
     id: "leader",
@@ -247,6 +280,16 @@ const archetypes: Archetype[] = [
       { period: "6–18 meses", name: "Influência", actions: ["Conduzir reuniões", "Resolver conflitos com clareza", "Assumir entregas maiores"] },
       { period: "18–36 meses", name: "Gestor", actions: ["Delegar com contexto", "Desenvolver talentos", "Criar sistemas de acompanhamento"] },
       { period: "4–6 anos", name: "Líder", actions: ["Alocar capital com responsabilidade", "Definir visão de longo prazo", "Multiplicar capacidade por meio de pessoas"] },
+    ],
+    dailyProtocol: ["Definir as 3 prioridades do dia", "Tomar uma decisão com critérios explícitos", "Dar contexto ou feedback a alguém", "Revisar responsabilidade, impacto e pendências"],
+    weeklyPath: [
+      { day: "Segunda", focus: "Direção", actions: ["Definir resultados da semana", "Alinhar responsáveis"] },
+      { day: "Terça", focus: "Pessoas", actions: ["Dar feedback específico", "Remover um bloqueio da equipe"] },
+      { day: "Quarta", focus: "Decisão", actions: ["Analisar uma decisão difícil", "Registrar premissas e riscos"] },
+      { day: "Quinta", focus: "Comunicação", actions: ["Conduzir conversa ou reunião", "Confirmar entendimento"] },
+      { day: "Sexta", focus: "Entrega", actions: ["Revisar indicadores", "Cobrar acordos com respeito"] },
+      { day: "Sábado", focus: "Capacidade", actions: ["Estudar liderança ou estratégia", "Mentorar uma pessoa"] },
+      { day: "Domingo", focus: "Caráter", actions: ["Revisar decisões e consequências", "Planejar com margem e clareza"] },
     ],
   },
 ];
@@ -304,10 +347,13 @@ export function StudyHub() {
   const [planDays, setPlanDays] = useState(5);
   const [planMinutes, setPlanMinutes] = useState(60);
   const [selectedPlanTopics, setSelectedPlanTopics] = useState<string[]>([]);
-  const [studyPlan, setStudyPlan] = useState<StudyWeek[]>([]);
+  const [studyPlans, setStudyPlans] = useState<StudyPlanRecord[]>([]);
+  const [activePlanId, setActivePlanId] = useState("");
   const [planWeekView, setPlanWeekView] = useState(0);
   const [skillLevels, setSkillLevels] = useState<SkillLevels>(initialSkills);
   const [evolutionLogs, setEvolutionLogs] = useState<EvolutionLog[]>([]);
+  const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null);
+  const [dailyMissionChecks, setDailyMissionChecks] = useState<string[]>([]);
   const [activityType, setActivityType] = useState<EvolutionLog["type"]>("reading");
   const [activityTitle, setActivityTitle] = useState("");
   const [activityMinutes, setActivityMinutes] = useState(45);
@@ -324,6 +370,7 @@ export function StudyHub() {
   const [topicModule, setTopicModule] = useState("");
   const [topicReference, setTopicReference] = useState("");
   const [topicPriority, setTopicPriority] = useState<TopicPriority>("high");
+  const [topicAiPrompt, setTopicAiPrompt] = useState("");
   const [quiz, setQuiz] = useState<Quiz[]>(demoQuiz);
   const [flashcards, setFlashcards] = useState<Flashcard[]>(demoCards);
   const [quizIndex, setQuizIndex] = useState(0);
@@ -341,12 +388,18 @@ export function StudyHub() {
     try {
       const stored = window.localStorage.getItem("nexo-goals-v1");
       if (stored) setGoals(JSON.parse(stored));
-      const storedPlan = window.localStorage.getItem("nexo-study-plan-v1");
-      if (storedPlan) setStudyPlan(JSON.parse(storedPlan));
-      const storedSkills = window.localStorage.getItem("nexo-skills-v1");
+      const storedPlans = window.localStorage.getItem("nexo-study-plans-v2");
+      if (storedPlans) setStudyPlans(JSON.parse(storedPlans));
+      const storedActivePlan = window.localStorage.getItem("nexo-active-plan-v2");
+      if (storedActivePlan) setActivePlanId(storedActivePlan);
+      const storedSkills = window.localStorage.getItem("nexo-skills-v2");
       if (storedSkills) setSkillLevels(JSON.parse(storedSkills));
-      const storedEvolution = window.localStorage.getItem("nexo-evolution-v1");
+      const storedEvolution = window.localStorage.getItem("nexo-evolution-v2");
       if (storedEvolution) setEvolutionLogs(JSON.parse(storedEvolution));
+      const storedAssessment = window.localStorage.getItem("nexo-assessment-v2");
+      if (storedAssessment) setAssessmentResult(JSON.parse(storedAssessment));
+      const storedMissions = window.localStorage.getItem("nexo-daily-missions-v1");
+      if (storedMissions) setDailyMissionChecks(JSON.parse(storedMissions));
       const storedArchetype = window.localStorage.getItem("nexo-archetype-v1");
       if (storedArchetype) setSelectedArchetype(storedArchetype);
       const storedMapping = window.localStorage.getItem("nexo-personal-map-v1");
@@ -357,9 +410,12 @@ export function StudyHub() {
       if (storedGoal) setStudyGoal(storedGoal);
     } catch {
       window.localStorage.removeItem("nexo-goals-v1");
-      window.localStorage.removeItem("nexo-study-plan-v1");
-      window.localStorage.removeItem("nexo-skills-v1");
-      window.localStorage.removeItem("nexo-evolution-v1");
+      window.localStorage.removeItem("nexo-study-plans-v2");
+      window.localStorage.removeItem("nexo-active-plan-v2");
+      window.localStorage.removeItem("nexo-skills-v2");
+      window.localStorage.removeItem("nexo-evolution-v2");
+      window.localStorage.removeItem("nexo-assessment-v2");
+      window.localStorage.removeItem("nexo-daily-missions-v1");
       window.localStorage.removeItem("nexo-archetype-v1");
       window.localStorage.removeItem("nexo-personal-map-v1");
       window.localStorage.removeItem("nexo-course-name-v1");
@@ -372,16 +428,29 @@ export function StudyHub() {
   }, [goals]);
 
   useEffect(() => {
-    window.localStorage.setItem("nexo-study-plan-v1", JSON.stringify(studyPlan));
-  }, [studyPlan]);
+    window.localStorage.setItem("nexo-study-plans-v2", JSON.stringify(studyPlans));
+  }, [studyPlans]);
 
   useEffect(() => {
-    window.localStorage.setItem("nexo-skills-v1", JSON.stringify(skillLevels));
+    window.localStorage.setItem("nexo-active-plan-v2", activePlanId);
+  }, [activePlanId]);
+
+  useEffect(() => {
+    window.localStorage.setItem("nexo-skills-v2", JSON.stringify(skillLevels));
   }, [skillLevels]);
 
   useEffect(() => {
-    window.localStorage.setItem("nexo-evolution-v1", JSON.stringify(evolutionLogs));
+    window.localStorage.setItem("nexo-evolution-v2", JSON.stringify(evolutionLogs));
   }, [evolutionLogs]);
+
+  useEffect(() => {
+    if (assessmentResult) window.localStorage.setItem("nexo-assessment-v2", JSON.stringify(assessmentResult));
+    else window.localStorage.removeItem("nexo-assessment-v2");
+  }, [assessmentResult]);
+
+  useEffect(() => {
+    window.localStorage.setItem("nexo-daily-missions-v1", JSON.stringify(dailyMissionChecks));
+  }, [dailyMissionChecks]);
 
   useEffect(() => {
     window.localStorage.setItem("nexo-archetype-v1", selectedArchetype);
@@ -454,6 +523,8 @@ export function StudyHub() {
   const mappedTopics = mapping.topics.filter((topic) => topic.status === "covered").length;
   const activeCard = flashcards[cardIndex] || demoCards[0];
   const activeQuiz = quiz[quizIndex] || demoQuiz[0];
+  const activePlanRecord = studyPlans.find((plan) => plan.id === activePlanId) || studyPlans[0];
+  const studyPlan = activePlanRecord?.weeks || [];
   const planSessionCount = studyPlan.reduce((total, week) => total + week.sessions.length, 0);
   const planCompletedCount = studyPlan.reduce(
     (total, week) => total + week.sessions.filter((session) => session.done).length,
@@ -463,20 +534,10 @@ export function StudyHub() {
     ? Math.round((planCompletedCount / planSessionCount) * 100)
     : 0;
   const activePlanWeek = studyPlan[planWeekView];
-  const totalXp = 2840 + evolutionLogs.reduce((total, log) => total + log.xp, 0);
-  const evolutionLevel = Math.floor(totalXp / 500) + 1;
+  const totalXp = evolutionLogs.reduce((total, log) => total + log.xp, 0);
+  const evolutionLevel = totalXp ? Math.floor(totalXp / 500) + 1 : 0;
   const levelXp = totalXp % 500;
-  const evolutionRank = evolutionLevel < 10
-    ? "E"
-    : evolutionLevel < 20
-      ? "D"
-      : evolutionLevel < 35
-        ? "C"
-        : evolutionLevel < 50
-          ? "B"
-          : evolutionLevel < 70
-            ? "A"
-            : "S";
+  const evolutionRank = assessmentResult?.rank || "—";
   const activeArchetype = archetypes.find((archetype) => archetype.id === selectedArchetype) || archetypes[0];
   const ActiveArchetypeIcon = activeArchetype.icon;
   const archetypeRequirements = Object.entries(activeArchetype.requirements) as [SkillKey, number][];
@@ -602,7 +663,9 @@ export function StudyHub() {
       };
     });
 
-    setStudyPlan(plan);
+    const id = `plan-${Date.now()}`;
+    setStudyPlans((current) => [{ id, name: planName.trim(), createdAt: new Date().toISOString(), weeks: plan }, ...current]);
+    setActivePlanId(id);
     setPlanWeekView(0);
     setNotice(`Plano “${planName}” criado com ${planWeeks * planDays} sessões.`);
   }
@@ -610,14 +673,16 @@ export function StudyHub() {
   function togglePlanSession(sessionId: string) {
     const session = studyPlan.flatMap((week) => week.sessions).find((item) => item.id === sessionId);
     const shouldReward = session && !session.done && !evolutionLogs.some((log) => log.sourceId === sessionId);
-    setStudyPlan((current) =>
-      current.map((week) => ({
-        ...week,
-        sessions: week.sessions.map((session) =>
-          session.id === sessionId ? { ...session, done: !session.done } : session,
-        ),
-      })),
-    );
+    if (!activePlanRecord) return;
+    setStudyPlans((current) => current.map((plan) => plan.id === activePlanRecord.id ? {
+      ...plan,
+      weeks: plan.weeks.map((week) => ({
+          ...week,
+          sessions: week.sessions.map((planSession) =>
+            planSession.id === sessionId ? { ...planSession, done: !planSession.done } : planSession,
+          ),
+        })),
+    } : plan));
     if (session && shouldReward) {
       const xp = session.minutes * activityTypes.study.xpRate;
       setEvolutionLogs((current) => [{
@@ -639,7 +704,8 @@ export function StudyHub() {
   }
 
   function addPlanToGoals() {
-    const newGoals = selectedPlanTopics.slice(0, 4).map((topic, index) => ({
+    const planTopics = [...new Set(studyPlan.flatMap((week) => week.sessions.map((session) => session.topic)))];
+    const newGoals = planTopics.slice(0, 4).map((topic, index) => ({
       id: Date.now() + index,
       title: `Avançar no plano: ${topic}`,
       done: false,
@@ -679,22 +745,131 @@ export function StudyHub() {
     setNotice(`Atividade registrada: +${xp} XP, +${skillGain} em ${skillMeta[activity.skill].label}.`);
   }
 
+  function completeAssessment(result: AssessmentResult) {
+    setAssessmentResult(result);
+    setSkillLevels(result.skills);
+    setSelectedArchetype(result.recommendedArchetype);
+    setNotice(`Avaliação concluída: Rank ${result.rank}. Sua linha de base foi criada.`);
+  }
+
+  function resetAssessment() {
+    setAssessmentResult(null);
+    setSkillLevels(initialSkills);
+    setEvolutionLogs([]);
+    setDailyMissionChecks([]);
+    setNotice("Ranking, XP e atributos zerados. Faça a avaliação para criar uma nova linha de base.");
+  }
+
+  function toggleDailyMission(archetypeId: string, missionIndex: number) {
+    const date = new Date().toISOString().slice(0, 10);
+    const missionId = `${date}-${archetypeId}-${missionIndex}`;
+    const completed = dailyMissionChecks.includes(missionId);
+    setDailyMissionChecks((current) => completed
+      ? current.filter((item) => item !== missionId)
+      : [...current, missionId]);
+    if (!completed) {
+      const xp = 25;
+      setEvolutionLogs((current) => [{
+        id: Date.now() + missionIndex,
+        sourceId: missionId,
+        type: archetypeId === "athlete" ? "strength" : archetypeId === "entrepreneur" ? "business" : archetypeId === "leader" ? "communication" : "reading",
+        title: `Protocolo diário: ${activeArchetype.dailyProtocol[missionIndex]}`,
+        minutes: 15,
+        xp,
+        createdAt: new Date().toISOString(),
+      }, ...current]);
+      setNotice(`Missão diária concluída: +${xp} XP.`);
+    }
+  }
+
+  async function generateMapTopics() {
+    if (!topicAiPrompt.trim()) {
+      setNotice("Explique para a IA o que você quer aprender.");
+      return;
+    }
+    setBusy("topics");
+    setNotice(null);
+    try {
+      const response = await fetch("/api/topics/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          request: topicAiPrompt,
+          courseName,
+          studyGoal,
+          existingTopics: mapping.topics.map((topic) => topic.title),
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(getErrorMessage(payload, "Não foi possível gerar os tópicos."));
+      const generated = (payload.topics as { title: string; module: string; priority: TopicPriority }[])
+        .filter((item) => !mapping.topics.some((topic) => topic.title.toLowerCase() === item.title.toLowerCase()))
+        .map((item, index): Topic => ({
+          id: `ai-topic-${Date.now()}-${index}`,
+          title: item.title,
+          module: item.module,
+          priority: item.priority,
+          status: "planned",
+          confidence: 0,
+          videoEvidence: "Aguardando uma aula para analisar.",
+          syllabusReference: "Referência ainda não definida",
+          action: "Adicionar material e analisar",
+        }));
+      setMapping((current) => ({ ...current, topics: [...current.topics, ...generated] }));
+      setSelectedPlanTopics((current) => [...new Set([...current, ...generated.map((topic) => topic.title)])]);
+      setTopicAiPrompt("");
+      setNotice(`${generated.length} tópicos personalizados foram adicionados ao mapa.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Não foi possível gerar os tópicos.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function transcribeVideo() {
     if (!videoFile && !driveUrl.trim()) {
-      setNotice("Selecione um arquivo ou cole um link do Google Drive.");
+      setNotice("Selecione um arquivo ou cole um link público de vídeo/áudio.");
+      return;
+    }
+    if (videoFile && videoFile.size > 250 * 1024 * 1024) {
+      setNotice("O vídeo pode ter no máximo 250 MB.");
       return;
     }
     setBusy("transcribe");
     setNotice(null);
     try {
-      const form = new FormData();
-      if (videoFile) form.append("file", videoFile);
-      if (driveUrl) form.append("driveUrl", driveUrl);
-      const response = await fetch("/api/transcribe", { method: "POST", body: form });
+      let response: Response;
+      if (videoFile && videoFile.size > 4 * 1024 * 1024) {
+        setNotice("Enviando o arquivo com segurança. Não feche esta página...");
+        const { upload } = await import("@vercel/blob/client");
+        const safeName = videoFile.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+        const blob = await upload(`nexo-media/${Date.now()}-${safeName}`, videoFile, {
+          access: "public",
+          handleUploadUrl: "/api/media/upload",
+          multipart: true,
+          contentType: videoFile.type || undefined,
+        });
+        setNotice("Upload concluído. Normalizando e dividindo o áudio...");
+        response = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mediaUrl: blob.url, fileName: videoFile.name, mimeType: videoFile.type }),
+        });
+      } else if (videoFile) {
+        const form = new FormData();
+        form.append("file", videoFile);
+        response = await fetch("/api/transcribe", { method: "POST", body: form });
+      } else {
+        response = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sourceUrl: driveUrl.trim() }),
+        });
+      }
       const payload = await response.json();
       if (!response.ok) throw new Error(getErrorMessage(payload, "Erro na transcrição."));
       setTranscript(payload.transcript);
-      setNotice("Transcrição concluída. Agora você pode cruzá-la com a apostila.");
+      setNotice(`Transcrição concluída em ${payload.parts || 1} parte(s). O áudio foi normalizado antes do reconhecimento.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Não foi possível transcrever.");
     } finally {
@@ -1014,6 +1189,8 @@ export function StudyHub() {
               </div>
             </section>
 
+            <RankAssessment result={assessmentResult} onComplete={completeAssessment} onReset={resetAssessment} />
+
             <div className="evolution-top-grid">
               <form className="evolution-log panel" onSubmit={logEvolutionActivity}>
                 <div className="panel-heading">
@@ -1151,6 +1328,23 @@ export function StudyHub() {
                     ))}
                   </div>
                 </div>
+                <section className="daily-archetype-path">
+                  <div className="daily-path-heading"><div><span className="eyebrow">SISTEMA DIÁRIO</span><h3>O que fazer hoje para se tornar {activeArchetype.name}</h3></div><span>{new Date().toLocaleDateString("pt-BR", { weekday: "long" })}</span></div>
+                  <div className="daily-protocol-grid">
+                    {activeArchetype.dailyProtocol.map((mission, index) => {
+                      const missionId = `${new Date().toISOString().slice(0, 10)}-${activeArchetype.id}-${index}`;
+                      const done = dailyMissionChecks.includes(missionId);
+                      return <button key={mission} className={done ? "done" : ""} onClick={() => toggleDailyMission(activeArchetype.id, index)}><span>{done ? <Check size={16} /> : index + 1}</span><p><strong>{mission}</strong><small>{done ? "Concluída hoje" : "+25 XP ao concluir"}</small></p></button>;
+                    })}
+                  </div>
+                  <div className="weekly-archetype-path">
+                    {activeArchetype.weeklyPath.map((day, index) => {
+                      const todayIndex = (new Date().getDay() + 6) % 7;
+                      return <article key={day.day} className={todayIndex === index ? "today" : ""}><span>{day.day.slice(0, 3)}</span><strong>{day.focus}</strong><ul>{day.actions.map((action) => <li key={action}>{action}</li>)}</ul></article>;
+                    })}
+                  </div>
+                  <small className="mission-note">A rota é deliberadamente longa: cumpra o mínimo diário, revise a semana e aumente a dificuldade somente quando a consistência estiver estável.</small>
+                </section>
               </div>
             </section>
 
@@ -1179,18 +1373,19 @@ export function StudyHub() {
               <div className="creator-copy">
                 <span className="eyebrow lime">NOVA SESSÃO INTELIGENTE</span>
                 <h2>Transforme uma aula em um plano de estudo.</h2>
-                <p>Envie o vídeo ou cole um link público do Google Drive. O Nexo transcreve, compara com a apostila e encontra as lacunas.</p>
+                <p>Envie qualquer vídeo ou áudio, ou cole um link público direto. O Nexo normaliza o áudio, divide aulas longas, transcreve e encontra lacunas.</p>
                 <div className="flow-line"><span><Video size={17} /> Aula</span><i /><span><FileText size={17} /> Apostila</span><i /><span><Sparkles size={17} /> Mapa</span></div>
               </div>
               <div className="creator-form">
-                <label>Link do Google Drive</label>
-                <div className="input-with-icon"><Link2 size={18} /><input value={driveUrl} onChange={(event) => setDriveUrl(event.target.value)} placeholder="https://drive.google.com/file/d/..." /></div>
+                <label>Link público do vídeo ou áudio</label>
+                <div className="input-with-icon"><Link2 size={18} /><input value={driveUrl} onChange={(event) => setDriveUrl(event.target.value)} placeholder="Drive, Dropbox ou URL direta https://..." /></div>
+                <small className="source-help">O link precisa permitir download público. YouTube, plataformas com login e conteúdo protegido não são baixados.</small>
                 <div className="or-divider"><span>ou envie um arquivo</span></div>
                 <label className="drop-zone">
                   <input type="file" accept="video/*,audio/*" onChange={(event) => setVideoFile(event.target.files?.[0] || null)} />
                   <Upload size={22} />
                   <strong>{videoFile ? videoFile.name : "Selecionar vídeo ou áudio"}</strong>
-                  <small>MP4, MP3, M4A ou WAV · até 25 MB</small>
+                  <small>MP4, MOV, MKV, WEBM, MP3, M4A ou WAV · até 250 MB</small>
                 </label>
                 <button className="primary-button wide" onClick={transcribeVideo} disabled={busy === "transcribe"}>{busy === "transcribe" ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />} Transcrever aula</button>
               </div>
@@ -1228,6 +1423,12 @@ export function StudyHub() {
               <div className="map-identity-grid">
                 <label><span>Curso, prova ou projeto</span><input value={courseName} onChange={(event) => setCourseName(event.target.value)} placeholder="Ex.: C-PRO I, Inglês ou Gestão de fundos" /></label>
                 <label><span>Objetivo principal</span><input value={studyGoal} onChange={(event) => setStudyGoal(event.target.value)} placeholder="Ex.: ser aprovado, dominar o tema ou aplicar no trabalho" /></label>
+              </div>
+
+              <div className="ai-topic-builder">
+                <span className="ai-topic-icon"><Sparkles size={19} /></span>
+                <div><span className="eyebrow">ARQUITETO DE CONTEÚDO IA</span><strong>Peça uma trilha com suas próprias palavras</strong><textarea value={topicAiPrompt} onChange={(event) => setTopicAiPrompt(event.target.value)} placeholder="Ex.: Quero aprender valuation do zero para analisar pequenas empresas; organize do básico ao avançado com prática." /></div>
+                <button className="primary-button" type="button" onClick={generateMapTopics} disabled={busy === "topics"}>{busy === "topics" ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />} Gerar tópicos</button>
               </div>
 
               <form className="topic-create-form" onSubmit={addMapTopic}>
@@ -1295,6 +1496,17 @@ export function StudyHub() {
                 </div>
               )}
             </section>
+
+            {studyPlans.length > 0 && (
+              <section className="plan-library panel">
+                <div><span className="eyebrow">MEUS PLANOS</span><strong>{studyPlans.length} plano(s) salvo(s)</strong></div>
+                <div>{studyPlans.map((plan) => {
+                  const sessions = plan.weeks.flatMap((week) => week.sessions);
+                  const progress = sessions.length ? Math.round(sessions.filter((session) => session.done).length / sessions.length * 100) : 0;
+                  return <button key={plan.id} className={activePlanRecord?.id === plan.id ? "active" : ""} onClick={() => { setActivePlanId(plan.id); setPlanWeekView(0); }}><span><CalendarDays size={16} /></span><p><strong>{plan.name}</strong><small>{plan.weeks.length} semanas · {progress}% concluído</small></p><i style={{ width: `${progress}%` }} /></button>;
+                })}</div>
+              </section>
+            )}
 
             <div className="plans-layout">
               <form className="plan-builder panel" onSubmit={createStudyPlan}>
@@ -1373,7 +1585,7 @@ export function StudyHub() {
                 {activePlanWeek ? (
                   <>
                     <div className="panel-heading plan-preview-heading">
-                      <div><span className="eyebrow">{planName.toUpperCase()}</span><h3>Semana {activePlanWeek.week} de {studyPlan.length}</h3></div>
+                      <div><span className="eyebrow">{(activePlanRecord?.name || planName).toUpperCase()}</span><h3>Semana {activePlanWeek.week} de {studyPlan.length}</h3></div>
                       <button className="outline-button compact" onClick={addPlanToGoals}><Target size={16} /> Levar para metas</button>
                     </div>
                     <div className="week-focus"><span>TEMA DA SEMANA</span><strong>{activePlanWeek.theme}</strong></div>
