@@ -50,9 +50,13 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Tab = "dashboard" | "evolution" | "sessions" | "mapping" | "plans" | "review";
-type TopicStatus = "covered" | "partial" | "gap";
+type TopicStatus = "planned" | "covered" | "partial" | "gap";
+type TopicPriority = "high" | "medium" | "low";
 type Topic = {
+  id?: string;
   title: string;
+  module?: string;
+  priority?: TopicPriority;
   status: TopicStatus;
   confidence: number;
   videoEvidence: string;
@@ -100,49 +104,17 @@ type Archetype = {
   phases: { period: string; name: string; actions: string[] }[];
 };
 
-const demoMapping: Mapping = {
-  summary:
-    "A aula cobriu bem a estrutura dos fundos e os participantes, mas deixou lacunas em tributação e marcação a mercado.",
-  coverage: 72,
-  topics: [
-    {
-      title: "Estrutura e funcionamento dos fundos",
-      status: "covered",
-      confidence: 94,
-      videoEvidence: "Explicado entre 08:12 e 21:40, com exemplo de fundo de renda fixa.",
-      syllabusReference: "Módulo 2 · páginas 18–24",
-      action: "Revisão rápida em 7 dias",
-    },
-    {
-      title: "Prestadores de serviços",
-      status: "covered",
-      confidence: 89,
-      videoEvidence: "Administrador, gestor e custodiante foram diferenciados na aula.",
-      syllabusReference: "Módulo 2 · páginas 25–29",
-      action: "Gerar 3 flashcards",
-    },
-    {
-      title: "Marcação a mercado",
-      status: "partial",
-      confidence: 68,
-      videoEvidence: "O conceito foi citado, sem exemplo numérico ou efeito na cota.",
-      syllabusReference: "Módulo 3 · páginas 41–46",
-      action: "Rever páginas 43–46",
-    },
-    {
-      title: "Tributação e come-cotas",
-      status: "gap",
-      confidence: 97,
-      videoEvidence: "Nenhuma explicação identificada na transcrição.",
-      syllabusReference: "Módulo 4 · páginas 57–66",
-      action: "Estudar antes do próximo simulado",
-    },
-  ],
-  nextSteps: [
-    "Rever marcação a mercado com um exemplo prático",
-    "Estudar tributação e come-cotas",
-    "Fazer uma revisão ativa de 10 minutos",
-  ],
+const initialMapping: Mapping = {
+  summary: "Seu mapa começa vazio. Cadastre abaixo os módulos e tópicos que fazem parte do seu objetivo.",
+  coverage: 0,
+  topics: [],
+  nextSteps: [],
+};
+
+const priorityLabels: Record<TopicPriority, string> = {
+  high: "Alta",
+  medium: "Média",
+  low: "Baixa",
 };
 
 const demoQuiz: Quiz[] = [
@@ -295,8 +267,18 @@ function getErrorMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
+function calculateCoverage(topics: Topic[]) {
+  if (!topics.length) return 0;
+  const score = topics.reduce((total, topic) => {
+    if (topic.status === "covered") return total + 1;
+    if (topic.status === "partial") return total + 0.5;
+    return total;
+  }, 0);
+  return Math.round(score / topics.length * 100);
+}
+
 function StatusPill({ status }: { status: TopicStatus }) {
-  const labels = { covered: "Coberto", partial: "Parcial", gap: "Lacuna" };
+  const labels = { planned: "Planejado", covered: "Coberto", partial: "Parcial", gap: "Lacuna" };
   return <span className={`status-pill ${status}`}>{labels[status]}</span>;
 }
 
@@ -317,13 +299,11 @@ export function StudyHub() {
   const [sessionMode, setSessionMode] = useState<"focus" | "break">("focus");
   const [goals, setGoals] = useState<Goal[]>(initialGoals);
   const [goalText, setGoalText] = useState("");
-  const [planName, setPlanName] = useState("Reta final C-PRO I");
+  const [planName, setPlanName] = useState("Meu plano de estudos");
   const [planWeeks, setPlanWeeks] = useState(8);
   const [planDays, setPlanDays] = useState(5);
   const [planMinutes, setPlanMinutes] = useState(60);
-  const [selectedPlanTopics, setSelectedPlanTopics] = useState<string[]>(
-    demoMapping.topics.filter((topic) => topic.status !== "covered").map((topic) => topic.title),
-  );
+  const [selectedPlanTopics, setSelectedPlanTopics] = useState<string[]>([]);
   const [studyPlan, setStudyPlan] = useState<StudyWeek[]>([]);
   const [planWeekView, setPlanWeekView] = useState(0);
   const [skillLevels, setSkillLevels] = useState<SkillLevels>(initialSkills);
@@ -337,7 +317,13 @@ export function StudyHub() {
   const [transcript, setTranscript] = useState("");
   const [syllabus, setSyllabus] = useState("");
   const [syllabusName, setSyllabusName] = useState("");
-  const [mapping, setMapping] = useState<Mapping>(demoMapping);
+  const [mapping, setMapping] = useState<Mapping>(initialMapping);
+  const [courseName, setCourseName] = useState("");
+  const [studyGoal, setStudyGoal] = useState("");
+  const [topicTitle, setTopicTitle] = useState("");
+  const [topicModule, setTopicModule] = useState("");
+  const [topicReference, setTopicReference] = useState("");
+  const [topicPriority, setTopicPriority] = useState<TopicPriority>("high");
   const [quiz, setQuiz] = useState<Quiz[]>(demoQuiz);
   const [flashcards, setFlashcards] = useState<Flashcard[]>(demoCards);
   const [quizIndex, setQuizIndex] = useState(0);
@@ -363,12 +349,21 @@ export function StudyHub() {
       if (storedEvolution) setEvolutionLogs(JSON.parse(storedEvolution));
       const storedArchetype = window.localStorage.getItem("nexo-archetype-v1");
       if (storedArchetype) setSelectedArchetype(storedArchetype);
+      const storedMapping = window.localStorage.getItem("nexo-personal-map-v1");
+      if (storedMapping) setMapping(JSON.parse(storedMapping));
+      const storedCourse = window.localStorage.getItem("nexo-course-name-v1");
+      if (storedCourse) setCourseName(storedCourse);
+      const storedGoal = window.localStorage.getItem("nexo-study-goal-v1");
+      if (storedGoal) setStudyGoal(storedGoal);
     } catch {
       window.localStorage.removeItem("nexo-goals-v1");
       window.localStorage.removeItem("nexo-study-plan-v1");
       window.localStorage.removeItem("nexo-skills-v1");
       window.localStorage.removeItem("nexo-evolution-v1");
       window.localStorage.removeItem("nexo-archetype-v1");
+      window.localStorage.removeItem("nexo-personal-map-v1");
+      window.localStorage.removeItem("nexo-course-name-v1");
+      window.localStorage.removeItem("nexo-study-goal-v1");
     }
   }, []);
 
@@ -393,11 +388,29 @@ export function StudyHub() {
   }, [selectedArchetype]);
 
   useEffect(() => {
+    window.localStorage.setItem("nexo-personal-map-v1", JSON.stringify(mapping));
+  }, [mapping]);
+
+  useEffect(() => {
+    window.localStorage.setItem("nexo-course-name-v1", courseName);
+  }, [courseName]);
+
+  useEffect(() => {
+    window.localStorage.setItem("nexo-study-goal-v1", studyGoal);
+  }, [studyGoal]);
+
+  useEffect(() => {
     const priorities = mapping.topics
       .filter((topic) => topic.status !== "covered")
       .map((topic) => topic.title);
     if (priorities.length) setSelectedPlanTopics(priorities);
   }, [mapping]);
+
+  const focusTopic = mapping.topics.find((topic) => topic.status === "gap")?.title
+    || mapping.topics.find((topic) => topic.status === "partial")?.title
+    || mapping.topics.find((topic) => topic.status === "planned")?.title
+    || mapping.topics[0]?.title
+    || "Defina um tópico no seu mapa";
 
   useEffect(() => {
     if (!timerRunning) return;
@@ -412,7 +425,7 @@ export function StudyHub() {
               id: Date.now(),
               sourceId: `focus-${Date.now()}`,
               type: "study",
-              title: "Sessão de foco: Tributação e come-cotas",
+              title: `Sessão de foco: ${focusTopic}`,
               minutes: focusedMinutes,
               xp,
               createdAt: new Date().toISOString(),
@@ -432,7 +445,7 @@ export function StudyHub() {
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [timerRunning, sessionMode]);
+  }, [timerRunning, sessionMode, focusTopic]);
 
   const minutes = Math.floor(timerSeconds / 60).toString().padStart(2, "0");
   const seconds = (timerSeconds % 60).toString().padStart(2, "0");
@@ -482,8 +495,8 @@ export function StudyHub() {
   ].filter(Boolean).length;
 
   const context = useMemo(
-    () => `TRANSCRIÇÃO:\n${transcript}\n\nAPOSTILA:\n${syllabus}\n\nMAPEAMENTO:\n${JSON.stringify(mapping)}`,
-    [transcript, syllabus, mapping],
+    () => `TRILHA: ${courseName || "Não definida"}\nOBJETIVO: ${studyGoal || "Não definido"}\n\nTRANSCRIÇÃO:\n${transcript}\n\nAPOSTILA:\n${syllabus}\n\nMAPEAMENTO:\n${JSON.stringify(mapping)}`,
+    [courseName, studyGoal, transcript, syllabus, mapping],
   );
 
   function resetTimer(mode = sessionMode) {
@@ -502,6 +515,55 @@ export function StudyHub() {
     if (!title) return;
     setGoals((current) => [...current, { id: Date.now(), title, done: false }]);
     setGoalText("");
+  }
+
+  function addMapTopic(event: FormEvent) {
+    event.preventDefault();
+    const title = topicTitle.trim();
+    if (!title) {
+      setNotice("Escreva o nome do tópico que você pretende estudar.");
+      return;
+    }
+    if (mapping.topics.some((topic) => topic.title.toLowerCase() === title.toLowerCase())) {
+      setNotice("Esse tópico já faz parte do seu mapa.");
+      return;
+    }
+
+    const topic: Topic = {
+      id: `topic-${Date.now()}`,
+      title,
+      module: topicModule.trim() || "Sem módulo",
+      priority: topicPriority,
+      status: "planned",
+      confidence: 0,
+      videoEvidence: "Aguardando uma aula para analisar.",
+      syllabusReference: topicReference.trim() || "Referência ainda não definida",
+      action: "Adicionar material e analisar",
+    };
+    setMapping((current) => ({
+      ...current,
+      summary: "Mapa personalizado criado por você. Envie uma aula e a apostila para medir a cobertura.",
+      topics: [...current.topics, topic],
+    }));
+    setSelectedPlanTopics((current) => [...current, title]);
+    setTopicTitle("");
+    setTopicReference("");
+    setNotice(`Tópico “${title}” adicionado ao seu mapa.`);
+  }
+
+  function removeMapTopic(topicId: string | undefined, title: string) {
+    setMapping((current) => {
+      const topics = current.topics.filter((topic) => topicId ? topic.id !== topicId : topic.title !== title);
+      return {
+        ...current,
+        coverage: calculateCoverage(topics),
+        topics,
+        summary: topics.length
+          ? current.summary
+          : "Seu mapa começa vazio. Cadastre abaixo os módulos e tópicos que fazem parte do seu objetivo.",
+      };
+    });
+    setSelectedPlanTopics((current) => current.filter((topic) => topic !== title));
   }
 
   function createStudyPlan(event: FormEvent) {
@@ -690,8 +752,13 @@ export function StudyHub() {
   }
 
   async function analyzeContent() {
-    if (!transcript.trim() || !syllabus.trim()) {
-      setNotice("Adicione a transcrição e a apostila antes de gerar o mapa.");
+    if (!mapping.topics.length) {
+      setNotice("Primeiro defina no mapa os tópicos que você pretende estudar.");
+      setTab("mapping");
+      return;
+    }
+    if (!transcript.trim()) {
+      setNotice("Adicione a transcrição da aula antes de analisar seu mapa.");
       return;
     }
     setBusy("analyze");
@@ -700,13 +767,40 @@ export function StudyHub() {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript, syllabus }),
+        body: JSON.stringify({
+          transcript,
+          syllabus,
+          studyPath: {
+            courseName,
+            studyGoal,
+            topics: mapping.topics.map((topic) => ({
+              title: topic.title,
+              module: topic.module,
+              priority: topic.priority,
+              syllabusReference: topic.syllabusReference,
+            })),
+          },
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(getErrorMessage(payload, "Erro no mapeamento."));
-      setMapping(payload);
+      const analyzed = payload as Mapping;
+      const topics = mapping.topics.map((definedTopic, index) => {
+        const result = analyzed.topics.find(
+          (topic) => topic.title.toLowerCase() === definedTopic.title.toLowerCase(),
+        ) || analyzed.topics[index];
+        return result
+          ? { ...definedTopic, ...result, title: definedTopic.title }
+          : definedTopic;
+      });
+      setMapping({
+        summary: analyzed.summary,
+        coverage: calculateCoverage(topics),
+        topics,
+        nextSteps: analyzed.nextSteps,
+      });
       setTab("mapping");
-      setNotice("Mapa atualizado com base na sua aula.");
+      setNotice("Seu mapa personalizado foi atualizado com base na aula.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Não foi possível mapear o conteúdo.");
     } finally {
@@ -782,7 +876,7 @@ export function StudyHub() {
 
         <div className="course-card">
           <span className="eyebrow">TRILHA ATUAL</span>
-          <strong>C-PRO I · ANBIMA</strong>
+          <strong>{courseName || "SUA TRILHA PERSONALIZADA"}</strong>
           <div className="mini-progress"><i style={{ width: `${mapping.coverage}%` }} /></div>
           <small>{mapping.coverage}% do conteúdo mapeado</small>
         </div>
@@ -832,11 +926,13 @@ export function StudyHub() {
           <div className="page-grid dashboard-page">
             <section className="welcome-row">
               <div>
-                <span className="eyebrow lime">PRÓXIMO PASSO</span>
-                <h2>Continue de onde você parou.</h2>
-                <p>Tributação de fundos ainda é a sua maior lacuna. Uma sessão focada agora leva sua cobertura para perto de 80%.</p>
+                <span className="eyebrow lime">{mapping.topics.length ? "PRÓXIMO PASSO" : "CONSTRUA SUA TRILHA"}</span>
+                <h2>{mapping.topics.length ? "Continue de onde você parou." : "Defina o que você quer dominar."}</h2>
+                <p>{mapping.topics.length
+                  ? `${focusTopic} é o próximo tópico sugerido pelo seu mapa pessoal.`
+                  : "Crie seu curso, módulos e tópicos. O Nexo só analisará o conteúdo que você escolher."}</p>
               </div>
-              <button className="primary-button" onClick={() => setTab("sessions")}>Iniciar sessão <ArrowRight size={18} /></button>
+              <button className="primary-button" onClick={() => setTab(mapping.topics.length ? "sessions" : "mapping")}>{mapping.topics.length ? "Iniciar sessão" : "Criar meu mapa"} <ArrowRight size={18} /></button>
             </section>
 
             <section className="timer-panel panel">
@@ -849,7 +945,7 @@ export function StudyHub() {
                 <b>:</b>
                 <FlipNumber value={seconds[0]} /><FlipNumber value={seconds[1]} />
               </div>
-              <div className="timer-topic"><span />Tributação e come-cotas</div>
+              <div className="timer-topic"><span />{focusTopic}</div>
               <div className="timer-controls">
                 <button className="icon-button" onClick={() => resetTimer()} aria-label="Reiniciar"><RotateCcw size={19} /></button>
                 <button className="timer-main" onClick={() => setTimerRunning((running) => !running)}>{timerRunning ? <Pause fill="currentColor" /> : <Play fill="currentColor" />} {timerRunning ? "Pausar" : "Começar"}</button>
@@ -1112,29 +1208,73 @@ export function StudyHub() {
                 <textarea value={syllabus} onChange={(event) => setSyllabus(event.target.value)} placeholder="O conteúdo extraído do PDF aparecerá aqui." />
               </div>
             </section>
-            <div className="action-dock"><div><Layers3 size={20} /><span><strong>Pronto para comparar?</strong><small>O resultado será salvo no mapa de conteúdo.</small></span></div><button className="primary-button" onClick={analyzeContent} disabled={busy === "analyze"}>{busy === "analyze" ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />} Mapear conteúdo</button></div>
+            <div className="action-dock"><div><Layers3 size={20} /><span><strong>Pronto para comparar?</strong><small>A aula será analisada somente contra os {mapping.topics.length} tópicos que você definiu.</small></span></div><button className="primary-button" onClick={analyzeContent} disabled={busy === "analyze"}>{busy === "analyze" ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />} Analisar meu mapa</button></div>
           </div>
         )}
 
         {tab === "mapping" && (
           <div className="mapping-page">
             <section className="mapping-header">
-              <div><span className="eyebrow lime">ANÁLISE DA ÚLTIMA AULA</span><h2>O que você já viu — e o que ainda falta.</h2><p>{mapping.summary}</p></div>
-              <div className="coverage-box"><span>Cobertura da apostila</span><strong>{mapping.coverage}%</strong><div className="goal-bar"><i style={{ width: `${mapping.coverage}%` }} /></div><small>{mapping.topics.length} tópicos analisados</small></div>
+              <div><span className="eyebrow lime">MAPA DEFINIDO POR VOCÊ</span><h2>Seu conteúdo, suas regras.</h2><p>{mapping.summary}</p></div>
+              <div className="coverage-box"><span>Cobertura do seu mapa</span><strong>{mapping.coverage}%</strong><div className="goal-bar"><i style={{ width: `${mapping.coverage}%` }} /></div><small>{mapping.topics.length} tópicos definidos</small></div>
             </section>
 
-            <div className="map-legend"><span><i className="green" />Coberto</span><span><i className="amber" />Parcial</span><span><i className="coral" />Lacuna</span></div>
-            <section className="topic-table panel">
-              <div className="topic-table-head"><span>Tópico da apostila</span><span>Evidência na aula</span><span>Próxima ação</span></div>
-              {mapping.topics.map((topic, index) => (
-                <article className="topic-row" key={`${topic.title}-${index}`}>
-                  <div className="topic-title"><StatusPill status={topic.status} /><strong>{topic.title}</strong><small>{topic.syllabusReference} · confiança {topic.confidence}%</small></div>
-                  <p>{topic.videoEvidence}</p>
-                  <button onClick={() => setTab("review")}>{topic.action}<ArrowRight size={15} /></button>
-                </article>
-              ))}
+            <section className="map-builder panel">
+              <div className="panel-heading">
+                <div><span className="eyebrow">ESTRUTURA DA SUA TRILHA</span><h3>Escolha exatamente o que será acompanhado</h3></div>
+                <span className="builder-icon"><Layers3 size={18} /></span>
+              </div>
+
+              <div className="map-identity-grid">
+                <label><span>Curso, prova ou projeto</span><input value={courseName} onChange={(event) => setCourseName(event.target.value)} placeholder="Ex.: C-PRO I, Inglês ou Gestão de fundos" /></label>
+                <label><span>Objetivo principal</span><input value={studyGoal} onChange={(event) => setStudyGoal(event.target.value)} placeholder="Ex.: ser aprovado, dominar o tema ou aplicar no trabalho" /></label>
+              </div>
+
+              <form className="topic-create-form" onSubmit={addMapTopic}>
+                <label><span>Módulo ou categoria</span><input value={topicModule} onChange={(event) => setTopicModule(event.target.value)} placeholder="Ex.: Módulo 1" /></label>
+                <label className="topic-name-field"><span>Tópico que você vai estudar</span><input value={topicTitle} onChange={(event) => setTopicTitle(event.target.value)} placeholder="Ex.: Política de investimento" required /></label>
+                <label><span>Referência opcional</span><input value={topicReference} onChange={(event) => setTopicReference(event.target.value)} placeholder="Ex.: páginas 10–18" /></label>
+                <label><span>Prioridade</span><select value={topicPriority} onChange={(event) => setTopicPriority(event.target.value as TopicPriority)}><option value="high">Alta</option><option value="medium">Média</option><option value="low">Baixa</option></select></label>
+                <button className="primary-button" type="submit"><Plus size={17} /> Adicionar tópico</button>
+              </form>
+
+              <div className="defined-topics-heading"><span>CONTEÚDO DO SEU MAPA</span><strong>{mapping.topics.length} tópicos</strong></div>
+              {mapping.topics.length ? (
+                <div className="defined-topics-list">
+                  {mapping.topics.map((topic) => (
+                    <article key={topic.id || topic.title}>
+                      <span className={`priority-mark ${topic.priority || "medium"}`} />
+                      <div><span>{topic.module || "Sem módulo"} · prioridade {priorityLabels[topic.priority || "medium"]}</span><strong>{topic.title}</strong><small>{topic.syllabusReference}</small></div>
+                      <StatusPill status={topic.status} />
+                      <button onClick={() => removeMapTopic(topic.id, topic.title)} aria-label={`Remover ${topic.title}`}><X size={16} /></button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="map-empty-state"><span><Layers3 size={29} /></span><div><strong>Nenhum conteúdo predefinido</strong><p>Adicione os tópicos que realmente fazem parte do que você pretende estudar.</p></div></div>
+              )}
             </section>
-            <section className="next-steps panel"><div><span className="next-icon"><Target /></span><div><span className="eyebrow">RECOMENDAÇÃO DO NEXO</span><h3>Plano para a próxima sessão</h3></div></div><ol>{mapping.nextSteps.map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol><button className="primary-button" onClick={generateRevision} disabled={busy === "generate"}>{busy === "generate" ? <LoaderCircle className="spin" size={18} /> : <BrainCircuit size={18} />} Gerar revisão das lacunas</button></section>
+
+            {mapping.topics.length > 0 && (
+              <>
+                <div className="map-legend"><span><i className="planned" />Planejado</span><span><i className="green" />Coberto</span><span><i className="amber" />Parcial</span><span><i className="coral" />Lacuna</span></div>
+                <section className="topic-table panel">
+                  <div className="topic-table-head"><span>Conteúdo escolhido</span><span>Evidência encontrada na aula</span><span>Próxima ação</span></div>
+                  {mapping.topics.map((topic, index) => (
+                    <article className="topic-row" key={`${topic.title}-${index}`}>
+                      <div className="topic-title"><StatusPill status={topic.status} /><strong>{topic.title}</strong><small>{topic.module} · {topic.syllabusReference}{topic.confidence ? ` · confiança ${topic.confidence}%` : ""}</small></div>
+                      <p>{topic.videoEvidence}</p>
+                      <button onClick={() => setTab(topic.status === "planned" ? "sessions" : "review")}>{topic.action}<ArrowRight size={15} /></button>
+                    </article>
+                  ))}
+                </section>
+                {mapping.nextSteps.length ? (
+                  <section className="next-steps panel"><div><span className="next-icon"><Target /></span><div><span className="eyebrow">RECOMENDAÇÃO DO NEXO</span><h3>Plano para a próxima sessão</h3></div></div><ol>{mapping.nextSteps.map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol><button className="primary-button" onClick={generateRevision} disabled={busy === "generate"}>{busy === "generate" ? <LoaderCircle className="spin" size={18} /> : <BrainCircuit size={18} />} Gerar revisão das lacunas</button></section>
+                ) : (
+                  <section className="map-ready panel"><span className="next-icon"><Video /></span><div><span className="eyebrow">PRÓXIMO PASSO</span><h3>Seu mapa está pronto para receber uma aula</h3><p>Adicione o vídeo ou a transcrição. A apostila é opcional quando você já informou as referências.</p></div><button className="primary-button" onClick={() => setTab("sessions")}>Adicionar aula <ArrowRight size={16} /></button></section>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -1165,7 +1305,7 @@ export function StudyHub() {
 
                 <label className="plan-field">
                   <span>Nome do plano</span>
-                  <input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Ex.: Reta final C-PRO I" required />
+                  <input value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Ex.: Minha preparação personalizada" required />
                 </label>
 
                 <div className="plan-field-grid">
