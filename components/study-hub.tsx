@@ -21,6 +21,7 @@ import {
   FileText,
   Flame,
   Gauge,
+  HardDrive,
   Layers3,
   Link2,
   ListChecks,
@@ -28,7 +29,6 @@ import {
   LoaderCircle,
   Menu,
   MessageCircle,
-  MoreHorizontal,
   Pause,
   Play,
   Plus,
@@ -48,8 +48,10 @@ import {
   Zap,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { AccountControl } from "@/components/account-control";
 import { RankAssessment } from "@/components/rank-assessment";
-import type { AssessmentResult, SkillKey, SkillLevels } from "@/lib/assessment";
+import { professionalAreas, type AssessmentResult, type ProfessionalArea, type SkillKey, type SkillLevels } from "@/lib/assessment";
+import type { GeneratedArchetype } from "@/lib/archetypes";
 
 type Tab = "dashboard" | "evolution" | "sessions" | "mapping" | "plans" | "review";
 type TopicStatus = "planned" | "covered" | "partial" | "gap";
@@ -105,6 +107,37 @@ type Archetype = {
   phases: { period: string; name: string; actions: string[] }[];
   dailyProtocol: string[];
   weeklyPath: { day: string; focus: string; actions: string[] }[];
+  area?: string;
+  fitScore?: number;
+  rationale?: string;
+  successPattern?: string;
+  caseModels?: { name: string; lesson: string }[];
+};
+
+type DashboardState = {
+  version: 3;
+  goals: Goal[];
+  studyPlans: StudyPlanRecord[];
+  activePlanId: string;
+  skillLevels: SkillLevels;
+  evolutionLogs: EvolutionLog[];
+  assessmentResult: AssessmentResult | null;
+  dailyMissionChecks: string[];
+  primaryArchetypeId: string;
+  secondaryArchetypeId: string;
+  generatedArchetypes: GeneratedArchetype[];
+  archetypeSummary: string;
+  archetypeArea: ProfessionalArea;
+  archetypeContext: string;
+  mapping: Mapping;
+  courseName: string;
+  studyGoal: string;
+  transcript: string;
+  syllabus: string;
+  syllabusName: string;
+  quiz: Quiz[];
+  flashcards: Flashcard[];
+  sessionMode: "focus" | "break";
 };
 
 const initialMapping: Mapping = {
@@ -153,12 +186,7 @@ const demoCards: Flashcard[] = [
   },
 ];
 
-const initialGoals: Goal[] = [
-  { id: 1, title: "Concluir módulo de fundos", done: true },
-  { id: 2, title: "Revisar 30 flashcards", done: true },
-  { id: 3, title: "Fazer simulado com 80%", done: false },
-  { id: 4, title: "Estudar tributação", done: false },
-];
+const initialGoals: Goal[] = [];
 
 const skillMeta: Record<SkillKey, { label: string; description: string }> = {
   body: { label: "Corpo", description: "Força, corrida, recuperação e energia" },
@@ -176,6 +204,18 @@ const initialSkills: SkillLevels = {
   communication: 0,
   capital: 0,
   leadership: 0,
+};
+
+const generatedColors = ["#a78bfa", "#22d3ee", "#f59e0b", "#34d399", "#fb7185", "#60a5fa", "#e879f9", "#facc15"];
+
+const rankOrder = ["E", "D", "C", "B", "A", "S"] as const;
+const rankRequirements: Record<(typeof rankOrder)[number], { score: number; records: number; days: number; hours: number; pillars: number }> = {
+  E: { score: 0, records: 0, days: 0, hours: 0, pillars: 0 },
+  D: { score: 30, records: 5, days: 3, hours: 3, pillars: 1 },
+  C: { score: 45, records: 20, days: 10, hours: 12, pillars: 2 },
+  B: { score: 60, records: 60, days: 30, hours: 50, pillars: 3 },
+  A: { score: 75, records: 160, days: 90, hours: 160, pillars: 5 },
+  S: { score: 90, records: 500, days: 240, hours: 500, pillars: 6 },
 };
 
 const activityTypes: Record<EvolutionLog["type"], { label: string; skill: SkillKey; xpRate: number }> = {
@@ -320,6 +360,21 @@ function calculateCoverage(topics: Topic[]) {
   return Math.round(score / topics.length * 100);
 }
 
+function calculateCurrentStreak(logs: EvolutionLog[]) {
+  const activeDays = new Set(logs.map((log) => log.createdAt.slice(0, 10)));
+  const cursor = new Date();
+  cursor.setUTCHours(0, 0, 0, 0);
+  const dayKey = () => cursor.toISOString().slice(0, 10);
+  if (!activeDays.has(dayKey())) cursor.setUTCDate(cursor.getUTCDate() - 1);
+  if (!activeDays.has(dayKey())) return 0;
+  let streak = 0;
+  while (activeDays.has(dayKey())) {
+    streak += 1;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return streak;
+}
+
 function StatusPill({ status }: { status: TopicStatus }) {
   const labels = { planned: "Planejado", covered: "Coberto", partial: "Parcial", gap: "Lacuna" };
   return <span className={`status-pill ${status}`}>{labels[status]}</span>;
@@ -334,7 +389,15 @@ function FlipNumber({ value }: { value: string }) {
   );
 }
 
-export function StudyHub() {
+export function StudyHub({
+  accountId,
+  authEnabled = false,
+  cloudEnabled = false,
+}: {
+  accountId?: string;
+  authEnabled?: boolean;
+  cloudEnabled?: boolean;
+}) {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [mobileNav, setMobileNav] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(50 * 60);
@@ -358,6 +421,11 @@ export function StudyHub() {
   const [activityTitle, setActivityTitle] = useState("");
   const [activityMinutes, setActivityMinutes] = useState(45);
   const [selectedArchetype, setSelectedArchetype] = useState("sage");
+  const [secondaryArchetype, setSecondaryArchetype] = useState("entrepreneur");
+  const [generatedArchetypes, setGeneratedArchetypes] = useState<GeneratedArchetype[]>([]);
+  const [archetypeSummary, setArchetypeSummary] = useState("");
+  const [archetypeArea, setArchetypeArea] = useState<ProfessionalArea>("technology");
+  const [archetypeContext, setArchetypeContext] = useState("");
   const [driveUrl, setDriveUrl] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [transcript, setTranscript] = useState("");
@@ -382,91 +450,186 @@ export function StudyHub() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState("");
   const [chatMessages, setChatMessages] = useState([
-    { role: "assistant", text: "Olá, Miguel. Posso explicar um trecho, criar exemplos ou montar uma revisão com base na sua aula." },
+    { role: "assistant", text: "Olá. Posso explicar um trecho, criar exemplos ou montar uma revisão com base na sua aula." },
   ]);
+  const [storageReady, setStorageReady] = useState(false);
+  const [cloudLoaded, setCloudLoaded] = useState(!cloudEnabled);
+  const [cloudStatus, setCloudStatus] = useState<"local" | "loading" | "saving" | "saved" | "error">(cloudEnabled ? "loading" : "local");
+  const [legacyImportAvailable, setLegacyImportAvailable] = useState(false);
+  const dashboardStorageKey = accountId ? `nexo-dashboard-v3:${accountId}` : "nexo-dashboard-v3";
+  const legacyMarkerKey = `nexo-legacy-reviewed:${accountId || "local"}`;
+
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem("nexo-goals-v1");
-      if (stored) setGoals(JSON.parse(stored));
-      const storedPlans = window.localStorage.getItem("nexo-study-plans-v2");
-      if (storedPlans) setStudyPlans(JSON.parse(storedPlans));
-      const storedActivePlan = window.localStorage.getItem("nexo-active-plan-v2");
-      if (storedActivePlan) setActivePlanId(storedActivePlan);
-      const storedSkills = window.localStorage.getItem("nexo-skills-v2");
-      if (storedSkills) setSkillLevels(JSON.parse(storedSkills));
-      const storedEvolution = window.localStorage.getItem("nexo-evolution-v2");
-      if (storedEvolution) setEvolutionLogs(JSON.parse(storedEvolution));
-      const storedAssessment = window.localStorage.getItem("nexo-assessment-v2");
-      if (storedAssessment) setAssessmentResult(JSON.parse(storedAssessment));
-      const storedMissions = window.localStorage.getItem("nexo-daily-missions-v1");
-      if (storedMissions) setDailyMissionChecks(JSON.parse(storedMissions));
-      const storedArchetype = window.localStorage.getItem("nexo-archetype-v1");
-      if (storedArchetype) setSelectedArchetype(storedArchetype);
-      const storedMapping = window.localStorage.getItem("nexo-personal-map-v1");
-      if (storedMapping) setMapping(JSON.parse(storedMapping));
-      const storedCourse = window.localStorage.getItem("nexo-course-name-v1");
-      if (storedCourse) setCourseName(storedCourse);
-      const storedGoal = window.localStorage.getItem("nexo-study-goal-v1");
-      if (storedGoal) setStudyGoal(storedGoal);
+      const v3 = window.localStorage.getItem(dashboardStorageKey);
+      if (v3) {
+        const state = JSON.parse(v3) as Partial<DashboardState>;
+        if (Array.isArray(state.goals)) setGoals(state.goals);
+        if (Array.isArray(state.studyPlans)) setStudyPlans(state.studyPlans);
+        if (typeof state.activePlanId === "string") setActivePlanId(state.activePlanId);
+        if (state.skillLevels) setSkillLevels(state.skillLevels);
+        if (Array.isArray(state.evolutionLogs)) setEvolutionLogs(state.evolutionLogs);
+        if (state.assessmentResult?.version === 3) setAssessmentResult(state.assessmentResult);
+        if (Array.isArray(state.dailyMissionChecks)) setDailyMissionChecks(state.dailyMissionChecks);
+        if (typeof state.primaryArchetypeId === "string") setSelectedArchetype(state.primaryArchetypeId);
+        if (typeof state.secondaryArchetypeId === "string") setSecondaryArchetype(state.secondaryArchetypeId);
+        if (Array.isArray(state.generatedArchetypes)) setGeneratedArchetypes(state.generatedArchetypes);
+        if (typeof state.archetypeSummary === "string") setArchetypeSummary(state.archetypeSummary);
+        if (state.archetypeArea) setArchetypeArea(state.archetypeArea);
+        if (typeof state.archetypeContext === "string") setArchetypeContext(state.archetypeContext);
+        if (state.mapping) setMapping(state.mapping);
+        if (typeof state.courseName === "string") setCourseName(state.courseName);
+        if (typeof state.studyGoal === "string") setStudyGoal(state.studyGoal);
+        if (typeof state.transcript === "string") setTranscript(state.transcript);
+        if (typeof state.syllabus === "string") setSyllabus(state.syllabus);
+        if (typeof state.syllabusName === "string") setSyllabusName(state.syllabusName);
+        if (Array.isArray(state.quiz)) setQuiz(state.quiz);
+        if (Array.isArray(state.flashcards)) setFlashcards(state.flashcards);
+        if (state.sessionMode) setSessionMode(state.sessionMode);
+      } else if (!authEnabled) {
+        const stored = window.localStorage.getItem("nexo-goals-v1");
+        if (stored) setGoals(JSON.parse(stored));
+        const storedPlans = window.localStorage.getItem("nexo-study-plans-v2");
+        if (storedPlans) setStudyPlans(JSON.parse(storedPlans));
+        const storedActivePlan = window.localStorage.getItem("nexo-active-plan-v2");
+        if (storedActivePlan) setActivePlanId(storedActivePlan);
+        const storedSkills = window.localStorage.getItem("nexo-skills-v2");
+        if (storedSkills) setSkillLevels(JSON.parse(storedSkills));
+        const storedEvolution = window.localStorage.getItem("nexo-evolution-v2");
+        if (storedEvolution) setEvolutionLogs(JSON.parse(storedEvolution));
+        const storedAssessment = window.localStorage.getItem("nexo-assessment-v2");
+        if (storedAssessment) {
+          const parsed = JSON.parse(storedAssessment) as AssessmentResult;
+          if (parsed.version === 3) setAssessmentResult(parsed);
+        }
+        const storedMissions = window.localStorage.getItem("nexo-daily-missions-v1");
+        if (storedMissions) setDailyMissionChecks(JSON.parse(storedMissions));
+        const storedArchetype = window.localStorage.getItem("nexo-archetype-v1");
+        if (storedArchetype) setSelectedArchetype(storedArchetype);
+        const storedMapping = window.localStorage.getItem("nexo-personal-map-v1");
+        if (storedMapping) setMapping(JSON.parse(storedMapping));
+        const storedCourse = window.localStorage.getItem("nexo-course-name-v1");
+        if (storedCourse) setCourseName(storedCourse);
+        const storedGoal = window.localStorage.getItem("nexo-study-goal-v1");
+        if (storedGoal) setStudyGoal(storedGoal);
+      }
+      if (authEnabled && !window.localStorage.getItem(legacyMarkerKey)) {
+        const hasLegacy = Boolean(
+          window.localStorage.getItem("nexo-dashboard-v3")
+            || window.localStorage.getItem("nexo-personal-map-v1")
+            || window.localStorage.getItem("nexo-study-plans-v2")
+            || window.localStorage.getItem("nexo-evolution-v2"),
+        );
+        setLegacyImportAvailable(hasLegacy);
+      }
     } catch {
-      window.localStorage.removeItem("nexo-goals-v1");
-      window.localStorage.removeItem("nexo-study-plans-v2");
-      window.localStorage.removeItem("nexo-active-plan-v2");
-      window.localStorage.removeItem("nexo-skills-v2");
-      window.localStorage.removeItem("nexo-evolution-v2");
-      window.localStorage.removeItem("nexo-assessment-v2");
-      window.localStorage.removeItem("nexo-daily-missions-v1");
-      window.localStorage.removeItem("nexo-archetype-v1");
-      window.localStorage.removeItem("nexo-personal-map-v1");
-      window.localStorage.removeItem("nexo-course-name-v1");
-      window.localStorage.removeItem("nexo-study-goal-v1");
+      setNotice("Alguns dados locais antigos não puderam ser lidos. Nenhum arquivo foi apagado.");
+    } finally {
+      setStorageReady(true);
     }
-  }, []);
+  }, [authEnabled, dashboardStorageKey, legacyMarkerKey]);
+
+  const dashboardState = useMemo<DashboardState>(() => ({
+    version: 3,
+    goals,
+    studyPlans,
+    activePlanId,
+    skillLevels,
+    evolutionLogs,
+    assessmentResult,
+    dailyMissionChecks,
+    primaryArchetypeId: selectedArchetype,
+    secondaryArchetypeId: secondaryArchetype,
+    generatedArchetypes,
+    archetypeSummary,
+    archetypeArea,
+    archetypeContext,
+    mapping,
+    courseName,
+    studyGoal,
+    transcript,
+    syllabus,
+    syllabusName,
+    quiz,
+    flashcards,
+    sessionMode,
+  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode]);
 
   useEffect(() => {
-    window.localStorage.setItem("nexo-goals-v1", JSON.stringify(goals));
-  }, [goals]);
+    if (!storageReady || (cloudEnabled && !cloudLoaded)) return;
+    window.localStorage.setItem(dashboardStorageKey, JSON.stringify(dashboardState));
+  }, [dashboardState, dashboardStorageKey, storageReady, cloudEnabled, cloudLoaded]);
 
   useEffect(() => {
-    window.localStorage.setItem("nexo-study-plans-v2", JSON.stringify(studyPlans));
-  }, [studyPlans]);
+    if (!cloudEnabled || !storageReady) return;
+    let cancelled = false;
+    async function loadCloudState() {
+      setCloudStatus("loading");
+      try {
+        const response = await fetch("/api/user-data", { cache: "no-store" });
+        const payload = await response.json() as { state?: Partial<DashboardState>; error?: string };
+        if (!response.ok) throw new Error(payload.error || "Falha ao carregar o painel.");
+        if (cancelled) return;
+        const state = payload.state;
+        if (state) {
+          setLegacyImportAvailable(false);
+          if (Array.isArray(state.goals)) setGoals(state.goals);
+          if (Array.isArray(state.studyPlans)) setStudyPlans(state.studyPlans);
+          if (typeof state.activePlanId === "string") setActivePlanId(state.activePlanId);
+          if (state.skillLevels) setSkillLevels(state.skillLevels);
+          if (Array.isArray(state.evolutionLogs)) setEvolutionLogs(state.evolutionLogs);
+          setAssessmentResult(state.assessmentResult?.version === 3 ? state.assessmentResult : null);
+          if (Array.isArray(state.dailyMissionChecks)) setDailyMissionChecks(state.dailyMissionChecks);
+          if (typeof state.primaryArchetypeId === "string") setSelectedArchetype(state.primaryArchetypeId);
+          if (typeof state.secondaryArchetypeId === "string") setSecondaryArchetype(state.secondaryArchetypeId);
+          if (Array.isArray(state.generatedArchetypes)) setGeneratedArchetypes(state.generatedArchetypes);
+          if (typeof state.archetypeSummary === "string") setArchetypeSummary(state.archetypeSummary);
+          if (state.archetypeArea) setArchetypeArea(state.archetypeArea);
+          if (typeof state.archetypeContext === "string") setArchetypeContext(state.archetypeContext);
+          if (state.mapping) setMapping(state.mapping);
+          if (typeof state.courseName === "string") setCourseName(state.courseName);
+          if (typeof state.studyGoal === "string") setStudyGoal(state.studyGoal);
+          if (typeof state.transcript === "string") setTranscript(state.transcript);
+          if (typeof state.syllabus === "string") setSyllabus(state.syllabus);
+          if (typeof state.syllabusName === "string") setSyllabusName(state.syllabusName);
+          if (Array.isArray(state.quiz)) setQuiz(state.quiz);
+          if (Array.isArray(state.flashcards)) setFlashcards(state.flashcards);
+          if (state.sessionMode) setSessionMode(state.sessionMode);
+        }
+        setCloudStatus(state ? "saved" : "saving");
+      } catch (error) {
+        if (!cancelled) {
+          setCloudStatus("error");
+          setNotice(error instanceof Error ? `${error.message} Seus dados locais continuam disponíveis.` : "Não foi possível carregar a nuvem.");
+        }
+      } finally {
+        if (!cancelled) setCloudLoaded(true);
+      }
+    }
+    loadCloudState();
+    return () => { cancelled = true; };
+  }, [cloudEnabled, storageReady]);
 
   useEffect(() => {
-    window.localStorage.setItem("nexo-active-plan-v2", activePlanId);
-  }, [activePlanId]);
-
-  useEffect(() => {
-    window.localStorage.setItem("nexo-skills-v2", JSON.stringify(skillLevels));
-  }, [skillLevels]);
-
-  useEffect(() => {
-    window.localStorage.setItem("nexo-evolution-v2", JSON.stringify(evolutionLogs));
-  }, [evolutionLogs]);
-
-  useEffect(() => {
-    if (assessmentResult) window.localStorage.setItem("nexo-assessment-v2", JSON.stringify(assessmentResult));
-    else window.localStorage.removeItem("nexo-assessment-v2");
-  }, [assessmentResult]);
-
-  useEffect(() => {
-    window.localStorage.setItem("nexo-daily-missions-v1", JSON.stringify(dailyMissionChecks));
-  }, [dailyMissionChecks]);
-
-  useEffect(() => {
-    window.localStorage.setItem("nexo-archetype-v1", selectedArchetype);
-  }, [selectedArchetype]);
-
-  useEffect(() => {
-    window.localStorage.setItem("nexo-personal-map-v1", JSON.stringify(mapping));
-  }, [mapping]);
-
-  useEffect(() => {
-    window.localStorage.setItem("nexo-course-name-v1", courseName);
-  }, [courseName]);
-
-  useEffect(() => {
-    window.localStorage.setItem("nexo-study-goal-v1", studyGoal);
-  }, [studyGoal]);
+    if (!cloudEnabled || !cloudLoaded || !storageReady) return;
+    setCloudStatus("saving");
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/user-data", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ state: dashboardState }),
+        });
+        const payload = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(payload.error || "Falha ao salvar.");
+        setCloudStatus("saved");
+      } catch (error) {
+        setCloudStatus("error");
+        setNotice(error instanceof Error ? `${error.message} Uma cópia permanece neste navegador.` : "Falha ao salvar na nuvem.");
+      }
+    }, 1200);
+    return () => window.clearTimeout(timeout);
+  }, [cloudEnabled, cloudLoaded, storageReady, dashboardState]);
 
   useEffect(() => {
     const priorities = mapping.topics
@@ -537,8 +700,40 @@ export function StudyHub() {
   const totalXp = evolutionLogs.reduce((total, log) => total + log.xp, 0);
   const evolutionLevel = totalXp ? Math.floor(totalXp / 500) + 1 : 0;
   const levelXp = totalXp % 500;
-  const evolutionRank = assessmentResult?.rank || "—";
-  const activeArchetype = archetypes.find((archetype) => archetype.id === selectedArchetype) || archetypes[0];
+  const accumulatedMinutes = evolutionLogs.reduce((total, log) => total + log.minutes, 0);
+  const evidenceDays = new Set(evolutionLogs.map((log) => log.createdAt.slice(0, 10))).size;
+  const evidencePillars = new Set(evolutionLogs.map((log) => log.type)).size;
+  const currentStreak = calculateCurrentStreak(evolutionLogs);
+  const averageSkill = Object.values(skillLevels).reduce((total, level) => total + level, 0) / 6;
+  const liveRankScore = assessmentResult ? Math.max(assessmentResult.overall, Math.round(assessmentResult.overall * 0.6 + averageSkill * 0.4)) : 0;
+  let evolutionRankIndex = assessmentResult ? rankOrder.indexOf(assessmentResult.rank) : -1;
+  if (assessmentResult) {
+    for (let index = evolutionRankIndex + 1; index < rankOrder.length; index += 1) {
+      const requirement = rankRequirements[rankOrder[index]];
+      const passed = liveRankScore >= requirement.score
+        && evolutionLogs.length >= requirement.records
+        && evidenceDays >= requirement.days
+        && accumulatedMinutes / 60 >= requirement.hours
+        && evidencePillars >= requirement.pillars;
+      if (!passed) break;
+      evolutionRankIndex = index;
+    }
+  }
+  const evolutionRank = evolutionRankIndex >= 0 ? rankOrder[evolutionRankIndex] : "—";
+  const nextRank = evolutionRankIndex >= 0 && evolutionRankIndex < rankOrder.length - 1 ? rankOrder[evolutionRankIndex + 1] : null;
+  const nextRankRequirement = nextRank ? rankRequirements[nextRank] : null;
+  const availableArchetypes = useMemo<Archetype[]>(() => [
+    ...archetypes,
+    ...generatedArchetypes.map((archetype, index) => ({
+      ...archetype,
+      icon: Crown,
+      color: generatedColors[index % generatedColors.length],
+    })),
+  ], [generatedArchetypes]);
+  const activeArchetype = availableArchetypes.find((archetype) => archetype.id === selectedArchetype) || availableArchetypes[0];
+  const activeSecondaryArchetype = availableArchetypes.find((archetype) => archetype.id === secondaryArchetype)
+    || availableArchetypes.find((archetype) => archetype.id !== activeArchetype.id)
+    || availableArchetypes[0];
   const ActiveArchetypeIcon = activeArchetype.icon;
   const archetypeRequirements = Object.entries(activeArchetype.requirements) as [SkillKey, number][];
   const archetypeProgress = Math.round(
@@ -547,7 +742,6 @@ export function StudyHub() {
       0,
     ) / archetypeRequirements.length * 100,
   );
-  const accumulatedMinutes = evolutionLogs.reduce((total, log) => total + log.minutes, 0);
   const completedMissions = [
     evolutionLogs.some((log) => log.type === "run" || log.type === "strength"),
     evolutionLogs.some((log) => log.type === "reading"),
@@ -568,6 +762,59 @@ export function StudyHub() {
   function changeMode(mode: "focus" | "break") {
     setSessionMode(mode);
     resetTimer(mode);
+  }
+
+  function importLegacyDashboard() {
+    try {
+      const savedV3 = window.localStorage.getItem("nexo-dashboard-v3");
+      if (savedV3) {
+        const state = JSON.parse(savedV3) as Partial<DashboardState>;
+        if (Array.isArray(state.goals)) setGoals(state.goals);
+        if (Array.isArray(state.studyPlans)) setStudyPlans(state.studyPlans);
+        if (typeof state.activePlanId === "string") setActivePlanId(state.activePlanId);
+        if (state.skillLevels) setSkillLevels(state.skillLevels);
+        if (Array.isArray(state.evolutionLogs)) setEvolutionLogs(state.evolutionLogs);
+        if (state.assessmentResult?.version === 3) setAssessmentResult(state.assessmentResult);
+        if (Array.isArray(state.dailyMissionChecks)) setDailyMissionChecks(state.dailyMissionChecks);
+        if (typeof state.primaryArchetypeId === "string") setSelectedArchetype(state.primaryArchetypeId);
+        if (typeof state.secondaryArchetypeId === "string") setSecondaryArchetype(state.secondaryArchetypeId);
+        if (Array.isArray(state.generatedArchetypes)) setGeneratedArchetypes(state.generatedArchetypes);
+        if (typeof state.archetypeSummary === "string") setArchetypeSummary(state.archetypeSummary);
+        if (state.archetypeArea) setArchetypeArea(state.archetypeArea);
+        if (typeof state.archetypeContext === "string") setArchetypeContext(state.archetypeContext);
+        if (state.mapping) setMapping(state.mapping);
+        if (typeof state.courseName === "string") setCourseName(state.courseName);
+        if (typeof state.studyGoal === "string") setStudyGoal(state.studyGoal);
+        if (typeof state.transcript === "string") setTranscript(state.transcript);
+        if (typeof state.syllabus === "string") setSyllabus(state.syllabus);
+        if (typeof state.syllabusName === "string") setSyllabusName(state.syllabusName);
+        if (Array.isArray(state.quiz)) setQuiz(state.quiz);
+        if (Array.isArray(state.flashcards)) setFlashcards(state.flashcards);
+      } else {
+        const storedGoals = window.localStorage.getItem("nexo-goals-v1");
+        const storedPlans = window.localStorage.getItem("nexo-study-plans-v2");
+        const storedSkills = window.localStorage.getItem("nexo-skills-v2");
+        const storedEvolution = window.localStorage.getItem("nexo-evolution-v2");
+        const storedMapping = window.localStorage.getItem("nexo-personal-map-v1");
+        if (storedGoals) setGoals(JSON.parse(storedGoals));
+        if (storedPlans) setStudyPlans(JSON.parse(storedPlans));
+        if (storedSkills) setSkillLevels(JSON.parse(storedSkills));
+        if (storedEvolution) setEvolutionLogs(JSON.parse(storedEvolution));
+        if (storedMapping) setMapping(JSON.parse(storedMapping));
+        setCourseName(window.localStorage.getItem("nexo-course-name-v1") || "");
+        setStudyGoal(window.localStorage.getItem("nexo-study-goal-v1") || "");
+      }
+      window.localStorage.setItem(legacyMarkerKey, "imported");
+      setLegacyImportAvailable(false);
+      setNotice("Painel local importado para esta conta. A cópia antiga foi preservada.");
+    } catch {
+      setNotice("Não foi possível importar o painel local. A cópia original não foi alterada.");
+    }
+  }
+
+  function dismissLegacyImport() {
+    window.localStorage.setItem(legacyMarkerKey, "ignored");
+    setLegacyImportAvailable(false);
   }
 
   function addGoal(event: FormEvent) {
@@ -749,6 +996,8 @@ export function StudyHub() {
     setAssessmentResult(result);
     setSkillLevels(result.skills);
     setSelectedArchetype(result.recommendedArchetype);
+    setSecondaryArchetype(result.recommendedArchetypes[1] || "leader");
+    setArchetypeArea(result.professionalArea);
     setNotice(`Avaliação concluída: Rank ${result.rank}. Sua linha de base foi criada.`);
   }
 
@@ -760,7 +1009,19 @@ export function StudyHub() {
     setNotice("Ranking, XP e atributos zerados. Faça a avaliação para criar uma nova linha de base.");
   }
 
-  function toggleDailyMission(archetypeId: string, missionIndex: number) {
+  function choosePrimaryArchetype(id: string) {
+    if (id === selectedArchetype) return;
+    if (id === secondaryArchetype) setSecondaryArchetype(selectedArchetype);
+    setSelectedArchetype(id);
+  }
+
+  function chooseSecondaryArchetype(id: string) {
+    if (id === secondaryArchetype) return;
+    if (id === selectedArchetype) setSelectedArchetype(secondaryArchetype);
+    setSecondaryArchetype(id);
+  }
+
+  function toggleDailyMission(archetypeId: string, missionIndex: number, missionTitle: string) {
     const date = new Date().toISOString().slice(0, 10);
     const missionId = `${date}-${archetypeId}-${missionIndex}`;
     const completed = dailyMissionChecks.includes(missionId);
@@ -773,12 +1034,52 @@ export function StudyHub() {
         id: Date.now() + missionIndex,
         sourceId: missionId,
         type: archetypeId === "athlete" ? "strength" : archetypeId === "entrepreneur" ? "business" : archetypeId === "leader" ? "communication" : "reading",
-        title: `Protocolo diário: ${activeArchetype.dailyProtocol[missionIndex]}`,
+        title: `Protocolo diário: ${missionTitle}`,
         minutes: 15,
         xp,
         createdAt: new Date().toISOString(),
       }, ...current]);
       setNotice(`Missão diária concluída: +${xp} XP.`);
+    }
+  }
+
+  async function generateArchetypePaths() {
+    const goal = archetypeContext.trim() || assessmentResult?.primaryGoal || studyGoal;
+    if (!goal.trim()) {
+      setNotice("Descreva o resultado que deseja construir antes de pedir os arquétipos à IA.");
+      return;
+    }
+    setBusy("archetypes");
+    setNotice(null);
+    try {
+      const areaLabel = professionalAreas.find((area) => area.value === archetypeArea)?.label || archetypeArea;
+      const response = await fetch("/api/archetypes/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: areaLabel,
+          role: assessmentResult?.role || courseName,
+          goal,
+          context: archetypeContext,
+          assessment: assessmentResult ? {
+            rank: assessmentResult.rank,
+            dimensions: assessmentResult.dimensions,
+            personality: assessmentResult.personality,
+            skills: assessmentResult.skills,
+          } : null,
+        }),
+      });
+      const payload = await response.json() as { error?: string; summary?: string; archetypes?: GeneratedArchetype[] };
+      if (!response.ok || !payload.archetypes?.length) throw new Error(payload.error || "A IA não conseguiu montar os caminhos.");
+      setGeneratedArchetypes(payload.archetypes);
+      setArchetypeSummary(payload.summary || "Caminhos personalizados para sua área.");
+      setSelectedArchetype(payload.archetypes[0].id);
+      setSecondaryArchetype(payload.archetypes[1]?.id || "sage");
+      setNotice(`${payload.archetypes.length} arquétipos personalizados foram criados. Você pode trocar o principal e o secundário a qualquer momento.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Não foi possível gerar os arquétipos agora.");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -1040,6 +1341,17 @@ export function StudyHub() {
     }
   }
 
+  if (cloudEnabled && !cloudLoaded) {
+    return (
+      <main className="cloud-loading">
+        <span className="brand"><span className="brand-mark"><Zap size={18} fill="currentColor" /></span><span>NEXO</span></span>
+        <LoaderCircle className="spin" size={30} />
+        <h1>Carregando seu painel individual</h1>
+        <p>Sincronizando ranking, planos, materiais e arquétipos.</p>
+      </main>
+    );
+  }
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
@@ -1075,8 +1387,8 @@ export function StudyHub() {
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="streak"><Flame size={18} /><span><strong>7 dias</strong><small>sequência atual</small></span></div>
-          <button className="profile"><span>ME</span><div><strong>Miguel Eduardo</strong><small>Aluno</small></div><MoreHorizontal size={17} /></button>
+          <div className="streak"><Flame size={18} /><span><strong>{currentStreak} {currentStreak === 1 ? "dia" : "dias"}</strong><small>sequência atual</small></span></div>
+          <AccountControl enabled={authEnabled} compact />
         </div>
       </aside>
 
@@ -1084,10 +1396,11 @@ export function StudyHub() {
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileNav(true)} aria-label="Abrir menu"><Menu /></button>
           <div>
-            <span className="eyebrow">TERÇA-FEIRA · 01 SET</span>
+            <span className="eyebrow" suppressHydrationWarning>{new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" }).toUpperCase()}</span>
             <h1>{tabs.find((item) => item.id === tab)?.label}</h1>
           </div>
           <div className="top-actions">
+            <span className={`cloud-status ${cloudStatus}`}>{cloudStatus === "saved" ? "Salvo na nuvem" : cloudStatus === "saving" ? "Salvando…" : cloudStatus === "error" ? "Cópia local" : cloudStatus === "loading" ? "Sincronizando…" : "Modo local"}</span>
             <div className="search-box"><Search size={17} /><input aria-label="Pesquisar" placeholder="Buscar nas suas aulas" /></div>
             <button className="outline-button" onClick={() => setChatOpen(true)}><Sparkles size={17} /> Perguntar à IA</button>
           </div>
@@ -1095,6 +1408,13 @@ export function StudyHub() {
 
         {notice && (
           <div className="notice" role="status"><span>{notice}</span><button onClick={() => setNotice(null)} aria-label="Fechar aviso"><X size={16} /></button></div>
+        )}
+
+        {legacyImportAvailable && (
+          <div className="legacy-import panel">
+            <div><HardDrive size={20} /><span><strong>Encontramos um painel local anterior</strong><small>Importe seus planos, mapa e histórico para esta conta. Nada será apagado do navegador.</small></span></div>
+            <div><button className="text-button" onClick={dismissLegacyImport}>Agora não</button><button className="primary-button" onClick={importLegacyDashboard}>Importar para minha conta</button></div>
+          </div>
         )}
 
         {tab === "dashboard" && (
@@ -1129,7 +1449,7 @@ export function StudyHub() {
             </section>
 
             <section className="progress-panel panel">
-              <div className="panel-heading"><div><span className="eyebrow">EVOLUÇÃO</span><h3>Progresso semanal</h3></div><span className="trend">+18%</span></div>
+              <div className="panel-heading"><div><span className="eyebrow">EVOLUÇÃO</span><h3>Progresso atual</h3></div><span className="trend">{evolutionLogs.length} registros</span></div>
               <div className="progress-content">
                 <div className="radial" style={{ "--value": `${mapping.coverage * 3.6}deg` } as React.CSSProperties}><div><strong>{mapping.coverage}%</strong><small>cobertura</small></div></div>
                 <div className="stat-list">
@@ -1156,12 +1476,8 @@ export function StudyHub() {
             </section>
 
             <section className="activity-panel panel">
-              <div className="panel-heading"><div><span className="eyebrow">ATIVIDADE RECENTE</span><h3>Últimas sessões</h3></div><button className="text-button" onClick={() => setTab("sessions")}>Ver todas</button></div>
-              <div className="session-list compact">
-                <div><span className="session-icon purple"><Video size={19} /></span><p><strong>Fundos de investimento — Aula 04</strong><small>Hoje · 52 min · 6 tópicos</small></p><span className="score">84%</span></div>
-                <div><span className="session-icon blue"><BrainCircuit size={19} /></span><p><strong>Revisão: riscos e suitability</strong><small>Ontem · 24 min · 18 questões</small></p><span className="score">78%</span></div>
-                <div><span className="session-icon orange"><BookOpen size={19} /></span><p><strong>Apostila — Módulo 2</strong><small>30 ago · 41 min · páginas 18–35</small></p><Check size={19} className="muted" /></div>
-              </div>
+              <div className="panel-heading"><div><span className="eyebrow">ATIVIDADE RECENTE</span><h3>Suas últimas evidências</h3></div><button className="text-button" onClick={() => setTab("evolution")}>Ver todas</button></div>
+              {evolutionLogs.length ? <div className="session-list compact">{evolutionLogs.slice(0, 3).map((log) => <div key={log.id}><span className="session-icon purple"><Activity size={19} /></span><p><strong>{log.title}</strong><small>{activityTypes[log.type].label} · {log.minutes} min · {new Date(log.createdAt).toLocaleDateString("pt-BR")}</small></p><span className="score">+{log.xp} XP</span></div>)}</div> : <div className="history-empty dashboard-empty"><Shield size={24} /><p><strong>Nenhuma evidência registrada.</strong><small>Use Ascensão para registrar estudo, leitura, treino ou projetos.</small></p></div>}
             </section>
           </div>
         )}
@@ -1190,6 +1506,29 @@ export function StudyHub() {
             </section>
 
             <RankAssessment result={assessmentResult} onComplete={completeAssessment} onReset={resetAssessment} />
+
+            {assessmentResult && (
+              <section className="rank-gates panel">
+                <div className="rank-gates-head">
+                  <div><span className="eyebrow">PROMOÇÃO POR EVIDÊNCIAS</span><h3>{nextRank ? `Rota do Rank ${evolutionRank} para o Rank ${nextRank}` : "Rank S: manutenção de excelência"}</h3><p>O diagnóstico define a base. Para subir, todos os limites abaixo precisam ser alcançados em dias diferentes e em múltiplos pilares.</p></div>
+                  <div><span>ÍNDICE VIVO</span><strong>{liveRankScore}</strong><small>base + atributos atuais</small></div>
+                </div>
+                {nextRankRequirement ? (
+                  <div className="rank-gate-grid">
+                    {[
+                      { label: "Índice composto", value: liveRankScore, target: nextRankRequirement.score, display: `${liveRankScore}/${nextRankRequirement.score}` },
+                      { label: "Registros válidos", value: evolutionLogs.length, target: nextRankRequirement.records, display: `${evolutionLogs.length}/${nextRankRequirement.records}` },
+                      { label: "Dias com evidência", value: evidenceDays, target: nextRankRequirement.days, display: `${evidenceDays}/${nextRankRequirement.days}` },
+                      { label: "Horas acumuladas", value: Math.round(accumulatedMinutes / 60), target: nextRankRequirement.hours, display: `${Math.round(accumulatedMinutes / 60)}/${nextRankRequirement.hours}h` },
+                      { label: "Pilares distintos", value: evidencePillars, target: nextRankRequirement.pillars, display: `${evidencePillars}/${nextRankRequirement.pillars}` },
+                    ].map((gate) => {
+                      const progress = Math.min(gate.value / Math.max(gate.target, 1) * 100, 100);
+                      return <article key={gate.label} className={progress >= 100 ? "passed" : ""}><div><span>{gate.label}</span><strong>{gate.display}</strong></div><i><b style={{ width: `${progress}%` }} /></i></article>;
+                    })}
+                  </div>
+                ) : <p className="rank-s-note"><Trophy size={18} /> O Rank S não encerra a jornada: mantenha consistência, qualidade, ética e resultados por ciclos longos.</p>}
+              </section>
+            )}
 
             <div className="evolution-top-grid">
               <form className="evolution-log panel" onSubmit={logEvolutionActivity}>
@@ -1265,24 +1604,45 @@ export function StudyHub() {
               <div className="archetype-header">
                 <div>
                   <span className="eyebrow ascension-label"><Crown size={14} /> CAMINHOS DE MAESTRIA</span>
-                  <h2>Escolha quem você quer se tornar.</h2>
-                  <p>Cada arquétipo exige uma combinação de habilidades, marcos concretos e anos de trabalho. Você pode mudar o caminho sem perder sua evolução.</p>
+                  <h2>Construa uma combinação que faça sentido para sua área.</h2>
+                  <p>Escolha um arquétipo principal para direção e um secundário para ampliar sua forma de agir. Você pode mudar ambos sem perder XP, histórico ou atributos.</p>
                 </div>
-                <div className="years-warning"><Clock3 size={20} /><span><strong>Horizonte real</strong><small>3 a 6 anos de consistência</small></span></div>
+                <div className="years-warning"><Clock3 size={20} /><span><strong>Horizonte real</strong><small>3 a 10 anos de evidências</small></span></div>
+              </div>
+
+              <section className="archetype-ai panel">
+                <div className="archetype-ai-copy">
+                  <span className="ai-orb"><Sparkles size={21} /></span>
+                  <div><span className="eyebrow">ARQUITETO DE ARQUÉTIPOS COM IA</span><h3>Gerar modelos específicos da sua área</h3><p>A IA combina seu diagnóstico com padrões recorrentes de casos públicos bem-sucedidos e transforma isso em marcos, competências e ações verificáveis.</p></div>
+                </div>
+                <div className="archetype-ai-form">
+                  <label><span>Área</span><select value={archetypeArea} onChange={(event) => setArchetypeArea(event.target.value as ProfessionalArea)}>{professionalAreas.map((area) => <option key={area.value} value={area.value}>{area.label}</option>)}</select></label>
+                  <label className="archetype-context"><span>Resultado desejado e contexto</span><textarea value={archetypeContext} onChange={(event) => setArchetypeContext(event.target.value)} placeholder={assessmentResult?.primaryGoal || "Ex.: quero liderar uma gestora de investimentos, mas hoje estou no início da carreira..."} /></label>
+                  <button className="primary-button" onClick={generateArchetypePaths} disabled={busy === "archetypes"}>{busy === "archetypes" ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />} {generatedArchetypes.length ? "Gerar novas opções" : "Analisar e gerar"}</button>
+                </div>
+                {archetypeSummary && <p className="archetype-ai-summary"><Bot size={16} />{archetypeSummary}</p>}
+                <small className="method-disclaimer">Síntese de IA, não pesquisa biográfica em tempo real. Os cases são referências de aprendizagem, não garantias; confirme informações importantes nas fontes originais.</small>
+              </section>
+
+              <div className="archetype-selection-summary panel">
+                <div><span>PRINCIPAL</span><strong>{activeArchetype.name}</strong><small>Define direção, marcos e três ações diárias.</small></div>
+                <i>+</i>
+                <div><span>SECUNDÁRIO</span><strong>{activeSecondaryArchetype.name}</strong><small>Adiciona uma ação complementar ao sistema diário.</small></div>
               </div>
 
               <div className="archetype-cards">
-                {archetypes.map((archetype) => {
+                {availableArchetypes.map((archetype) => {
                   const requirements = Object.entries(archetype.requirements) as [SkillKey, number][];
                   const progress = Math.round(requirements.reduce((total, [skill, requirement]) => total + Math.min(skillLevels[skill] / requirement, 1), 0) / requirements.length * 100);
                   const Icon = archetype.icon;
                   return (
-                    <button key={archetype.id} className={selectedArchetype === archetype.id ? "active" : ""} style={{ "--archetype": archetype.color } as React.CSSProperties} onClick={() => setSelectedArchetype(archetype.id)}>
-                      <span className="archetype-icon"><Icon size={22} /></span>
-                      <span className="archetype-name"><strong>{archetype.name}</strong><small>{archetype.horizon}</small></span>
+                    <article key={archetype.id} className={`${selectedArchetype === archetype.id ? "active" : ""} ${secondaryArchetype === archetype.id ? "secondary" : ""}`} style={{ "--archetype": archetype.color } as React.CSSProperties}>
+                      <div className="archetype-card-head"><span className="archetype-icon"><Icon size={22} /></span><span className="archetype-name"><strong>{archetype.name}</strong><small>{archetype.area || "Caminho-base"} · {archetype.horizon}</small></span></div>
+                      {typeof archetype.fitScore === "number" && <span className="fit-score">Compatibilidade IA {archetype.fitScore}%</span>}
                       <span className="archetype-card-progress"><i style={{ width: `${progress}%` }} /></span>
                       <span className="archetype-lock">{progress >= 100 ? <Trophy size={15} /> : <LockKeyhole size={15} />} {progress}%</span>
-                    </button>
+                      <div className="archetype-role-actions"><button className={selectedArchetype === archetype.id ? "chosen" : ""} onClick={() => choosePrimaryArchetype(archetype.id)}>Principal</button><button className={secondaryArchetype === archetype.id ? "chosen" : ""} onClick={() => chooseSecondaryArchetype(archetype.id)}>Secundário</button></div>
+                    </article>
                   );
                 })}
               </div>
@@ -1291,9 +1651,10 @@ export function StudyHub() {
                 <div className="archetype-detail-intro">
                   <div className="archetype-title-row">
                     <span><ActiveArchetypeIcon size={27} /></span>
-                    <div><span className="eyebrow">ARQUÉTIPO SELECIONADO</span><h3>{activeArchetype.name}</h3></div>
+                    <div><span className="eyebrow">ARQUÉTIPO PRINCIPAL</span><h3>{activeArchetype.name}</h3><small className="secondary-label">Secundário: {activeSecondaryArchetype.name}</small></div>
                   </div>
                   <p>{activeArchetype.subtitle}</p>
+                  {activeArchetype.rationale && <div className="archetype-rationale"><strong>Por que combina com seu perfil</strong><p>{activeArchetype.rationale}</p></div>}
                   <div className="archetype-big-progress">
                     <div><span>Prontidão atual</span><strong>{archetypeProgress}%</strong></div>
                     <div><i style={{ width: `${archetypeProgress}%` }} /></div>
@@ -1311,6 +1672,7 @@ export function StudyHub() {
                   <ul className="milestone-list">
                     {activeArchetype.milestones.map((milestone) => <li key={milestone}><Target size={16} />{milestone}</li>)}
                   </ul>
+                  {activeArchetype.caseModels?.length ? <div className="case-models"><h4>Cases públicos para estudar</h4><p>{activeArchetype.successPattern}</p>{activeArchetype.caseModels.map((model) => <article key={model.name}><strong>{model.name}</strong><span>{model.lesson}</span></article>)}</div> : null}
                 </div>
 
                 <div className="roadmap-column">
@@ -1329,12 +1691,15 @@ export function StudyHub() {
                   </div>
                 </div>
                 <section className="daily-archetype-path">
-                  <div className="daily-path-heading"><div><span className="eyebrow">SISTEMA DIÁRIO</span><h3>O que fazer hoje para se tornar {activeArchetype.name}</h3></div><span>{new Date().toLocaleDateString("pt-BR", { weekday: "long" })}</span></div>
+                  <div className="daily-path-heading"><div><span className="eyebrow">PROTOCOLO HÍBRIDO</span><h3>O que fazer hoje: {activeArchetype.name} + {activeSecondaryArchetype.name}</h3></div><span suppressHydrationWarning>{new Date().toLocaleDateString("pt-BR", { weekday: "long" })}</span></div>
                   <div className="daily-protocol-grid">
-                    {activeArchetype.dailyProtocol.map((mission, index) => {
-                      const missionId = `${new Date().toISOString().slice(0, 10)}-${activeArchetype.id}-${index}`;
+                    {[
+                      ...activeArchetype.dailyProtocol.slice(0, 3).map((mission, index) => ({ mission, index, archetype: activeArchetype, role: "Principal" })),
+                      ...activeSecondaryArchetype.dailyProtocol.slice(0, 1).map((mission, index) => ({ mission, index, archetype: activeSecondaryArchetype, role: "Secundário" })),
+                    ].map(({ mission, index, archetype, role }) => {
+                      const missionId = `${new Date().toISOString().slice(0, 10)}-${archetype.id}-${index}`;
                       const done = dailyMissionChecks.includes(missionId);
-                      return <button key={mission} className={done ? "done" : ""} onClick={() => toggleDailyMission(activeArchetype.id, index)}><span>{done ? <Check size={16} /> : index + 1}</span><p><strong>{mission}</strong><small>{done ? "Concluída hoje" : "+25 XP ao concluir"}</small></p></button>;
+                      return <button key={`${archetype.id}-${index}`} className={done ? "done" : ""} onClick={() => toggleDailyMission(archetype.id, index, mission)}><span>{done ? <Check size={16} /> : index + 1}</span><p><strong>{mission}</strong><small>{done ? "Concluída hoje" : `${role} · +25 XP`}</small></p></button>;
                     })}
                   </div>
                   <div className="weekly-archetype-path">
