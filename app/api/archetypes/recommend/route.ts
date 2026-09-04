@@ -5,7 +5,7 @@ import { createStructuredResponse, OpenAIRequestError } from "@/lib/openai";
 import { isRecord } from "@/lib/safe-json";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function safeText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -38,11 +38,12 @@ export async function POST(request: Request) {
       schema: archetypeResponseSchema as unknown as Record<string, unknown>,
       schemaName: "archetype_paths",
       validate: validateArchetypeResponse,
-      instructions: `Você é um arquiteto de desenvolvimento humano responsável e orientado a evidências. Crie de 6 a 8 arquétipos profissionais distintos e escolhíveis para a área informada. Eles não são tipos místicos: são modelos de competência, comportamento e produção de resultados.
+      timeoutMs: 210_000,
+      instructions: `Você é um arquiteto de desenvolvimento humano responsável e orientado a evidências. Crie exatamente 6 arquétipos profissionais distintos e escolhíveis para a área informada. Eles não são tipos místicos: são modelos de competência, comportamento e produção de resultados.
 
 Use padrões recorrentes observáveis em casos públicos de alto desempenho da área: prática deliberada, produção, feedback, ética, julgamento, colaboração, saúde sustentável e criação de valor. Cite 2 ou 3 casos públicos amplamente documentados por arquétipo apenas como modelos de aprendizagem. Não invente biografias, números ou hábitos privados e não prometa que imitar alguém produz o mesmo resultado. Se não houver segurança sobre um nome específico, use uma organização, equipe ou tradição profissional verificável.
 
-Personalize fitScore e justificativa com os atributos fornecidos, sem tratar renda, personalidade, gênero, país ou origem como mérito. Personalidade serve para adaptar a rota. O horizonte deve ser realista, de 3 a 10 anos. Cada marco deve ser verificável. O protocolo diário deve caber em uma rotina real; o plano semanal deve cobrir exatamente segunda a domingo e combinar o arquétipo principal com saúde e reflexão. Escreva em português do Brasil, com profundidade, clareza e sem linguagem clínica.`,
+Personalize fitScore e justificativa com os atributos fornecidos, sem tratar renda, personalidade, gênero, país ou origem como mérito. Personalidade serve para adaptar a rota. O horizonte deve ser realista, de 3 a 10 anos. Cada marco deve ser verificável. O protocolo diário deve caber em uma rotina real; o plano semanal deve cobrir exatamente segunda a domingo e combinar o arquétipo principal com saúde e reflexão. Use frases objetivas em cada ação para entregar a estrutura completa dentro do tempo disponível. Escreva em português do Brasil, com profundidade, clareza e sem linguagem clínica.`,
       input,
     });
     const seen = new Set<string>();

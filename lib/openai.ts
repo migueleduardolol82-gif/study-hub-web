@@ -69,11 +69,19 @@ export async function createTextResponse({
   schemaName?: string;
   timeoutMs?: number;
 }) {
+  const model = process.env.OPENAI_TEXT_MODEL || "gpt-5-mini";
   const body: Record<string, unknown> = {
-    model: process.env.OPENAI_TEXT_MODEL || "gpt-5-mini",
+    model,
     instructions,
     input,
   };
+
+  // Os modelos GPT-5 raciocinam antes de responder. Esforço baixo mantém a
+  // geração estruturada profunda, mas evita gastar boa parte da janela da
+  // função em raciocínio invisível.
+  if (/^gpt-5(?:[.-]|$)/i.test(model)) {
+    body.reasoning = { effort: "low" };
+  }
 
   if (schema) {
     body.text = {
@@ -82,6 +90,9 @@ export async function createTextResponse({
   }
 
   let response: Response;
+  let rawBody: string;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     response = await fetch(`${OPENAI_API_URL}/responses`, {
       method: "POST",
@@ -90,8 +101,12 @@ export async function createTextResponse({
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: controller.signal,
     });
+    // Inclui a leitura do corpo no mesmo timeout. Alguns provedores enviam os
+    // cabeçalhos antes de concluir a geração; limitar apenas fetch() deixaria a
+    // leitura pendurada fora da janela controlada.
+    rawBody = await response.text();
   } catch (error) {
     if (error instanceof OpenAIRequestError) throw error;
     const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
@@ -102,10 +117,11 @@ export async function createTextResponse({
       true,
       error instanceof Error ? error.message : String(error),
     );
+  } finally {
+    clearTimeout(timeout);
   }
 
   const contentType = response.headers.get("content-type")?.toLowerCase() || "";
-  const rawBody = await response.text();
   let payload: unknown = null;
   if (contentType.includes("application/json") && rawBody.trim()) {
     try {

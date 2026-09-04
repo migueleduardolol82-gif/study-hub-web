@@ -1344,7 +1344,7 @@ export function StudyHub({
       return;
     }
     setBusy("archetypes");
-    setNotice(null);
+    setNotice("A IA está construindo 6 caminhos completos. Esta análise profunda pode levar até 3 minutos.");
     setArchetypeError(null);
     try {
       const areaLabel = professionalAreas.find((area) => area.value === archetypeArea)?.label || archetypeArea;
