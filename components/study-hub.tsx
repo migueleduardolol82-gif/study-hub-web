@@ -20,7 +20,6 @@ import {
   Dumbbell,
   FileText,
   Flame,
-  Gauge,
   HardDrive,
   Layers3,
   Link2,
@@ -29,6 +28,7 @@ import {
   LoaderCircle,
   Menu,
   MessageCircle,
+  MoreVertical,
   Pause,
   Play,
   Plus,
@@ -49,30 +49,19 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AccountControl } from "@/components/account-control";
+import { ActiveReview } from "@/components/active-review";
+import { StudyMapsLibrary, ThemesWorkspace } from "@/components/content-workspaces";
 import { RankAssessment } from "@/components/rank-assessment";
+import { ApiClientError, readApiResponse } from "@/lib/api-contract";
 import { professionalAreas, type AssessmentResult, type ProfessionalArea, type SkillKey, type SkillLevels } from "@/lib/assessment";
 import type { GeneratedArchetype } from "@/lib/archetypes";
+import { emptyPathProgress, type ContentMapping, type LearningPath, type LearningTopic, type PathProgress, type StudyMapRecord, type ThemeRecord, type TopicPriority as LearningTopicPriority, type TopicStatus as LearningTopicStatus } from "@/lib/learning";
 
-type Tab = "dashboard" | "evolution" | "sessions" | "mapping" | "plans" | "review";
-type TopicStatus = "planned" | "covered" | "partial" | "gap";
-type TopicPriority = "high" | "medium" | "low";
-type Topic = {
-  id?: string;
-  title: string;
-  module?: string;
-  priority?: TopicPriority;
-  status: TopicStatus;
-  confidence: number;
-  videoEvidence: string;
-  syllabusReference: string;
-  action: string;
-};
-type Mapping = {
-  summary: string;
-  coverage: number;
-  topics: Topic[];
-  nextSteps: string[];
-};
+type Tab = "dashboard" | "mapping" | "themes" | "review" | "evolution" | "sessions" | "plans";
+type TopicStatus = LearningTopicStatus;
+type TopicPriority = LearningTopicPriority;
+type Topic = LearningTopic;
+type Mapping = ContentMapping;
 type Goal = { id: number; title: string; done: boolean };
 type Quiz = { question: string; options: string[]; answer: number; explanation: string };
 type Flashcard = { front: string; back: string; topic: string };
@@ -83,6 +72,13 @@ type PlanSession = {
   activity: string;
   minutes: number;
   done: boolean;
+  category?: "study" | "revision" | "exercise" | "reading" | "project";
+  difficulty?: "easy" | "medium" | "hard";
+  xp?: number;
+  dueDate?: string;
+  recurrence?: "none" | "daily" | "weekly" | "monthly";
+  mapId?: string;
+  themeId?: string;
 };
 type StudyWeek = { week: number; theme: string; sessions: PlanSession[] };
 type StudyPlanRecord = { id: string; name: string; createdAt: string; weeks: StudyWeek[] };
@@ -94,6 +90,14 @@ type EvolutionLog = {
   minutes: number;
   xp: number;
   createdAt: string;
+  description?: string;
+  difficulty?: "easy" | "medium" | "hard";
+  dueDate?: string;
+  recurrence?: "none" | "daily" | "weekly" | "monthly";
+  mapId?: string;
+  themeId?: string;
+  status?: "pending" | "completed";
+  order?: number;
 };
 type Archetype = {
   id: string;
@@ -115,7 +119,7 @@ type Archetype = {
 };
 
 type DashboardState = {
-  version: 3;
+  version: 4;
   goals: Goal[];
   studyPlans: StudyPlanRecord[];
   activePlanId: string;
@@ -138,6 +142,11 @@ type DashboardState = {
   quiz: Quiz[];
   flashcards: Flashcard[];
   sessionMode: "focus" | "break";
+  themes: ThemeRecord[];
+  studyMaps: StudyMapRecord[];
+  activeStudyMapId: string;
+  learningPaths: LearningPath[];
+  learningProgress: Record<string, PathProgress>;
 };
 
 const initialMapping: Mapping = {
@@ -152,39 +161,6 @@ const priorityLabels: Record<TopicPriority, string> = {
   medium: "Média",
   low: "Baixa",
 };
-
-const demoQuiz: Quiz[] = [
-  {
-    question: "Qual participante toma as decisões de compra e venda dos ativos do fundo?",
-    options: ["Administrador", "Gestor", "Custodiante", "Auditor"],
-    answer: 1,
-    explanation: "O gestor define a estratégia e executa as decisões de investimento dentro da política do fundo.",
-  },
-  {
-    question: "O que a marcação a mercado procura refletir na cota?",
-    options: ["O custo original", "O valor contábil", "O preço atual dos ativos", "A rentabilidade futura"],
-    answer: 2,
-    explanation: "Ela atualiza os ativos pelo valor pelo qual poderiam ser negociados no mercado naquele momento.",
-  },
-];
-
-const demoCards: Flashcard[] = [
-  {
-    front: "Qual é a principal função do administrador fiduciário?",
-    back: "Cuidar do funcionamento do fundo e garantir o cumprimento das normas e do regulamento.",
-    topic: "Estrutura dos fundos",
-  },
-  {
-    front: "Por que a marcação a mercado pode alterar uma cota diariamente?",
-    back: "Porque os preços e as taxas dos ativos variam no mercado, mudando o valor atualizado da carteira.",
-    topic: "Marcação a mercado",
-  },
-  {
-    front: "O que é o come-cotas?",
-    back: "É a antecipação semestral do IR em certos fundos, realizada pela redução do número de cotas.",
-    topic: "Tributação",
-  },
-];
 
 const initialGoals: Goal[] = [];
 
@@ -336,19 +312,13 @@ const archetypes: Archetype[] = [
 
 const tabs: { id: Tab; label: string; icon: typeof BarChart3 }[] = [
   { id: "dashboard", label: "Visão geral", icon: BarChart3 },
+  { id: "mapping", label: "Mapas de Estudos", icon: Layers3 },
+  { id: "themes", label: "Temas", icon: BookMarked },
+  { id: "review", label: "Revisão Ativa", icon: BrainCircuit },
   { id: "evolution", label: "Ascensão", icon: Shield },
-  { id: "sessions", label: "Sessões", icon: Video },
-  { id: "mapping", label: "Mapa de conteúdo", icon: Layers3 },
-  { id: "plans", label: "Plano de estudos", icon: CalendarDays },
-  { id: "review", label: "Revisão ativa", icon: BrainCircuit },
+  { id: "sessions", label: "Estudos", icon: Video },
+  { id: "plans", label: "Planos", icon: CalendarDays },
 ];
-
-function getErrorMessage(payload: unknown, fallback: string) {
-  if (payload && typeof payload === "object" && "error" in payload) {
-    return String((payload as { error: unknown }).error);
-  }
-  return fallback;
-}
 
 function calculateCoverage(topics: Topic[]) {
   if (!topics.length) return 0;
@@ -420,12 +390,21 @@ export function StudyHub({
   const [activityType, setActivityType] = useState<EvolutionLog["type"]>("reading");
   const [activityTitle, setActivityTitle] = useState("");
   const [activityMinutes, setActivityMinutes] = useState(45);
+  const [activityDescription, setActivityDescription] = useState("");
+  const [activityDifficulty, setActivityDifficulty] = useState<NonNullable<EvolutionLog["difficulty"]>>("medium");
+  const [activityXp, setActivityXp] = useState(0);
+  const [activityDueDate, setActivityDueDate] = useState("");
+  const [activityRecurrence, setActivityRecurrence] = useState<NonNullable<EvolutionLog["recurrence"]>>("none");
+  const [activityMapId, setActivityMapId] = useState("");
+  const [activityThemeId, setActivityThemeId] = useState("");
+  const [activityStatus, setActivityStatus] = useState<NonNullable<EvolutionLog["status"]>>("completed");
   const [selectedArchetype, setSelectedArchetype] = useState("sage");
   const [secondaryArchetype, setSecondaryArchetype] = useState("entrepreneur");
   const [generatedArchetypes, setGeneratedArchetypes] = useState<GeneratedArchetype[]>([]);
   const [archetypeSummary, setArchetypeSummary] = useState("");
   const [archetypeArea, setArchetypeArea] = useState<ProfessionalArea>("technology");
   const [archetypeContext, setArchetypeContext] = useState("");
+  const [archetypeError, setArchetypeError] = useState<{ message: string; retryable: boolean } | null>(null);
   const [driveUrl, setDriveUrl] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [transcript, setTranscript] = useState("");
@@ -437,14 +416,11 @@ export function StudyHub({
   const [topicTitle, setTopicTitle] = useState("");
   const [topicModule, setTopicModule] = useState("");
   const [topicReference, setTopicReference] = useState("");
+  const [topicParentId, setTopicParentId] = useState("");
   const [topicPriority, setTopicPriority] = useState<TopicPriority>("high");
   const [topicAiPrompt, setTopicAiPrompt] = useState("");
-  const [quiz, setQuiz] = useState<Quiz[]>(demoQuiz);
-  const [flashcards, setFlashcards] = useState<Flashcard[]>(demoCards);
-  const [quizIndex, setQuizIndex] = useState(0);
-  const [quizChoice, setQuizChoice] = useState<number | null>(null);
-  const [cardIndex, setCardIndex] = useState(0);
-  const [cardFlipped, setCardFlipped] = useState(false);
+  const [quiz, setQuiz] = useState<Quiz[]>([]);
+  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -456,12 +432,21 @@ export function StudyHub({
   const [cloudLoaded, setCloudLoaded] = useState(!cloudEnabled);
   const [cloudStatus, setCloudStatus] = useState<"local" | "loading" | "saving" | "saved" | "error">(cloudEnabled ? "loading" : "local");
   const [legacyImportAvailable, setLegacyImportAvailable] = useState(false);
-  const dashboardStorageKey = accountId ? `nexo-dashboard-v3:${accountId}` : "nexo-dashboard-v3";
+  const [themes, setThemes] = useState<ThemeRecord[]>([]);
+  const [studyMaps, setStudyMaps] = useState<StudyMapRecord[]>([]);
+  const [activeStudyMapId, setActiveStudyMapId] = useState("");
+  const [learningPaths, setLearningPaths] = useState<LearningPath[]>([]);
+  const [learningProgress, setLearningProgress] = useState<Record<string, PathProgress>>({});
+  const [editingActivityId, setEditingActivityId] = useState<number | null>(null);
+  const [activityMenuId, setActivityMenuId] = useState<number | null>(null);
+  const [planSessionMenuId, setPlanSessionMenuId] = useState<string | null>(null);
+  const [editingPlanSession, setEditingPlanSession] = useState<PlanSession | null>(null);
+  const dashboardStorageKey = accountId ? `nexo-dashboard-v4:${accountId}` : "nexo-dashboard-v4";
   const legacyMarkerKey = `nexo-legacy-reviewed:${accountId || "local"}`;
 
   useEffect(() => {
     try {
-      const v3 = window.localStorage.getItem(dashboardStorageKey);
+      const v3 = window.localStorage.getItem(dashboardStorageKey) || window.localStorage.getItem(accountId ? `nexo-dashboard-v3:${accountId}` : "nexo-dashboard-v3");
       if (v3) {
         const state = JSON.parse(v3) as Partial<DashboardState>;
         if (Array.isArray(state.goals)) setGoals(state.goals);
@@ -486,6 +471,11 @@ export function StudyHub({
         if (Array.isArray(state.quiz)) setQuiz(state.quiz);
         if (Array.isArray(state.flashcards)) setFlashcards(state.flashcards);
         if (state.sessionMode) setSessionMode(state.sessionMode);
+        if (Array.isArray(state.themes)) setThemes(state.themes);
+        if (Array.isArray(state.studyMaps)) setStudyMaps(state.studyMaps);
+        if (typeof state.activeStudyMapId === "string") setActiveStudyMapId(state.activeStudyMapId);
+        if (Array.isArray(state.learningPaths)) setLearningPaths(state.learningPaths);
+        if (state.learningProgress && typeof state.learningProgress === "object") setLearningProgress(state.learningProgress);
       } else if (!authEnabled) {
         const stored = window.localStorage.getItem("nexo-goals-v1");
         if (stored) setGoals(JSON.parse(stored));
@@ -527,10 +517,10 @@ export function StudyHub({
     } finally {
       setStorageReady(true);
     }
-  }, [authEnabled, dashboardStorageKey, legacyMarkerKey]);
+  }, [authEnabled, dashboardStorageKey, legacyMarkerKey, accountId]);
 
   const dashboardState = useMemo<DashboardState>(() => ({
-    version: 3,
+    version: 4,
     goals,
     studyPlans,
     activePlanId,
@@ -553,7 +543,12 @@ export function StudyHub({
     quiz,
     flashcards,
     sessionMode,
-  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode]);
+    themes,
+    studyMaps,
+    activeStudyMapId,
+    learningPaths,
+    learningProgress,
+  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress]);
 
   useEffect(() => {
     if (!storageReady || (cloudEnabled && !cloudLoaded)) return;
@@ -567,8 +562,7 @@ export function StudyHub({
       setCloudStatus("loading");
       try {
         const response = await fetch("/api/user-data", { cache: "no-store" });
-        const payload = await response.json() as { state?: Partial<DashboardState>; error?: string };
-        if (!response.ok) throw new Error(payload.error || "Falha ao carregar o painel.");
+        const payload = await readApiResponse<{ state?: Partial<DashboardState> | null }>(response);
         if (cancelled) return;
         const state = payload.state;
         if (state) {
@@ -595,6 +589,11 @@ export function StudyHub({
           if (Array.isArray(state.quiz)) setQuiz(state.quiz);
           if (Array.isArray(state.flashcards)) setFlashcards(state.flashcards);
           if (state.sessionMode) setSessionMode(state.sessionMode);
+          if (Array.isArray(state.themes)) setThemes(state.themes);
+          if (Array.isArray(state.studyMaps)) setStudyMaps(state.studyMaps);
+          if (typeof state.activeStudyMapId === "string") setActiveStudyMapId(state.activeStudyMapId);
+          if (Array.isArray(state.learningPaths)) setLearningPaths(state.learningPaths);
+          if (state.learningProgress && typeof state.learningProgress === "object") setLearningProgress(state.learningProgress);
         }
         setCloudStatus(state ? "saved" : "saving");
       } catch (error) {
@@ -620,8 +619,7 @@ export function StudyHub({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ state: dashboardState }),
         });
-        const payload = await response.json() as { error?: string };
-        if (!response.ok) throw new Error(payload.error || "Falha ao salvar.");
+        await readApiResponse<{ saved: boolean; updatedAt: string }>(response);
         setCloudStatus("saved");
       } catch (error) {
         setCloudStatus("error");
@@ -630,6 +628,27 @@ export function StudyHub({
     }, 1200);
     return () => window.clearTimeout(timeout);
   }, [cloudEnabled, cloudLoaded, storageReady, dashboardState]);
+
+  useEffect(() => {
+    if (!storageReady || (cloudEnabled && !cloudLoaded) || studyMaps.length || (!mapping.topics.length && !courseName && !studyGoal)) return;
+    const id = `map-migrated-${Date.now()}`;
+    const now = new Date().toISOString();
+    setStudyMaps([{ id, name: courseName || "Mapa importado", description: "Mapa preservado da versão anterior.", objective: studyGoal, status: "active", isPrimary: true, themeIds: [], createdAt: now, updatedAt: now, lastActivityAt: now, mapping }]);
+    setActiveStudyMapId(id);
+    setNotice("Seu mapa anterior foi migrado para a nova biblioteca sem perda de dados.");
+  }, [storageReady, cloudEnabled, cloudLoaded, studyMaps.length, mapping, courseName, studyGoal]);
+
+  useEffect(() => {
+    if (!activeStudyMapId) return;
+    setStudyMaps((current) => current.map((map) => map.id === activeStudyMapId ? {
+      ...map,
+      name: courseName.trim() || map.name,
+      objective: studyGoal,
+      mapping,
+      updatedAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+    } : map));
+  }, [activeStudyMapId, courseName, studyGoal, mapping]);
 
   useEffect(() => {
     const priorities = mapping.topics
@@ -684,10 +703,10 @@ export function StudyHub({
   const completedGoals = goals.filter((goal) => goal.done).length;
   const goalProgress = goals.length ? Math.round((completedGoals / goals.length) * 100) : 0;
   const mappedTopics = mapping.topics.filter((topic) => topic.status === "covered").length;
-  const activeCard = flashcards[cardIndex] || demoCards[0];
-  const activeQuiz = quiz[quizIndex] || demoQuiz[0];
+  const activeStudyMap = studyMaps.find((map) => map.id === activeStudyMapId);
   const activePlanRecord = studyPlans.find((plan) => plan.id === activePlanId) || studyPlans[0];
   const studyPlan = activePlanRecord?.weeks || [];
+  const allPlanSessions = studyPlan.flatMap((week) => week.sessions);
   const planSessionCount = studyPlan.reduce((total, week) => total + week.sessions.length, 0);
   const planCompletedCount = studyPlan.reduce(
     (total, week) => total + week.sessions.filter((session) => session.done).length,
@@ -697,13 +716,14 @@ export function StudyHub({
     ? Math.round((planCompletedCount / planSessionCount) * 100)
     : 0;
   const activePlanWeek = studyPlan[planWeekView];
-  const totalXp = evolutionLogs.reduce((total, log) => total + log.xp, 0);
+  const completedEvolutionLogs = evolutionLogs.filter((log) => log.status !== "pending");
+  const totalXp = completedEvolutionLogs.reduce((total, log) => total + log.xp, 0);
   const evolutionLevel = totalXp ? Math.floor(totalXp / 500) + 1 : 0;
   const levelXp = totalXp % 500;
-  const accumulatedMinutes = evolutionLogs.reduce((total, log) => total + log.minutes, 0);
-  const evidenceDays = new Set(evolutionLogs.map((log) => log.createdAt.slice(0, 10))).size;
-  const evidencePillars = new Set(evolutionLogs.map((log) => log.type)).size;
-  const currentStreak = calculateCurrentStreak(evolutionLogs);
+  const accumulatedMinutes = completedEvolutionLogs.reduce((total, log) => total + log.minutes, 0);
+  const evidenceDays = new Set(completedEvolutionLogs.map((log) => log.createdAt.slice(0, 10))).size;
+  const evidencePillars = new Set(completedEvolutionLogs.map((log) => log.type)).size;
+  const currentStreak = calculateCurrentStreak(completedEvolutionLogs);
   const averageSkill = Object.values(skillLevels).reduce((total, level) => total + level, 0) / 6;
   const liveRankScore = assessmentResult ? Math.max(assessmentResult.overall, Math.round(assessmentResult.overall * 0.6 + averageSkill * 0.4)) : 0;
   let evolutionRankIndex = assessmentResult ? rankOrder.indexOf(assessmentResult.rank) : -1;
@@ -711,7 +731,7 @@ export function StudyHub({
     for (let index = evolutionRankIndex + 1; index < rankOrder.length; index += 1) {
       const requirement = rankRequirements[rankOrder[index]];
       const passed = liveRankScore >= requirement.score
-        && evolutionLogs.length >= requirement.records
+        && completedEvolutionLogs.length >= requirement.records
         && evidenceDays >= requirement.days
         && accumulatedMinutes / 60 >= requirement.hours
         && evidencePillars >= requirement.pillars;
@@ -743,10 +763,10 @@ export function StudyHub({
     ) / archetypeRequirements.length * 100,
   );
   const completedMissions = [
-    evolutionLogs.some((log) => log.type === "run" || log.type === "strength"),
-    evolutionLogs.some((log) => log.type === "reading"),
-    evolutionLogs.some((log) => log.type === "study"),
-    evolutionLogs.some((log) => log.type === "business" || log.type === "communication"),
+    completedEvolutionLogs.some((log) => log.type === "run" || log.type === "strength"),
+    completedEvolutionLogs.some((log) => log.type === "reading"),
+    completedEvolutionLogs.some((log) => log.type === "study"),
+    completedEvolutionLogs.some((log) => log.type === "business" || log.type === "communication"),
   ].filter(Boolean).length;
 
   const context = useMemo(
@@ -817,6 +837,111 @@ export function StudyHub({
     setLegacyImportAvailable(false);
   }
 
+  function createStudyMap(theme?: ThemeRecord) {
+    const now = new Date().toISOString();
+    const id = `map-${Date.now()}`;
+    const map: StudyMapRecord = {
+      id,
+      name: theme ? `Mapa — ${theme.name}` : `Novo mapa ${studyMaps.length + 1}`,
+      description: theme?.description || "",
+      objective: theme?.objective || "",
+      status: "active",
+      isPrimary: studyMaps.length === 0,
+      themeIds: theme ? [theme.id] : [],
+      createdAt: now,
+      updatedAt: now,
+      lastActivityAt: now,
+      mapping: { ...initialMapping, topics: [], nextSteps: [] },
+    };
+    setStudyMaps((current) => [map, ...current]);
+    if (theme) setThemes((current) => current.map((item) => item.id === theme.id ? { ...item, mapIds: [...new Set([...item.mapIds, id])], updatedAt: now } : item));
+    setActiveStudyMapId(id);
+    setCourseName(map.name);
+    setStudyGoal(map.objective);
+    setMapping(map.mapping);
+    setSelectedPlanTopics([]);
+    setTab("mapping");
+    setNotice(`Mapa “${map.name}” criado sem alterar os outros mapas.`);
+  }
+
+  function openStudyMap(map: StudyMapRecord) {
+    setActiveStudyMapId(map.id);
+    setCourseName(map.name);
+    setStudyGoal(map.objective);
+    setMapping(map.mapping);
+    setSelectedPlanTopics(map.mapping.topics.filter((topic) => topic.status !== "covered").map((topic) => topic.title));
+  }
+
+  function updateStudyMap(map: StudyMapRecord) {
+    setStudyMaps((current) => current.map((item) => item.id === map.id ? map : item));
+    if (map.id === activeStudyMapId) openStudyMap(map);
+  }
+
+  function deleteStudyMap(map: StudyMapRecord) {
+    const remaining = studyMaps.filter((item) => item.id !== map.id);
+    setStudyMaps(remaining);
+    setThemes((current) => current.map((theme) => ({ ...theme, mapIds: theme.mapIds.filter((id) => id !== map.id) })));
+    setLearningPaths((current) => current.map((path) => path.mapId === map.id ? { ...path, mapId: undefined } : path));
+    if (activeStudyMapId === map.id) {
+      const next = remaining[0];
+      setActiveStudyMapId(next?.id || "");
+      setCourseName(next?.name || "");
+      setStudyGoal(next?.objective || "");
+      setMapping(next?.mapping || initialMapping);
+    }
+    setNotice(`Mapa “${map.name}” excluído. Temas e outros mapas foram preservados.`);
+  }
+
+  function duplicateStudyMap(map: StudyMapRecord) {
+    const id = `map-${Date.now()}`;
+    const now = new Date().toISOString();
+    const copy: StudyMapRecord = {
+      ...map, id, name: `${map.name} — cópia`, isPrimary: false, createdAt: now, updatedAt: now, lastActivityAt: now,
+      mapping: { ...map.mapping, topics: map.mapping.topics.map((topic, index) => ({ ...topic, id: `topic-${Date.now()}-${index}` })) },
+    };
+    setStudyMaps((current) => [copy, ...current]);
+    setThemes((current) => current.map((theme) => copy.themeIds.includes(theme.id) ? { ...theme, mapIds: [...new Set([...theme.mapIds, id])] } : theme));
+    setNotice(`Mapa “${map.name}” duplicado com dados independentes.`);
+  }
+
+  function saveTheme(theme: ThemeRecord) {
+    setThemes((current) => current.some((item) => item.id === theme.id) ? current.map((item) => item.id === theme.id ? theme : item) : [theme, ...current]);
+    setNotice(`Tema “${theme.name}” salvo.`);
+  }
+
+  function deleteTheme(themeId: string, deleteLearningData: boolean) {
+    setThemes((current) => current.filter((theme) => theme.id !== themeId));
+    setStudyMaps((current) => current.map((map) => ({ ...map, themeIds: map.themeIds.filter((id) => id !== themeId) })));
+    setLearningPaths((current) => deleteLearningData ? current.filter((path) => path.themeId !== themeId) : current.map((path) => path.themeId === themeId ? { ...path, themeId: undefined } : path));
+    setNotice(deleteLearningData ? "Tema e trilhas vinculadas excluídos. Os mapas foram preservados." : "Tema excluído; mapas e trilhas foram preservados sem o vínculo.");
+  }
+
+  function duplicateTheme(themeId: string) {
+    const source = themes.find((theme) => theme.id === themeId);
+    if (!source) return;
+    const now = new Date().toISOString();
+    setThemes((current) => [{ ...source, id: `theme-${Date.now()}`, name: `${source.name} — cópia`, mapIds: [], archived: false, createdAt: now, updatedAt: now }, ...current]);
+  }
+
+  function moveMapTopic(index: number, direction: -1 | 1) {
+    setMapping((current) => {
+      const next = [...current.topics];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return current;
+      [next[index], next[target]] = [next[target], next[index]];
+      return { ...current, topics: next };
+    });
+  }
+
+  function toggleMapTheme(themeId: string) {
+    const map = studyMaps.find((item) => item.id === activeStudyMapId);
+    if (!map) return;
+    const linked = map.themeIds.includes(themeId);
+    const themeIds = linked ? map.themeIds.filter((id) => id !== themeId) : [...map.themeIds, themeId];
+    updateStudyMap({ ...map, themeIds, updatedAt: new Date().toISOString() });
+    setThemes((current) => current.map((theme) => theme.id === themeId ? { ...theme, mapIds: linked ? theme.mapIds.filter((id) => id !== map.id) : [...new Set([...theme.mapIds, map.id])] } : theme));
+  }
+
   function addGoal(event: FormEvent) {
     event.preventDefault();
     const title = goalText.trim();
@@ -839,6 +964,7 @@ export function StudyHub({
 
     const topic: Topic = {
       id: `topic-${Date.now()}`,
+      parentId: topicParentId || undefined,
       title,
       module: topicModule.trim() || "Sem módulo",
       priority: topicPriority,
@@ -856,6 +982,7 @@ export function StudyHub({
     setSelectedPlanTopics((current) => [...current, title]);
     setTopicTitle("");
     setTopicReference("");
+    setTopicParentId("");
     setNotice(`Tópico “${title}” adicionado ao seu mapa.`);
   }
 
@@ -872,6 +999,14 @@ export function StudyHub({
       };
     });
     setSelectedPlanTopics((current) => current.filter((topic) => topic !== title));
+  }
+
+  function editMapTopic(topic: Topic) {
+    const title = window.prompt("Nome do tópico", topic.title)?.trim();
+    if (!title) return;
+    const moduleName = window.prompt("Módulo ou categoria", topic.module || "")?.trim() || "Sem módulo";
+    const reference = window.prompt("Referência opcional", topic.syllabusReference)?.trim() || "Referência ainda não definida";
+    setMapping((current) => ({ ...current, topics: current.topics.map((item) => item.id === topic.id ? { ...item, title, module: moduleName, syllabusReference: reference } : item) }));
   }
 
   function createStudyPlan(event: FormEvent) {
@@ -901,6 +1036,12 @@ export function StudyHub({
           activity: activities[(weekIndex + dayIndex) % activities.length],
           minutes: planMinutes,
           done: false,
+          category: dayIndex % 3 === 1 ? "revision" as const : dayIndex % 3 === 2 ? "exercise" as const : "study" as const,
+          difficulty: weekIndex < Math.ceil(planWeeks / 3) ? "easy" as const : weekIndex < Math.ceil(planWeeks * 2 / 3) ? "medium" as const : "hard" as const,
+          xp: planMinutes * activityTypes.study.xpRate,
+          recurrence: "weekly" as const,
+          mapId: activeStudyMapId || undefined,
+          themeId: activeStudyMap?.themeIds[0] || undefined,
         };
       });
       return {
@@ -931,7 +1072,7 @@ export function StudyHub({
         })),
     } : plan));
     if (session && shouldReward) {
-      const xp = session.minutes * activityTypes.study.xpRate;
+      const xp = session.xp ?? session.minutes * activityTypes.study.xpRate;
       setEvolutionLogs((current) => [{
         id: Date.now(),
         sourceId: session.id,
@@ -940,6 +1081,13 @@ export function StudyHub({
         minutes: session.minutes,
         xp,
         createdAt: new Date().toISOString(),
+        description: session.activity,
+        difficulty: session.difficulty,
+        dueDate: session.dueDate,
+        recurrence: session.recurrence,
+        mapId: session.mapId,
+        themeId: session.themeId,
+        status: "completed",
       }, ...current]);
       setSkillLevels((current) => ({
         ...current,
@@ -970,16 +1118,33 @@ export function StudyHub({
     }
 
     const activity = activityTypes[activityType];
-    const xp = activityMinutes * activity.xpRate;
+    const xp = activityXp > 0 ? activityXp : activityMinutes * activity.xpRate;
     const skillGain = Math.max(1, Math.min(3, Math.round(activityMinutes / 30)));
+    const fields = {
+      type: activityType,
+      title,
+      minutes: activityMinutes,
+      xp,
+      description: activityDescription.trim() || undefined,
+      difficulty: activityDifficulty,
+      dueDate: activityDueDate || undefined,
+      recurrence: activityRecurrence,
+      mapId: activityMapId || undefined,
+      themeId: activityThemeId || undefined,
+      status: activityStatus,
+    } satisfies Partial<EvolutionLog>;
+    if (editingActivityId !== null) {
+      setEvolutionLogs((current) => current.map((log) => log.id === editingActivityId ? { ...log, ...fields } : log));
+      resetEvolutionForm();
+      setNotice("Atividade atualizada e salva.");
+      return;
+    }
     setEvolutionLogs((current) => [
       {
         id: Date.now(),
-        type: activityType,
-        title,
-        minutes: activityMinutes,
-        xp,
+        ...fields,
         createdAt: new Date().toISOString(),
+        order: 0,
       },
       ...current,
     ]);
@@ -988,8 +1153,137 @@ export function StudyHub({
       [activity.skill]: Math.min(100, current[activity.skill] + skillGain),
       discipline: Math.min(100, current.discipline + 1),
     }));
-    setActivityTitle("");
+    resetEvolutionForm();
     setNotice(`Atividade registrada: +${xp} XP, +${skillGain} em ${skillMeta[activity.skill].label}.`);
+  }
+
+  function resetEvolutionForm() {
+    setEditingActivityId(null);
+    setActivityTitle("");
+    setActivityDescription("");
+    setActivityMinutes(45);
+    setActivityDifficulty("medium");
+    setActivityXp(0);
+    setActivityDueDate("");
+    setActivityRecurrence("none");
+    setActivityMapId("");
+    setActivityThemeId("");
+    setActivityStatus("completed");
+  }
+
+  function editEvolutionActivity(log: EvolutionLog) {
+    setEditingActivityId(log.id);
+    setActivityType(log.type);
+    setActivityTitle(log.title);
+    setActivityMinutes(log.minutes);
+    setActivityDescription(log.description || "");
+    setActivityDifficulty(log.difficulty || "medium");
+    setActivityXp(log.xp);
+    setActivityDueDate(log.dueDate || "");
+    setActivityRecurrence(log.recurrence || "none");
+    setActivityMapId(log.mapId || "");
+    setActivityThemeId(log.themeId || "");
+    setActivityStatus(log.status || "completed");
+    setActivityMenuId(null);
+    document.querySelector(".evolution-log")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function duplicateEvolutionActivity(log: EvolutionLog) {
+    setEvolutionLogs((current) => [{ ...log, id: Date.now(), sourceId: undefined, title: `${log.title} — cópia`, createdAt: new Date().toISOString(), status: "pending" }, ...current]);
+    setActivityMenuId(null);
+    setNotice("Atividade duplicada como pendente.");
+  }
+
+  function toggleEvolutionActivity(log: EvolutionLog) {
+    setEvolutionLogs((current) => current.map((item) => item.id === log.id ? { ...item, status: item.status === "pending" ? "completed" : "pending" } : item));
+    setActivityMenuId(null);
+  }
+
+  function deleteEvolutionActivity(log: EvolutionLog) {
+    if (!window.confirm(`Excluir “${log.title}”? O registro deixará de contar para XP, sequência e progresso.`)) return;
+    setEvolutionLogs((current) => current.filter((item) => item.id !== log.id));
+    setActivityMenuId(null);
+    setNotice(`Atividade “${log.title}” excluída do histórico.`);
+  }
+
+  function moveEvolutionActivity(log: EvolutionLog, direction: -1 | 1) {
+    setEvolutionLogs((current) => {
+      const index = current.findIndex((item) => item.id === log.id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= current.length) return current;
+      const reordered = [...current];
+      [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+      return reordered.map((item, order) => ({ ...item, order }));
+    });
+    setActivityMenuId(null);
+  }
+
+  function duplicatePlanSession(session: PlanSession) {
+    if (!activePlanRecord) return;
+    setStudyPlans((current) => current.map((plan) => plan.id === activePlanRecord.id ? { ...plan, weeks: plan.weeks.map((week) => week.sessions.some((item) => item.id === session.id) ? { ...week, sessions: [...week.sessions, { ...session, id: `session-${Date.now()}`, topic: `${session.topic} — cópia`, done: false }] } : week) } : plan));
+    setPlanSessionMenuId(null);
+    setNotice("Atividade de estudo duplicada como pendente.");
+  }
+
+  function editPlanSession(session: PlanSession) {
+    setEditingPlanSession({
+      ...session,
+      category: session.category || "study",
+      difficulty: session.difficulty || "medium",
+      xp: session.xp ?? session.minutes * activityTypes.study.xpRate,
+      recurrence: session.recurrence || "none",
+    });
+    setPlanSessionMenuId(null);
+  }
+
+  function savePlanSession(event: FormEvent) {
+    event.preventDefault();
+    if (!activePlanRecord || !editingPlanSession?.topic.trim()) return;
+    const normalized = {
+      ...editingPlanSession,
+      topic: editingPlanSession.topic.trim(),
+      activity: editingPlanSession.activity.trim() || "Estudo dirigido",
+      minutes: Math.max(5, Number(editingPlanSession.minutes) || 5),
+      xp: Math.max(0, Number(editingPlanSession.xp) || 0),
+    };
+    setStudyPlans((current) => current.map((plan) => plan.id === activePlanRecord.id ? {
+      ...plan,
+      weeks: plan.weeks.map((week) => ({
+        ...week,
+        sessions: week.sessions.map((item) => item.id === normalized.id ? normalized : item),
+      })),
+    } : plan));
+    setEditingPlanSession(null);
+    setNotice(`Atividade “${normalized.topic}” atualizada.`);
+  }
+
+  function deletePlanSession(session: PlanSession) {
+    if (!activePlanRecord || !window.confirm(`Excluir “${session.topic}”? Essa atividade será retirada do plano e poderá alterar o progresso.`)) return;
+    setStudyPlans((current) => current.map((plan) => plan.id === activePlanRecord.id ? { ...plan, weeks: plan.weeks.map((week) => ({ ...week, sessions: week.sessions.filter((item) => item.id !== session.id) })) } : plan));
+    setEvolutionLogs((current) => current.filter((log) => log.sourceId !== session.id));
+    setPlanSessionMenuId(null);
+    setNotice(`Atividade “${session.topic}” excluída do plano.`);
+  }
+
+  function movePlanSession(session: PlanSession, direction: -1 | 1) {
+    if (!activePlanRecord) return;
+    setStudyPlans((current) => current.map((plan) => {
+      if (plan.id !== activePlanRecord.id) return plan;
+      const sizes = plan.weeks.map((week) => week.sessions.length);
+      const sessions = plan.weeks.flatMap((week) => week.sessions);
+      const index = sessions.findIndex((item) => item.id === session.id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= sessions.length) return plan;
+      [sessions[index], sessions[target]] = [sessions[target], sessions[index]];
+      let cursor = 0;
+      const weeks = plan.weeks.map((week, weekIndex) => {
+        const nextSessions = sessions.slice(cursor, cursor + sizes[weekIndex]);
+        cursor += sizes[weekIndex];
+        return { ...week, sessions: nextSessions };
+      });
+      return { ...plan, weeks };
+    }));
+    setPlanSessionMenuId(null);
   }
 
   function completeAssessment(result: AssessmentResult) {
@@ -1051,6 +1345,7 @@ export function StudyHub({
     }
     setBusy("archetypes");
     setNotice(null);
+    setArchetypeError(null);
     try {
       const areaLabel = professionalAreas.find((area) => area.value === archetypeArea)?.label || archetypeArea;
       const response = await fetch("/api/archetypes/recommend", {
@@ -1069,15 +1364,17 @@ export function StudyHub({
           } : null,
         }),
       });
-      const payload = await response.json() as { error?: string; summary?: string; archetypes?: GeneratedArchetype[] };
-      if (!response.ok || !payload.archetypes?.length) throw new Error(payload.error || "A IA não conseguiu montar os caminhos.");
-      setGeneratedArchetypes(payload.archetypes);
-      setArchetypeSummary(payload.summary || "Caminhos personalizados para sua área.");
-      setSelectedArchetype(payload.archetypes[0].id);
-      setSecondaryArchetype(payload.archetypes[1]?.id || "sage");
-      setNotice(`${payload.archetypes.length} arquétipos personalizados foram criados. Você pode trocar o principal e o secundário a qualquer momento.`);
+      const data = await readApiResponse<{ summary: string; archetypes: GeneratedArchetype[] }>(response);
+      if (!Array.isArray(data.archetypes) || !data.archetypes.length) throw new Error("A IA não devolveu arquétipos válidos.");
+      setGeneratedArchetypes(data.archetypes);
+      setArchetypeSummary(data.summary || "Caminhos personalizados para sua área.");
+      setSelectedArchetype(data.archetypes[0].id);
+      setSecondaryArchetype(data.archetypes[1]?.id || "sage");
+      setNotice(`${data.archetypes.length} arquétipos personalizados foram criados. Você pode trocar o principal e o secundário a qualquer momento.`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Não foi possível gerar os arquétipos agora.");
+      const message = error instanceof Error ? error.message : "Não foi possível gerar os arquétipos agora.";
+      setArchetypeError({ message, retryable: error instanceof ApiClientError ? error.retryable : true });
+      setNotice(message);
     } finally {
       setBusy(null);
     }
@@ -1101,9 +1398,8 @@ export function StudyHub({
           existingTopics: mapping.topics.map((topic) => topic.title),
         }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(getErrorMessage(payload, "Não foi possível gerar os tópicos."));
-      const generated = (payload.topics as { title: string; module: string; priority: TopicPriority }[])
+      const payload = await readApiResponse<{ topics: { title: string; module: string; priority: TopicPriority }[] }>(response);
+      const generated = payload.topics
         .filter((item) => !mapping.topics.some((topic) => topic.title.toLowerCase() === item.title.toLowerCase()))
         .map((item, index): Topic => ({
           id: `ai-topic-${Date.now()}-${index}`,
@@ -1167,8 +1463,7 @@ export function StudyHub({
           body: JSON.stringify({ sourceUrl: driveUrl.trim() }),
         });
       }
-      const payload = await response.json();
-      if (!response.ok) throw new Error(getErrorMessage(payload, "Erro na transcrição."));
+      const payload = await readApiResponse<{ transcript: string; parts: number; normalizedAudio: boolean }>(response);
       setTranscript(payload.transcript);
       setNotice(`Transcrição concluída em ${payload.parts || 1} parte(s). O áudio foi normalizado antes do reconhecimento.`);
     } catch (error) {
@@ -1258,9 +1553,7 @@ export function StudyHub({
           },
         }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(getErrorMessage(payload, "Erro no mapeamento."));
-      const analyzed = payload as Mapping;
+      const analyzed = await readApiResponse<Mapping>(response);
       const topics = mapping.topics.map((definedTopic, index) => {
         const result = analyzed.topics.find(
           (topic) => topic.title.toLowerCase() === definedTopic.title.toLowerCase(),
@@ -1298,16 +1591,45 @@ export function StudyHub({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: material, focus: "lacunas do mapeamento", difficulty: "intermediário" }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(getErrorMessage(payload, "Erro ao gerar revisão."));
+      const payload = await readApiResponse<{ quiz: Quiz[]; flashcards: Flashcard[] }>(response);
       setQuiz(payload.quiz);
       setFlashcards(payload.flashcards);
-      setQuizIndex(0);
-      setQuizChoice(null);
-      setCardIndex(0);
-      setCardFlipped(false);
+      const prefix = Date.now().toString(36);
+      const path: LearningPath = {
+        id: `path-review-${prefix}`,
+        title: `Revisão — ${courseName || "material atual"}`,
+        mapId: activeStudyMapId || undefined,
+        themeId: activeStudyMap?.themeIds[0],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        units: [{
+          id: `unit-review-${prefix}`,
+          title: "Revisão do material",
+          description: "Questões e cartões gerados exclusivamente a partir do conteúdo enviado.",
+          lessons: [
+            {
+              id: `lesson-quiz-${prefix}`,
+              title: "Quiz adaptativo",
+              description: "Recupere os conceitos sem consultar o material.",
+              difficulty: "intermediario",
+              xp: 70,
+              exercises: payload.quiz.map((item, index) => ({ id: `exercise-quiz-${prefix}-${index}`, type: "multiple_choice", prompt: item.question, options: item.options, answer: item.options[item.answer], explanation: item.explanation })),
+            },
+            {
+              id: `lesson-cards-${prefix}`,
+              title: "Flashcards essenciais",
+              description: "Explique cada conceito antes de conferir a resposta.",
+              difficulty: "intermediario",
+              xp: 60,
+              exercises: payload.flashcards.map((item, index) => ({ id: `exercise-card-${prefix}-${index}`, type: "flashcard", prompt: `${item.topic}: ${item.front}`, options: [], answer: item.back, explanation: item.back })),
+            },
+          ],
+        }],
+      };
+      setLearningPaths((current) => [path, ...current]);
+      setLearningProgress((current) => ({ ...current, [path.id]: { ...emptyPathProgress } }));
       setTab("review");
-      setNotice("Nova revisão gerada a partir do seu material.");
+      setNotice("Nova trilha de revisão gerada a partir do seu material real.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Não foi possível gerar a revisão.");
     } finally {
@@ -1328,8 +1650,7 @@ export function StudyHub({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, context }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(getErrorMessage(payload, "Erro no tutor."));
+      const payload = await readApiResponse<{ answer: string }>(response);
       setChatMessages((current) => [...current, { role: "assistant", text: payload.answer }]);
     } catch (error) {
       setChatMessages((current) => [
@@ -1380,7 +1701,7 @@ export function StudyHub({
               >
                 <Icon size={19} />
                 <span>{item.label}</span>
-                {item.id === "mapping" && <em>2</em>}
+                {item.id === "mapping" && studyMaps.length > 0 && <em>{studyMaps.length}</em>}
               </button>
             );
           })}
@@ -1517,7 +1838,7 @@ export function StudyHub({
                   <div className="rank-gate-grid">
                     {[
                       { label: "Índice composto", value: liveRankScore, target: nextRankRequirement.score, display: `${liveRankScore}/${nextRankRequirement.score}` },
-                      { label: "Registros válidos", value: evolutionLogs.length, target: nextRankRequirement.records, display: `${evolutionLogs.length}/${nextRankRequirement.records}` },
+                      { label: "Registros válidos", value: completedEvolutionLogs.length, target: nextRankRequirement.records, display: `${completedEvolutionLogs.length}/${nextRankRequirement.records}` },
                       { label: "Dias com evidência", value: evidenceDays, target: nextRankRequirement.days, display: `${evidenceDays}/${nextRankRequirement.days}` },
                       { label: "Horas acumuladas", value: Math.round(accumulatedMinutes / 60), target: nextRankRequirement.hours, display: `${Math.round(accumulatedMinutes / 60)}/${nextRankRequirement.hours}h` },
                       { label: "Pilares distintos", value: evidencePillars, target: nextRankRequirement.pillars, display: `${evidencePillars}/${nextRankRequirement.pillars}` },
@@ -1548,6 +1869,10 @@ export function StudyHub({
                   <input value={activityTitle} onChange={(event) => setActivityTitle(event.target.value)} placeholder="Ex.: corri 5 km ou li 30 páginas" />
                 </label>
                 <label>
+                  <span>Descrição</span>
+                  <textarea value={activityDescription} onChange={(event) => setActivityDescription(event.target.value)} placeholder="Resultado, série, páginas, conteúdo ou evidência produzida" />
+                </label>
+                <label>
                   <span>Duração</span>
                   <div className="activity-duration">
                     {[30, 45, 60, 90].map((duration) => (
@@ -1555,7 +1880,17 @@ export function StudyHub({
                     ))}
                   </div>
                 </label>
-                <button className="primary-button wide" type="submit"><Zap size={18} /> Registrar e receber XP</button>
+                <div className="activity-fields-grid">
+                  <label><span>Dificuldade</span><select value={activityDifficulty} onChange={(event) => setActivityDifficulty(event.target.value as NonNullable<EvolutionLog["difficulty"]>)}><option value="easy">Fácil</option><option value="medium">Média</option><option value="hard">Difícil</option></select></label>
+                  <label><span>XP personalizado (0 = automático)</span><input type="number" min="0" max="10000" value={activityXp} onChange={(event) => setActivityXp(Math.max(0, Number(event.target.value) || 0))} /></label>
+                  <label><span>Prazo</span><input type="date" value={activityDueDate} onChange={(event) => setActivityDueDate(event.target.value)} /></label>
+                  <label><span>Recorrência</span><select value={activityRecurrence} onChange={(event) => setActivityRecurrence(event.target.value as NonNullable<EvolutionLog["recurrence"]>)}><option value="none">Sem recorrência</option><option value="daily">Diária</option><option value="weekly">Semanal</option><option value="monthly">Mensal</option></select></label>
+                  <label><span>Mapa vinculado</span><select value={activityMapId} onChange={(event) => setActivityMapId(event.target.value)}><option value="">Nenhum mapa</option>{studyMaps.filter((map) => map.status !== "archived").map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}</select></label>
+                  <label><span>Tema vinculado</span><select value={activityThemeId} onChange={(event) => setActivityThemeId(event.target.value)}><option value="">Nenhum tema</option>{themes.filter((theme) => !theme.archived).map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
+                  <label><span>Status</span><select value={activityStatus} onChange={(event) => setActivityStatus(event.target.value as NonNullable<EvolutionLog["status"]>)}><option value="completed">Concluída</option><option value="pending">Pendente</option></select></label>
+                </div>
+                <button className="primary-button wide" type="submit"><Zap size={18} /> {editingActivityId !== null ? "Salvar atividade" : "Registrar e receber XP"}</button>
+                {editingActivityId !== null && <button className="text-button wide" type="button" onClick={resetEvolutionForm}>Cancelar edição</button>}
               </form>
 
               <section className="missions-panel panel">
@@ -1620,6 +1955,12 @@ export function StudyHub({
                   <label className="archetype-context"><span>Resultado desejado e contexto</span><textarea value={archetypeContext} onChange={(event) => setArchetypeContext(event.target.value)} placeholder={assessmentResult?.primaryGoal || "Ex.: quero liderar uma gestora de investimentos, mas hoje estou no início da carreira..."} /></label>
                   <button className="primary-button" onClick={generateArchetypePaths} disabled={busy === "archetypes"}>{busy === "archetypes" ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />} {generatedArchetypes.length ? "Gerar novas opções" : "Analisar e gerar"}</button>
                 </div>
+                {archetypeError && (
+                  <div className="inline-error" role="alert">
+                    <span>{archetypeError.message}</span>
+                    {archetypeError.retryable && <button type="button" onClick={generateArchetypePaths} disabled={busy === "archetypes"}><RotateCcw size={15} /> Tentar novamente</button>}
+                  </div>
+                )}
                 {archetypeSummary && <p className="archetype-ai-summary"><Bot size={16} />{archetypeSummary}</p>}
                 <small className="method-disclaimer">Síntese de IA, não pesquisa biográfica em tempo real. Os cases são referências de aprendizagem, não garantias; confirme informações importantes nas fontes originais.</small>
               </section>
@@ -1717,11 +2058,13 @@ export function StudyHub({
               <div className="panel-heading"><div><span className="eyebrow">HISTÓRICO DE ESFORÇO</span><h3>As evidências da sua construção</h3></div><span>{evolutionLogs.length} registros</span></div>
               {evolutionLogs.length ? (
                 <div className="evolution-history-list">
-                  {evolutionLogs.slice(0, 8).map((log) => (
-                    <div key={log.id}>
+                  {evolutionLogs.slice(0, 8).map((log, index) => (
+                    <div key={log.id} className={log.status === "pending" ? "pending" : ""}>
                       <span className="history-icon"><Activity size={17} /></span>
-                      <p><strong>{log.title}</strong><small>{activityTypes[log.type].label} · {log.minutes} min · {new Date(log.createdAt).toLocaleDateString("pt-BR")}</small></p>
-                      <strong>+{log.xp} XP</strong>
+                      <p><strong>{log.title}</strong><small>{activityTypes[log.type].label} · {log.minutes} min · {log.difficulty === "hard" ? "Difícil" : log.difficulty === "easy" ? "Fácil" : "Média"} · {new Date(log.createdAt).toLocaleDateString("pt-BR")} · {log.status === "pending" ? "Pendente" : "Concluída"}</small>{log.description && <small>{log.description}</small>}</p>
+                      <strong>{log.status === "pending" ? "Pendente" : `+${log.xp} XP`}</strong>
+                      <button className="activity-menu-button" aria-label={`Ações de ${log.title}`} onClick={() => setActivityMenuId(activityMenuId === log.id ? null : log.id)}><MoreVertical size={18} /></button>
+                      {activityMenuId === log.id && <div className="card-menu activity-card-menu"><button onClick={() => editEvolutionActivity(log)}>Editar</button><button onClick={() => duplicateEvolutionActivity(log)}>Duplicar</button><button onClick={() => toggleEvolutionActivity(log)}>{log.status === "pending" ? "Marcar concluída" : "Marcar pendente"}</button><button disabled={index === 0} onClick={() => moveEvolutionActivity(log, -1)}>Mover para cima</button><button disabled={index === evolutionLogs.length - 1} onClick={() => moveEvolutionActivity(log, 1)}>Mover para baixo</button><button className="danger" onClick={() => deleteEvolutionActivity(log)}>Excluir</button></div>}
                     </div>
                   ))}
                 </div>
@@ -1769,11 +2112,49 @@ export function StudyHub({
               </div>
             </section>
             <div className="action-dock"><div><Layers3 size={20} /><span><strong>Pronto para comparar?</strong><small>A aula será analisada somente contra os {mapping.topics.length} tópicos que você definiu.</small></span></div><button className="primary-button" onClick={analyzeContent} disabled={busy === "analyze"}>{busy === "analyze" ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />} Analisar meu mapa</button></div>
+            <section className="study-activities panel">
+              <div className="panel-heading"><div><span className="eyebrow">ATIVIDADES DE ESTUDOS</span><h3>Editar, concluir e reorganizar</h3></div><button className="outline-button compact" onClick={() => setTab("plans")}><Plus size={15} /> Adicionar pelo plano</button></div>
+              {studyPlan.length ? (
+                <div className="study-activity-list">
+                  {studyPlan.flatMap((week) => week.sessions.map((session) => ({ ...session, week: week.week }))).map((session, index, list) => (
+                    <article key={session.id} className={session.done ? "done" : ""}>
+                      <button className="session-check" onClick={() => togglePlanSession(session.id)} aria-label={session.done ? "Marcar pendente" : "Marcar concluída"}>{session.done ? <Check size={16} /> : <Circle size={16} />}</button>
+                      <div><strong>{session.topic}</strong><small>Semana {session.week} · {session.activity} · {session.minutes} min · {session.difficulty === "hard" ? "Difícil" : session.difficulty === "easy" ? "Fácil" : "Média"}</small></div>
+                      <strong className="session-xp">{session.xp ?? session.minutes * activityTypes.study.xpRate} XP</strong>
+                      <button className="activity-menu-button" aria-label={`Ações de ${session.topic}`} onClick={() => setPlanSessionMenuId(planSessionMenuId === session.id ? null : session.id)}><MoreVertical size={18} /></button>
+                      {planSessionMenuId === session.id && <div className="card-menu activity-card-menu"><button onClick={() => editPlanSession(session)}>Editar</button><button onClick={() => duplicatePlanSession(session)}>Duplicar</button><button onClick={() => togglePlanSession(session.id)}>{session.done ? "Marcar pendente" : "Marcar concluída"}</button><button disabled={index === 0} onClick={() => movePlanSession(session, -1)}>Mover para cima</button><button disabled={index === list.length - 1} onClick={() => movePlanSession(session, 1)}>Mover para baixo</button><button className="danger" onClick={() => deletePlanSession(session)}>Excluir</button></div>}
+                    </article>
+                  ))}
+                </div>
+              ) : <div className="entity-empty"><ListChecks size={25} /><strong>Nenhuma atividade planejada</strong><p>Crie um plano para organizar suas atividades de estudo.</p></div>}
+            </section>
           </div>
+        )}
+
+        {tab === "themes" && (
+          <ThemesWorkspace
+            themes={themes}
+            maps={studyMaps}
+            onSave={saveTheme}
+            onDelete={deleteTheme}
+            onDuplicate={duplicateTheme}
+            onArchive={(themeId) => setThemes((current) => current.map((theme) => theme.id === themeId ? { ...theme, archived: !theme.archived, updatedAt: new Date().toISOString() } : theme))}
+            onCreateMap={createStudyMap}
+          />
         )}
 
         {tab === "mapping" && (
           <div className="mapping-page">
+            <StudyMapsLibrary
+              maps={studyMaps}
+              themes={themes}
+              activeMapId={activeStudyMapId}
+              onCreate={() => createStudyMap()}
+              onOpen={openStudyMap}
+              onUpdate={updateStudyMap}
+              onDelete={deleteStudyMap}
+              onDuplicate={duplicateStudyMap}
+            />
             <section className="mapping-header">
               <div><span className="eyebrow lime">MAPA DEFINIDO POR VOCÊ</span><h2>Seu conteúdo, suas regras.</h2><p>{mapping.summary}</p></div>
               <div className="coverage-box"><span>Cobertura do seu mapa</span><strong>{mapping.coverage}%</strong><div className="goal-bar"><i style={{ width: `${mapping.coverage}%` }} /></div><small>{mapping.topics.length} tópicos definidos</small></div>
@@ -1788,7 +2169,11 @@ export function StudyHub({
               <div className="map-identity-grid">
                 <label><span>Curso, prova ou projeto</span><input value={courseName} onChange={(event) => setCourseName(event.target.value)} placeholder="Ex.: C-PRO I, Inglês ou Gestão de fundos" /></label>
                 <label><span>Objetivo principal</span><input value={studyGoal} onChange={(event) => setStudyGoal(event.target.value)} placeholder="Ex.: ser aprovado, dominar o tema ou aplicar no trabalho" /></label>
+                {activeStudyMap && <label><span>Descrição do mapa</span><input value={activeStudyMap.description} onChange={(event) => updateStudyMap({ ...activeStudyMap, description: event.target.value, updatedAt: new Date().toISOString() })} placeholder="Contexto e escopo" /></label>}
+                {activeStudyMap && <label><span>Prazo</span><input type="date" value={activeStudyMap.deadline || ""} onChange={(event) => updateStudyMap({ ...activeStudyMap, deadline: event.target.value, updatedAt: new Date().toISOString() })} /></label>}
               </div>
+
+              {activeStudyMap && themes.length > 0 && <fieldset className="theme-link-selector"><legend>Temas vinculados</legend>{themes.filter((theme) => !theme.archived).map((theme) => <button type="button" key={theme.id} className={activeStudyMap.themeIds.includes(theme.id) ? "selected" : ""} onClick={() => toggleMapTheme(theme.id)}><span style={{ background: theme.color }}>{theme.icon}</span>{theme.name}{activeStudyMap.themeIds.includes(theme.id) && <Check size={14} />}</button>)}</fieldset>}
 
               <div className="ai-topic-builder">
                 <span className="ai-topic-icon"><Sparkles size={19} /></span>
@@ -1799,6 +2184,7 @@ export function StudyHub({
               <form className="topic-create-form" onSubmit={addMapTopic}>
                 <label><span>Módulo ou categoria</span><input value={topicModule} onChange={(event) => setTopicModule(event.target.value)} placeholder="Ex.: Módulo 1" /></label>
                 <label className="topic-name-field"><span>Tópico que você vai estudar</span><input value={topicTitle} onChange={(event) => setTopicTitle(event.target.value)} placeholder="Ex.: Política de investimento" required /></label>
+                <label><span>Tópico principal (opcional)</span><select value={topicParentId} onChange={(event) => setTopicParentId(event.target.value)}><option value="">É um tópico principal</option>{mapping.topics.filter((topic) => !topic.parentId).map((topic) => <option key={topic.id || topic.title} value={topic.id}>{topic.title}</option>)}</select></label>
                 <label><span>Referência opcional</span><input value={topicReference} onChange={(event) => setTopicReference(event.target.value)} placeholder="Ex.: páginas 10–18" /></label>
                 <label><span>Prioridade</span><select value={topicPriority} onChange={(event) => setTopicPriority(event.target.value as TopicPriority)}><option value="high">Alta</option><option value="medium">Média</option><option value="low">Baixa</option></select></label>
                 <button className="primary-button" type="submit"><Plus size={17} /> Adicionar tópico</button>
@@ -1807,11 +2193,13 @@ export function StudyHub({
               <div className="defined-topics-heading"><span>CONTEÚDO DO SEU MAPA</span><strong>{mapping.topics.length} tópicos</strong></div>
               {mapping.topics.length ? (
                 <div className="defined-topics-list">
-                  {mapping.topics.map((topic) => (
+                  {mapping.topics.map((topic, index) => (
                     <article key={topic.id || topic.title}>
                       <span className={`priority-mark ${topic.priority || "medium"}`} />
-                      <div><span>{topic.module || "Sem módulo"} · prioridade {priorityLabels[topic.priority || "medium"]}</span><strong>{topic.title}</strong><small>{topic.syllabusReference}</small></div>
+                      <div><span>{topic.parentId ? "Subtópico" : topic.module || "Sem módulo"} · prioridade {priorityLabels[topic.priority || "medium"]}</span><strong>{topic.parentId ? "↳ " : ""}{topic.title}</strong><small>{topic.syllabusReference}</small></div>
                       <StatusPill status={topic.status} />
+                      <button onClick={() => editMapTopic(topic)} aria-label={`Editar ${topic.title}`}>Editar</button>
+                      <div className="topic-order"><button disabled={index === 0} onClick={() => moveMapTopic(index, -1)} aria-label={`Mover ${topic.title} para cima`}>↑</button><button disabled={index === mapping.topics.length - 1} onClick={() => moveMapTopic(index, 1)} aria-label={`Mover ${topic.title} para baixo`}>↓</button></div>
                       <button onClick={() => removeMapTopic(topic.id, topic.title)} aria-label={`Remover ${topic.title}`}><X size={16} /></button>
                     </article>
                   ))}
@@ -1956,11 +2344,13 @@ export function StudyHub({
                     <div className="week-focus"><span>TEMA DA SEMANA</span><strong>{activePlanWeek.theme}</strong></div>
                     <div className="plan-session-list">
                       {activePlanWeek.sessions.map((session) => (
-                        <button key={session.id} className={session.done ? "done" : ""} onClick={() => togglePlanSession(session.id)}>
-                          <span className="session-check">{session.done ? <Check size={16} /> : session.day.slice(0, 3)}</span>
+                        <article key={session.id} className={session.done ? "done" : ""}>
+                          <button className="session-check" onClick={() => togglePlanSession(session.id)} aria-label={session.done ? `Marcar ${session.topic} como pendente` : `Concluir ${session.topic}`}>{session.done ? <Check size={16} /> : session.day.slice(0, 3)}</button>
                           <div><strong>{session.topic}</strong><small>{session.activity}</small></div>
                           <span className="session-time"><Clock3 size={14} /> {session.minutes} min</span>
-                        </button>
+                          <button className="activity-menu-button" aria-label={`Ações de ${session.topic}`} onClick={() => setPlanSessionMenuId(planSessionMenuId === session.id ? null : session.id)}><MoreVertical size={18} /></button>
+                          {planSessionMenuId === session.id && <div className="card-menu activity-card-menu"><button onClick={() => editPlanSession(session)}>Editar</button><button onClick={() => duplicatePlanSession(session)}>Duplicar</button><button onClick={() => togglePlanSession(session.id)}>{session.done ? "Marcar pendente" : "Marcar concluída"}</button><button disabled={allPlanSessions.findIndex((item) => item.id === session.id) === 0} onClick={() => movePlanSession(session, -1)}>Mover para cima</button><button disabled={allPlanSessions.findIndex((item) => item.id === session.id) === allPlanSessions.length - 1} onClick={() => movePlanSession(session, 1)}>Mover para baixo</button><button className="danger" onClick={() => deletePlanSession(session)}>Excluir</button></div>}
+                        </article>
                       ))}
                     </div>
                     <div className="week-navigation">
@@ -1985,37 +2375,40 @@ export function StudyHub({
         )}
 
         {tab === "review" && (
-          <div className="review-page">
-            <section className="review-header"><div><span className="eyebrow lime">REVISÃO ATIVA</span><h2>Treine a lembrança, não o reconhecimento.</h2><p>Questões e cartões conectados ao conteúdo da sua aula e às lacunas encontradas.</p></div><button className="outline-button" onClick={generateRevision} disabled={busy === "generate"}><Sparkles size={17} /> Gerar nova revisão</button></section>
-            <div className="review-grid">
-              <section className="panel flashcard-panel">
-                <div className="panel-heading"><div><span className="eyebrow">FLASHCARDS</span><h3>Cartão {cardIndex + 1} de {flashcards.length}</h3></div><span className="card-topic">{activeCard.topic}</span></div>
-                <button className={`flashcard ${cardFlipped ? "flipped" : ""}`} onClick={() => setCardFlipped((value) => !value)}>
-                  <span className="eyebrow">{cardFlipped ? "RESPOSTA" : "PERGUNTA"}</span>
-                  <strong>{cardFlipped ? activeCard.back : activeCard.front}</strong>
-                  <small><RotateCcw size={15} /> Clique para virar</small>
-                </button>
-                <div className="card-nav"><button onClick={() => { setCardIndex((current) => (current - 1 + flashcards.length) % flashcards.length); setCardFlipped(false); }} aria-label="Cartão anterior"><ChevronLeft /></button><div>{flashcards.map((_, index) => <i key={index} className={index === cardIndex ? "active" : ""} />)}</div><button onClick={() => { setCardIndex((current) => (current + 1) % flashcards.length); setCardFlipped(false); }} aria-label="Próximo cartão"><ChevronRight /></button></div>
-              </section>
-              <section className="panel quiz-panel">
-                <div className="panel-heading"><div><span className="eyebrow">QUIZ ADAPTATIVO</span><h3>Questão {quizIndex + 1} de {quiz.length}</h3></div><span className="difficulty">Intermediário</span></div>
-                <div className="quiz-progress"><i style={{ width: `${((quizIndex + 1) / quiz.length) * 100}%` }} /></div>
-                <h4>{activeQuiz.question}</h4>
-                <div className="options">
-                  {activeQuiz.options.map((option, index) => {
-                    const answered = quizChoice !== null;
-                    const className = answered ? index === activeQuiz.answer ? "correct" : index === quizChoice ? "wrong" : "" : "";
-                    return <button key={option} className={className} onClick={() => setQuizChoice(index)} disabled={answered}><span>{String.fromCharCode(65 + index)}</span>{option}{answered && index === activeQuiz.answer && <Check size={17} />}</button>;
-                  })}
-                </div>
-                {quizChoice !== null && <div className="explanation"><Sparkles size={17} /><p><strong>{quizChoice === activeQuiz.answer ? "Correto." : "Quase."}</strong> {activeQuiz.explanation}</p></div>}
-                <button className="primary-button quiz-next" disabled={quizChoice === null} onClick={() => { setQuizIndex((current) => (current + 1) % quiz.length); setQuizChoice(null); }}>Próxima questão <ArrowRight size={17} /></button>
-              </section>
-            </div>
-            <section className="review-stats panel"><div><Gauge size={20} /><span><strong>78%</strong><small>Taxa de acerto</small></span></div><div><Layers3 size={20} /><span><strong>{flashcards.length}</strong><small>Cartões disponíveis</small></span></div><div><Clock3 size={20} /><span><strong>12 min</strong><small>Revisão hoje</small></span></div><div><Flame size={20} /><span><strong>7 dias</strong><small>Sequência</small></span></div></section>
-          </div>
+          <ActiveReview
+            paths={learningPaths}
+            setPaths={setLearningPaths}
+            progressByPath={learningProgress}
+            setProgressByPath={setLearningProgress}
+            themes={themes}
+            maps={studyMaps}
+            materialContext={[transcript, syllabus].filter(Boolean).join("\n\n")}
+            notify={setNotice}
+          />
         )}
       </main>
+
+      {editingPlanSession && (
+        <div className="modal-backdrop" role="presentation">
+          <form className="edit-session-modal panel" role="dialog" aria-modal="true" aria-labelledby="edit-session-title" onSubmit={savePlanSession}>
+            <div className="panel-heading"><div><span className="eyebrow">EDITAR ATIVIDADE</span><h3 id="edit-session-title">Configuração completa</h3></div><button type="button" className="modal-close" onClick={() => setEditingPlanSession(null)} aria-label="Fechar"><X size={18} /></button></div>
+            <div className="edit-session-grid">
+              <label className="wide-field"><span>Nome</span><input value={editingPlanSession.topic} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, topic: event.target.value })} required /></label>
+              <label className="wide-field"><span>Descrição</span><textarea value={editingPlanSession.activity} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, activity: event.target.value })} /></label>
+              <label><span>Dia</span><input value={editingPlanSession.day} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, day: event.target.value })} /></label>
+              <label><span>Duração</span><input type="number" min="5" max="1440" value={editingPlanSession.minutes} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, minutes: Number(event.target.value) })} /></label>
+              <label><span>Categoria</span><select value={editingPlanSession.category || "study"} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, category: event.target.value as NonNullable<PlanSession["category"]> })}><option value="study">Estudo</option><option value="revision">Revisão</option><option value="exercise">Exercícios</option><option value="reading">Leitura</option><option value="project">Projeto</option></select></label>
+              <label><span>Dificuldade</span><select value={editingPlanSession.difficulty || "medium"} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, difficulty: event.target.value as NonNullable<PlanSession["difficulty"]> })}><option value="easy">Fácil</option><option value="medium">Média</option><option value="hard">Difícil</option></select></label>
+              <label><span>XP</span><input type="number" min="0" max="10000" value={editingPlanSession.xp || 0} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, xp: Number(event.target.value) })} /></label>
+              <label><span>Prazo</span><input type="date" value={editingPlanSession.dueDate || ""} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, dueDate: event.target.value })} /></label>
+              <label><span>Recorrência</span><select value={editingPlanSession.recurrence || "none"} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, recurrence: event.target.value as NonNullable<PlanSession["recurrence"]> })}><option value="none">Sem recorrência</option><option value="daily">Diária</option><option value="weekly">Semanal</option><option value="monthly">Mensal</option></select></label>
+              <label><span>Mapa</span><select value={editingPlanSession.mapId || ""} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, mapId: event.target.value || undefined })}><option value="">Nenhum</option>{studyMaps.filter((map) => map.status !== "archived").map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}</select></label>
+              <label><span>Tema</span><select value={editingPlanSession.themeId || ""} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, themeId: event.target.value || undefined })}><option value="">Nenhum</option>{themes.filter((theme) => !theme.archived).map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
+            </div>
+            <div className="confirm-actions"><button type="button" onClick={() => setEditingPlanSession(null)}>Cancelar</button><button className="primary-button" type="submit">Salvar alterações</button></div>
+          </form>
+        </div>
+      )}
 
       <button className="chat-launcher" onClick={() => setChatOpen(true)} aria-label="Abrir tutor"><MessageCircle size={23} /><span>Tutor IA</span></button>
       {chatOpen && (

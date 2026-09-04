@@ -9,7 +9,9 @@ import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import ffmpegPath from "ffmpeg-static";
 import { NextResponse } from "next/server";
-import { getOpenAIKey, OPENAI_API_URL } from "@/lib/openai";
+import { failure, success } from "@/lib/api-contract";
+import { getOpenAIKey, OpenAIRequestError, OPENAI_API_URL } from "@/lib/openai";
+import { getNestedMessage, isRecord, parseJsonSafely } from "@/lib/safe-json";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -131,16 +133,40 @@ async function transcribeChunk(path: string, index: number) {
   form.append("response_format", "json");
   form.append("prompt", "Transcreva fielmente esta aula em português, preservando termos técnicos, nomes e números.");
 
-  const response = await fetch(`${OPENAI_API_URL}/audio/transcriptions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${getOpenAIKey()}` },
-    body: form,
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || `Não foi possível transcrever a parte ${index + 1}.`);
+  let response: Response;
+  try {
+    response = await fetch(`${OPENAI_API_URL}/audio/transcriptions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getOpenAIKey()}` },
+      body: form,
+      signal: AbortSignal.timeout(55_000),
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    throw new OpenAIRequestError(
+      timedOut ? "OPENAI_TIMEOUT" : "OPENAI_UNAVAILABLE",
+      timedOut ? `A transcrição da parte ${index + 1} excedeu o tempo limite. Tente novamente.` : `Não foi possível enviar a parte ${index + 1} para transcrição.`,
+      503,
+      true,
+      error instanceof Error ? error.message : String(error),
+    );
   }
-  return String(payload.text || "").trim();
+  const contentType = response.headers.get("content-type")?.toLowerCase() || "";
+  const responseText = await response.text();
+  let payload: unknown = null;
+  if (contentType.includes("application/json") && responseText.trim()) {
+    try { payload = parseJsonSafely(responseText); } catch { payload = null; }
+  }
+  if (!response.ok) {
+    const technical = getNestedMessage(payload) || responseText.slice(0, 400) || `HTTP ${response.status}`;
+    if (response.status === 429) throw new OpenAIRequestError("OPENAI_RATE_LIMIT", "O limite de transcrição foi atingido. Aguarde e tente novamente.", 429, true, technical);
+    if (response.status === 401 || response.status === 403) throw new OpenAIRequestError("OPENAI_AUTH_FAILED", "A configuração da IA precisa ser revisada.", response.status, false, technical);
+    throw new OpenAIRequestError("OPENAI_UNAVAILABLE", `Não foi possível transcrever a parte ${index + 1}.`, response.status, response.status >= 500, technical);
+  }
+  if (!isRecord(payload) || typeof payload.text !== "string" || !payload.text.trim()) {
+    throw new OpenAIRequestError("MALFORMED_AI_RESPONSE", "A IA devolveu uma transcrição inválida. Tente novamente.", 502, true, responseText.slice(0, 400));
+  }
+  return payload.text.trim();
 }
 
 export async function POST(request: Request) {
@@ -155,16 +181,18 @@ export async function POST(request: Request) {
     let upload: File | null = null;
 
     if (contentType.includes("application/json")) {
-      const body = await request.json() as {
-        mediaUrl?: string;
-        sourceUrl?: string;
-        fileName?: string;
-        mimeType?: string;
-      };
+      let body: Record<string, unknown>;
+      try {
+        const parsed: unknown = await request.json();
+        if (!isRecord(parsed)) throw new Error("invalid body");
+        body = parsed;
+      } catch {
+        return NextResponse.json(failure("INVALID_REQUEST", "A solicitação enviada é inválida."), { status: 400 });
+      }
       sourceUrl = String(body.mediaUrl || body.sourceUrl || "");
       fileName = String(body.fileName || "aula.mp4");
       mimeType = String(body.mimeType || "video/mp4");
-      if (body.mediaUrl?.includes(".blob.vercel-storage.com")) temporaryBlobUrl = body.mediaUrl;
+      if (typeof body.mediaUrl === "string" && body.mediaUrl.includes(".blob.vercel-storage.com")) temporaryBlobUrl = body.mediaUrl;
     } else {
       const incoming = await request.formData();
       sourceUrl = String(incoming.get("sourceUrl") || incoming.get("driveUrl") || "");
@@ -177,16 +205,10 @@ export async function POST(request: Request) {
     }
 
     if (!upload && !sourceUrl) {
-      return NextResponse.json(
-        { error: "Envie um vídeo/áudio ou cole um link público direto." },
-        { status: 400 },
-      );
+      return NextResponse.json(failure("INVALID_REQUEST", "Envie um vídeo/áudio ou cole um link público direto."), { status: 400 });
     }
     if (upload && upload.size > DIRECT_UPLOAD_BYTES) {
-      return NextResponse.json(
-        { error: "Para arquivos acima de 4 MB, use o upload ampliado com Vercel Blob." },
-        { status: 413 },
-      );
+      return NextResponse.json(failure("INVALID_REQUEST", "Para arquivos acima de 4 MB, use o upload ampliado com Vercel Blob."), { status: 413 });
     }
 
     const inputPath = join(workingDirectory, `input${safeExtension(fileName, mimeType)}`);
@@ -220,17 +242,17 @@ export async function POST(request: Request) {
       transcriptParts.push(await transcribeChunk(join(workingDirectory, chunks[index]), index));
     }
 
-    return NextResponse.json({
+    return NextResponse.json(success({
       transcript: transcriptParts.filter(Boolean).join("\n\n"),
       fileName,
       parts: chunks.length,
       normalizedAudio: true,
-    });
+    }));
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Erro inesperado na transcrição." },
-      { status: 500 },
-    );
+    console.error("POST /api/transcribe", error instanceof OpenAIRequestError ? error.technicalMessage : error);
+    if (error instanceof OpenAIRequestError) return NextResponse.json(failure(error.code, error.message, error.retryable), { status: error.status });
+    const message = error instanceof Error ? error.message : "Erro inesperado na transcrição.";
+    return NextResponse.json(failure("UNKNOWN_ERROR", message, true), { status: 500 });
   } finally {
     await rm(workingDirectory, { recursive: true, force: true });
     if (temporaryBlobUrl) {
