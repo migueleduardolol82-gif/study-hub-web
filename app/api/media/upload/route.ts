@@ -27,11 +27,12 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível preparar o upload.";
     const notConfigured = message.toLowerCase().includes("token");
+    console.error("POST /api/media/upload", error);
     return NextResponse.json(
       {
         error: notConfigured
           ? "O armazenamento de vídeos ainda não está ativado. Crie um Vercel Blob no projeto; a variável BLOB_READ_WRITE_TOKEN será adicionada automaticamente."
-          : message,
+          : "Não foi possível preparar o upload. Verifique o arquivo e tente novamente.",
       },
       { status: notConfigured ? 503 : 400 },
     );

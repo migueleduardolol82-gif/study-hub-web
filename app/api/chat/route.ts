@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { failure, success } from "@/lib/api-contract";
-import { createTextResponse } from "@/lib/openai";
+import { createTextResponse, OpenAIRequestError } from "@/lib/openai";
 
 export async function POST(request: Request) {
   try {
@@ -17,8 +17,12 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(success({ answer }));
   } catch (error) {
+    console.error("POST /api/chat", error instanceof OpenAIRequestError ? error.technicalMessage : error);
+    if (error instanceof OpenAIRequestError) {
+      return NextResponse.json(failure(error.code, error.message, error.retryable), { status: error.status });
+    }
     return NextResponse.json(
-      failure("UNKNOWN_ERROR", error instanceof Error ? error.message : "O tutor não conseguiu responder."),
+      failure("UNKNOWN_ERROR", "O tutor não conseguiu responder agora. Tente novamente.", true),
       { status: 500 },
     );
   }

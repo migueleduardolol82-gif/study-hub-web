@@ -53,6 +53,22 @@ try {
   assert.equal(typeof payload.error.message, "string");
   assert.equal(JSON.stringify(payload).includes("sk-"), false);
 
+  const tutorMissingKey = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Explique juros compostos" }),
+  });
+  assert.equal(tutorMissingKey.status, 503);
+  const tutorPayload = await tutorMissingKey.json();
+  assert.equal(tutorPayload.error.code, "OPENAI_KEY_MISSING");
+  assert.equal(JSON.stringify(tutorPayload).includes("OPENAI_API_KEY"), false);
+
+  const invalidMedia = await fetch(`http://127.0.0.1:${port}/api/transcribe`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sourceUrl: "http://localhost/video.mp4" }),
+  });
+  assert.equal(invalidMedia.status, 400);
+  const invalidMediaPayload = await invalidMedia.json();
+  assert.equal(invalidMediaPayload.error.code, "INVALID_MEDIA");
+  assert.equal(invalidMediaPayload.success, false);
+
   const invalidShape = await fetch(`http://127.0.0.1:${port}/api/learning/generate`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: "[]",
   });
@@ -63,7 +79,7 @@ try {
   assert.equal(userData.status, 503);
   assert.equal((await userData.json()).error.code, "CLOUD_NOT_CONFIGURED");
 
-  console.log("HTTP smoke: páginas, login e contratos de erro verificados.");
+  console.log("HTTP smoke: páginas, login, IA, mídia e contratos de erro verificados.");
 } finally {
   server.kill("SIGTERM");
 }

@@ -20,6 +20,16 @@ const MAX_MEDIA_BYTES = 250 * 1024 * 1024;
 const DIRECT_UPLOAD_BYTES = 4 * 1024 * 1024;
 const run = promisify(execFile);
 
+class MediaInputError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "MediaInputError";
+    this.status = status;
+  }
+}
+
 const extensionByMime: Record<string, string> = {
   "audio/mpeg": ".mp3",
   "audio/mp4": ".m4a",
@@ -57,10 +67,10 @@ function resolvePublicMediaUrl(rawUrl: string) {
   try {
     parsed = new URL(rawUrl);
   } catch {
-    throw new Error("Cole um link público válido começando com https://.");
+    throw new MediaInputError("Cole um link público válido começando com https://.");
   }
   if (parsed.protocol !== "https:" || isPrivateHostname(parsed.hostname)) {
-    throw new Error("Por segurança, use um link público HTTPS.");
+    throw new MediaInputError("Por segurança, use um link público HTTPS.");
   }
 
   const driveId = driveIdFromUrl(rawUrl);
@@ -83,7 +93,7 @@ async function downloadToFile(url: string, destination: string) {
   for (let redirect = 0; redirect <= 5; redirect += 1) {
     const target = new URL(currentUrl);
     if (target.protocol !== "https:" || isPrivateHostname(target.hostname)) {
-      throw new Error("O link tentou redirecionar para um endereço não permitido.");
+      throw new MediaInputError("O link tentou redirecionar para um endereço não permitido.");
     }
     response = await fetch(target, {
       redirect: "manual",
@@ -95,29 +105,29 @@ async function downloadToFile(url: string, destination: string) {
     currentUrl = new URL(location, target).toString();
   }
   if (response?.status && response.status >= 300 && response.status < 400) {
-    throw new Error("O link possui redirecionamentos demais.");
+    throw new MediaInputError("O link possui redirecionamentos demais.");
   }
-  if (!response) throw new Error("Não foi possível abrir o link do vídeo.");
+  if (!response) throw new MediaInputError("Não foi possível abrir o link do vídeo.");
   if (!response.ok || !response.body) {
-    throw new Error(
+    throw new MediaInputError(
       "Não foi possível acessar esse vídeo. Confirme que o link é público e aponta diretamente para um arquivo.",
     );
   }
 
   const contentType = response.headers.get("content-type")?.toLowerCase() || "";
   if (contentType.includes("text/html") || contentType.includes("application/json")) {
-    throw new Error(
+    throw new MediaInputError(
       "O link devolveu uma página, não um vídeo. No Drive, escolha ‘qualquer pessoa com o link’; em outros serviços, use o link público de download.",
     );
   }
   const declaredSize = Number(response.headers.get("content-length") || 0);
-  if (declaredSize > MAX_MEDIA_BYTES) throw new Error("O vídeo pode ter no máximo 250 MB.");
+  if (declaredSize > MAX_MEDIA_BYTES) throw new MediaInputError("O vídeo pode ter no máximo 250 MB.", 413);
 
   let received = 0;
   const limiter = new Transform({
     transform(chunk: Buffer, _encoding, callback) {
       received += chunk.length;
-      callback(received > MAX_MEDIA_BYTES ? new Error("O vídeo ultrapassou 250 MB.") : null, chunk);
+      callback(received > MAX_MEDIA_BYTES ? new MediaInputError("O vídeo ultrapassou 250 MB.", 413) : null, chunk);
     },
   });
   await pipeline(Readable.fromWeb(response.body as never), limiter, createWriteStream(destination));
@@ -227,7 +237,7 @@ export async function POST(request: Request) {
         "-f", "segment", "-segment_time", "600", "-reset_timestamps", "1", outputPattern,
       ], { maxBuffer: 4 * 1024 * 1024 });
     } catch {
-      throw new Error(
+      throw new MediaInputError(
         "Não encontrei uma faixa de áudio válida. Tente outro arquivo ou exporte o vídeo novamente como MP4 (H.264/AAC).",
       );
     }
@@ -235,7 +245,7 @@ export async function POST(request: Request) {
     const chunks = (await readdir(workingDirectory))
       .filter((name) => name.startsWith("parte-") && name.endsWith(".mp3"))
       .sort();
-    if (!chunks.length) throw new Error("O vídeo não produziu áudio para transcrição.");
+    if (!chunks.length) throw new MediaInputError("O vídeo não produziu áudio para transcrição.");
 
     const transcriptParts: string[] = [];
     for (let index = 0; index < chunks.length; index += 1) {
@@ -251,8 +261,13 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("POST /api/transcribe", error instanceof OpenAIRequestError ? error.technicalMessage : error);
     if (error instanceof OpenAIRequestError) return NextResponse.json(failure(error.code, error.message, error.retryable), { status: error.status });
-    const message = error instanceof Error ? error.message : "Erro inesperado na transcrição.";
-    return NextResponse.json(failure("UNKNOWN_ERROR", message, true), { status: 500 });
+    if (error instanceof MediaInputError) {
+      return NextResponse.json(failure("INVALID_MEDIA", error.message), { status: error.status });
+    }
+    return NextResponse.json(
+      failure("UNKNOWN_ERROR", "Não foi possível concluir a transcrição agora. Tente novamente.", true),
+      { status: 500 },
+    );
   } finally {
     await rm(workingDirectory, { recursive: true, force: true });
     if (temporaryBlobUrl) {
