@@ -57,9 +57,11 @@ function chunksForPage(documentId: string, page: number, label: string, text: st
 }
 
 function xmlText(xml: string) {
-  const parser = new DOMParser();
-  const document = parser.parseFromString(xml, "application/xml");
-  return Array.from(document.querySelectorAll("t")).map((node) => node.textContent || "").join(" ");
+  const decode = (value: string) => value
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  return decode(Array.from(xml.matchAll(/<(?:w:|a:)?t(?:\s[^>]*)?>([\s\S]*?)<\/(?:w:|a:)?t>/g), (match) => match[1]).join(" "));
 }
 
 export async function extractStudyDocument(file: File, documentId: string, progress: (stage: string) => void): Promise<DocumentChunk[]> {
