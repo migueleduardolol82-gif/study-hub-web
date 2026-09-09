@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nexo — Ambiente de Estudos",
+  title: "Nexo — Central de Evolução",
   description:
     "Transcrição, mapeamento de conteúdo, sessões, metas e revisão ativa em um único espaço.",
 };

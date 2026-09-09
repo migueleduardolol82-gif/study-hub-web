@@ -4,6 +4,7 @@ import { initialTimer, nextTimerPhase, remainingTime, restoreTimer } from '../li
 import { buildStudySchedule } from '../lib/study-planning.ts';
 import { validateLessonContent, validateOutline } from '../lib/learning-generation.ts';
 import { relevantMaterial } from '../lib/ai-pedagogy.ts';
+import { journeyProgress, migrateStudyOrganizationToJourneys } from '../lib/journeys.ts';
 
 test('timer calcula pelo relógio real mesmo após a aba ficar suspensa', () => {
   const timer = { ...initialTimer(), running: true, endsAt: 61000, sessionId: 'test-focus' };
@@ -72,4 +73,23 @@ test('lição rejeita resposta ausente, alternativas duplicadas e ordenação in
 test('material relevante é selecionado mesmo quando está depois das primeiras páginas', () => {
   const text = 'Texto de introdução. '.repeat(2000) + 'DERIVADAS regra da cadeia aplicada a funções compostas. '.repeat(100);
   assert.match(relevantMaterial(text, 'derivadas regra cadeia', 6400), /DERIVADAS/);
+});
+
+test('migração reúne mapas e temas em jornadas sem alterar os registros originais', () => {
+  const now = '2026-09-09T12:00:00.000Z';
+  const themes = [{ id: 'theme-1', name: 'Finanças', description: '', icon: '📚', color: '#fff', category: 'Estudos', difficulty: 'iniciante' as const, objective: 'Aprender', createdAt: now, updatedAt: now, archived: false, mapIds: ['map-1'] }, { id: 'theme-2', name: 'Corrida', description: '', icon: '🏃', color: '#0f0', category: 'Esporte', difficulty: 'iniciante' as const, objective: 'Evoluir', createdAt: now, updatedAt: now, archived: false, mapIds: [] }];
+  const maps = [{ id: 'map-1', name: 'C-Pro I', description: '', objective: 'Aprovação', status: 'active' as const, isPrimary: true, themeIds: ['theme-1'], createdAt: now, updatedAt: now, lastActivityAt: now, mapping: { summary: '', coverage: 42, topics: [], nextSteps: [] } }];
+  const before = JSON.stringify({ themes, maps });
+  const journeys = migrateStudyOrganizationToJourneys(themes, maps, []);
+  assert.equal(journeys.length, 2);
+  assert.equal(journeys.find((item) => item.sourceMapIds.includes('map-1'))?.current, 42);
+  assert.equal(journeys.find((item) => item.sourceThemeIds.includes('theme-2'))?.name, 'Corrida');
+  assert.equal(JSON.stringify({ themes, maps }), before);
+  assert.equal(migrateStudyOrganizationToJourneys(themes, maps, journeys).length, 2);
+});
+
+test('progresso da jornada aceita meta numérica ou atividades concluídas', () => {
+  const base = { id: 'j1', name: 'Ler', category: 'Leitura', icon: '📖', color: '#fff', objective: '', status: 'active' as const, startDate: '2026-09-09', metricName: 'Páginas', metricUnit: 'páginas', target: 200, current: 50, activities: [], sourceThemeIds: [], sourceMapIds: [], createdAt: '', updatedAt: '' };
+  assert.equal(journeyProgress(base), 25);
+  assert.equal(journeyProgress({ ...base, target: 0, activities: [{ id: 'a', title: 'Ler', date: '2026-09-09', minutes: 20, done: true }, { id: 'b', title: 'Ler', date: '2026-09-10', minutes: 20, done: false }] }), 50);
 });

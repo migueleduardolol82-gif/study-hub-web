@@ -60,8 +60,10 @@ import { emptyPathProgress, type ContentMapping, type LearningPath, type Learnin
 import type { StudyDocument } from "@/lib/study-documents";
 import { DocumentUploadPanel } from "@/components/document-upload-panel";
 import { analyzeStudyDocuments } from "@/lib/document-analysis-client";
+import { JourneysWorkspace, TodayWorkspace } from "@/components/journeys-workspace";
+import { migrateStudyOrganizationToJourneys, journeyProgress, type JourneyRecord } from "@/lib/journeys";
 
-type Tab = "dashboard" | "mapping" | "themes" | "review" | "evolution" | "sessions" | "plans";
+type Tab = "dashboard" | "today" | "journeys" | "mapping" | "themes" | "review" | "evolution" | "sessions" | "plans";
 type TopicStatus = LearningTopicStatus;
 type TopicPriority = LearningTopicPriority;
 type Topic = LearningTopic;
@@ -135,7 +137,7 @@ type Archetype = {
 };
 
 type DashboardState = {
-  version: 5;
+  version: 6;
   goals: Goal[];
   studyPlans: StudyPlanRecord[];
   activePlanId: string;
@@ -165,6 +167,7 @@ type DashboardState = {
   learningPaths: LearningPath[];
   learningProgress: Record<string, PathProgress>;
   documents: StudyDocument[];
+  journeys: JourneyRecord[];
 };
 
 const initialMapping: Mapping = {
@@ -330,8 +333,8 @@ const archetypes: Archetype[] = [
 
 const tabs: { id: Tab; label: string; icon: typeof BarChart3 }[] = [
   { id: "dashboard", label: "Visão geral", icon: BarChart3 },
-  { id: "mapping", label: "Mapas de Estudos", icon: Layers3 },
-  { id: "themes", label: "Temas", icon: BookMarked },
+  { id: "today", label: "Hoje", icon: CalendarDays },
+  { id: "journeys", label: "Jornadas", icon: Target },
   { id: "review", label: "Revisão Ativa", icon: BrainCircuit },
   { id: "evolution", label: "Ascensão", icon: Shield },
   { id: "sessions", label: "Estudos", icon: Video },
@@ -457,16 +460,17 @@ export function StudyHub({
   const [learningPaths, setLearningPaths] = useState<LearningPath[]>([]);
   const [learningProgress, setLearningProgress] = useState<Record<string, PathProgress>>({});
   const [documents, setDocuments] = useState<StudyDocument[]>([]);
+  const [journeys, setJourneys] = useState<JourneyRecord[]>([]);
   const [editingActivityId, setEditingActivityId] = useState<number | null>(null);
   const [activityMenuId, setActivityMenuId] = useState<number | null>(null);
   const [planSessionMenuId, setPlanSessionMenuId] = useState<string | null>(null);
   const [editingPlanSession, setEditingPlanSession] = useState<PlanSession | null>(null);
-  const dashboardStorageKey = accountId ? `nexo-dashboard-v5:${accountId}` : "nexo-dashboard-v5";
+  const dashboardStorageKey = accountId ? `nexo-dashboard-v6:${accountId}` : "nexo-dashboard-v6";
   const legacyMarkerKey = `nexo-legacy-reviewed:${accountId || "local"}`;
 
   useEffect(() => {
     try {
-      const v3 = window.localStorage.getItem(dashboardStorageKey) || window.localStorage.getItem(accountId ? `nexo-dashboard-v4:${accountId}` : "nexo-dashboard-v4") || window.localStorage.getItem(accountId ? `nexo-dashboard-v3:${accountId}` : "nexo-dashboard-v3");
+      const v3 = window.localStorage.getItem(dashboardStorageKey) || window.localStorage.getItem(accountId ? `nexo-dashboard-v5:${accountId}` : "nexo-dashboard-v5") || window.localStorage.getItem(accountId ? `nexo-dashboard-v4:${accountId}` : "nexo-dashboard-v4") || window.localStorage.getItem(accountId ? `nexo-dashboard-v3:${accountId}` : "nexo-dashboard-v3");
       if (v3) {
         const state = JSON.parse(v3) as Partial<DashboardState>;
         if (Array.isArray(state.goals)) setGoals(state.goals);
@@ -497,6 +501,7 @@ export function StudyHub({
         if (Array.isArray(state.learningPaths)) setLearningPaths(state.learningPaths);
         if (state.learningProgress && typeof state.learningProgress === "object") setLearningProgress(state.learningProgress);
         if (Array.isArray(state.documents)) setDocuments(state.documents);
+        if (Array.isArray(state.journeys)) setJourneys(state.journeys);
       } else if (!authEnabled) {
         const stored = window.localStorage.getItem("nexo-goals-v1");
         if (stored) setGoals(JSON.parse(stored));
@@ -541,7 +546,7 @@ export function StudyHub({
   }, [authEnabled, dashboardStorageKey, legacyMarkerKey, accountId]);
 
   const dashboardState = useMemo<DashboardState>(() => ({
-    version: 5,
+    version: 6,
     goals,
     studyPlans,
     activePlanId,
@@ -571,7 +576,8 @@ export function StudyHub({
     learningPaths,
     learningProgress,
     documents,
-  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents]);
+    journeys,
+  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys]);
 
   useEffect(() => {
     if (!storageReady || (cloudEnabled && !cloudLoaded)) return;
@@ -618,6 +624,7 @@ export function StudyHub({
           if (Array.isArray(state.learningPaths)) setLearningPaths(state.learningPaths);
           if (state.learningProgress && typeof state.learningProgress === "object") setLearningProgress(state.learningProgress);
           if (Array.isArray(state.documents)) setDocuments(state.documents);
+          if (Array.isArray(state.journeys)) setJourneys(state.journeys);
         }
         setCloudStatus(state ? "saved" : "saving");
       } catch (error) {
@@ -632,6 +639,16 @@ export function StudyHub({
     loadCloudState();
     return () => { cancelled = true; };
   }, [cloudEnabled, storageReady]);
+
+  useEffect(() => {
+    if (!storageReady || (cloudEnabled && !cloudLoaded) || (!themes.length && !studyMaps.length)) return;
+    setJourneys((current) => {
+      const migrated = migrateStudyOrganizationToJourneys(themes, studyMaps, current);
+      if (migrated.length === current.length) return current;
+      setNotice("Seus mapas e temas foram reunidos em Jornadas sem apagar os dados anteriores.");
+      return migrated;
+    });
+  }, [storageReady, cloudEnabled, cloudLoaded, themes, studyMaps]);
 
   useEffect(() => {
     if (!cloudEnabled || !cloudLoaded || !storageReady) return;
@@ -726,6 +743,12 @@ export function StudyHub({
   const evidenceDays = new Set(completedEvolutionLogs.map((log) => log.createdAt.slice(0, 10))).size;
   const evidencePillars = new Set(completedEvolutionLogs.map((log) => log.type)).size;
   const currentStreak = calculateCurrentStreak(completedEvolutionLogs);
+  const activeJourneys = journeys.filter((journey) => journey.status === "active");
+  const journeyAverage = activeJourneys.length ? Math.round(activeJourneys.reduce((total, journey) => total + journeyProgress(journey), 0) / activeJourneys.length) : 0;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayJourneyActions = journeys.flatMap((journey) => journey.activities).filter((activity) => activity.date === todayKey);
+  const weeklyLogs = completedEvolutionLogs.filter((log) => Date.now() - new Date(log.createdAt).getTime() <= 7 * 86400000);
+  const weeklyByType = (type: EvolutionLog["type"]) => weeklyLogs.filter((log) => log.type === type).reduce((total, log) => total + log.minutes, 0);
   const averageSkill = Object.values(skillLevels).reduce((total, level) => total + level, 0) / 6;
   const liveRankScore = assessmentResult ? Math.max(assessmentResult.overall, Math.round(assessmentResult.overall * 0.6 + averageSkill * 0.4)) : 0;
   let evolutionRankIndex = assessmentResult ? rankOrder.indexOf(assessmentResult.rank) : -1;
@@ -1760,7 +1783,7 @@ export function StudyHub({
               >
                 <Icon size={19} />
                 <span>{item.label}</span>
-                {item.id === "mapping" && studyMaps.length > 0 && <em>{studyMaps.length}</em>}
+                {item.id === "journeys" && journeys.length > 0 && <em>{journeys.length}</em>}
               </button>
             );
           })}
@@ -1777,7 +1800,7 @@ export function StudyHub({
           <button className="menu-button" onClick={() => setMobileNav(true)} aria-label="Abrir menu"><Menu /></button>
           <div>
             <span className="eyebrow" suppressHydrationWarning>{new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" }).toUpperCase()}</span>
-            <h1>{tabs.find((item) => item.id === tab)?.label}</h1>
+            <h1>{tabs.find((item) => item.id === tab)?.label || (tab === "mapping" ? "Mapas preservados" : "Temas preservados")}</h1>
           </div>
           <div className="top-actions">
             <span className={`cloud-status ${cloudStatus}`}>{cloudStatus === "saved" ? "Salvo na nuvem" : cloudStatus === "saving" ? "Salvando…" : cloudStatus === "error" ? "Cópia local" : cloudStatus === "loading" ? "Sincronizando…" : "Modo local"}</span>
@@ -1843,8 +1866,23 @@ export function StudyHub({
               <div className="panel-heading"><div><span className="eyebrow">ATIVIDADE RECENTE</span><h3>Suas últimas evidências</h3></div><button className="text-button" onClick={() => setTab("evolution")}>Ver todas</button></div>
               {evolutionLogs.length ? <div className="session-list compact">{evolutionLogs.slice(0, 3).map((log) => <div key={log.id}><span className="session-icon purple"><Activity size={19} /></span><p><strong>{log.title}</strong><small>{activityTypes[log.type].label} · {log.minutes} min · {new Date(log.createdAt).toLocaleDateString("pt-BR")}</small></p><span className="score">+{log.xp} XP</span></div>)}</div> : <div className="history-empty dashboard-empty"><Shield size={24} /><p><strong>Nenhuma evidência registrada.</strong><small>Use Ascensão para registrar estudo, leitura, treino ou projetos.</small></p></div>}
             </section>
+
+            <section className="life-dashboard panel">
+              <div className="panel-heading"><div><span className="eyebrow">PAINEL GERAL</span><h3>Resumo da sua semana</h3></div><button className="text-button" onClick={() => setTab("journeys")}>Ver jornadas <ArrowRight size={16} /></button></div>
+              <div className="life-metric-grid">
+                <article><BookOpen /><span><strong>{Math.round(weeklyByType("study") / 60 * 10) / 10}h</strong><small>Estudos</small></span></article>
+                <article><Dumbbell /><span><strong>{Math.round((weeklyByType("run") + weeklyByType("strength")) / 60 * 10) / 10}h</strong><small>Treinos</small></span></article>
+                <article><BookMarked /><span><strong>{Math.round(weeklyByType("reading") / 60 * 10) / 10}h</strong><small>Leitura</small></span></article>
+                <article><Target /><span><strong>{journeyAverage}%</strong><small>Média das jornadas</small></span></article>
+              </div>
+              <div className="dashboard-journeys"><span><strong>{activeJourneys.length}</strong> jornadas ativas</span><span><strong>{todayJourneyActions.filter((item) => item.done).length}/{todayJourneyActions.length}</strong> ações de hoje</span><span><strong>{weeklyLogs.length}</strong> registros na semana</span></div>
+            </section>
           </div>
         )}
+
+        {tab === "today" && <TodayWorkspace journeys={journeys} setJourneys={setJourneys} />}
+
+        {tab === "journeys" && <JourneysWorkspace journeys={journeys} setJourneys={setJourneys} openLegacy={(view) => setTab(view)} />}
 
         {tab === "evolution" && (
           <div className="evolution-page">

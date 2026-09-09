@@ -1,9 +1,11 @@
-# Nexo — Ambiente Inteligente de Estudos
+# Nexo — Central de Evolução
 
-Aplicativo em Next.js que conecta vídeos, apostilas, metas, sessões de foco e revisão ativa.
+Aplicativo em Next.js para organizar jornadas pessoais, estudos, treinos, leitura, metas, sessões de foco e revisão ativa.
 
 ## O que já funciona
 
+- painel geral com resumo semanal, área Hoje e Jornadas livres para qualquer esporte, leitura, carreira, finanças, saúde, estudo ou categoria escrita pelo usuário;
+- migração versionada que reúne mapas e temas existentes em Jornadas sem excluir os registros, vínculos ou progresso anteriores;
 - envio de vídeo ou áudio de até 250 MB e links públicos do Drive, Dropbox ou arquivo direto;
 - normalização e divisão automática do áudio antes da transcrição em português pela OpenAI;
 - biblioteca de fontes com PDF, DOCX, PPTX, TXT, JPG, JPEG e PNG, incluindo OCR de imagens e PDFs digitalizados;
