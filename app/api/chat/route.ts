@@ -1,29 +1,17 @@
-import { NextResponse } from "next/server";
-import { failure, success } from "@/lib/api-contract";
-import { createTextResponse, OpenAIRequestError } from "@/lib/openai";
-
+import { aiRoute, InvalidAIRequest } from "@/lib/ai-route";
+import { inputText, relevantMaterial, specialistInstructions } from "@/lib/ai-pedagogy";
+import { createTextResponse } from "@/lib/openai";
+export const runtime = "nodejs";
+export const maxDuration = 120;
 export async function POST(request: Request) {
-  try {
-    let body: { message?: string; context?: string };
-    try { body = await request.json(); } catch { return NextResponse.json(failure("INVALID_REQUEST", "A solicitação enviada é inválida."), { status: 400 }); }
-    const { message, context = "" } = body;
-    if (!message?.trim()) {
-      return NextResponse.json(failure("INVALID_REQUEST", "Escreva uma pergunta."), { status: 400 });
-    }
+  return aiRoute(request, "/api/chat", async (body) => {
+    const message = inputText(body.message, 6000);
+    if (!message) throw new InvalidAIRequest("Escreva uma pergunta.");
     const answer = await createTextResponse({
-      instructions:
-        "Você é o tutor do aluno dentro de um ambiente de estudos. Responda em português do Brasil, com clareza, exemplos curtos e fidelidade ao material. Quando o material não for suficiente, diga isso explicitamente.",
-      input: `MATERIAL DISPONÍVEL:\n${context.slice(0, 50000)}\n\nPERGUNTA DO ALUNO:\n${message}`,
+      instructions: `${specialistInstructions} Responda à pergunta diretamente, explicando o raciocínio e os erros comuns. Use exemplos pertinentes ao assunto e ao nível do aluno. Se o aluno mudar de assunto, acompanhe o novo assunto. Se pedir algo amplo demais, proponha um recorte inicial útil e pergunte o necessário. Use conhecimento geral quando não houver material, identificando complementos ao material quando houver.`,
+      input: JSON.stringify({ pergunta: message, material: relevantMaterial(inputText(body.context, 60000), message) }),
+      timeoutMs: 105000, maxOutputTokens: 5000, signal: request.signal,
     });
-    return NextResponse.json(success({ answer }));
-  } catch (error) {
-    console.error("POST /api/chat", error instanceof OpenAIRequestError ? error.technicalMessage : error);
-    if (error instanceof OpenAIRequestError) {
-      return NextResponse.json(failure(error.code, error.message, error.retryable), { status: error.status });
-    }
-    return NextResponse.json(
-      failure("UNKNOWN_ERROR", "O tutor não conseguiu responder agora. Tente novamente.", true),
-      { status: 500 },
-    );
-  }
+    return { answer };
+  });
 }

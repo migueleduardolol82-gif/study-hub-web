@@ -1,7 +1,8 @@
 "use client";
 
-import { Archive, Check, Copy, Edit3, FolderOpen, Link2, MoreVertical, Pause, Play, Plus, Search, Star, Trash2, X } from "lucide-react";
+import { Archive, Check, Copy, Edit3, FolderOpen, Link2, MoreVertical, Pause, Play, Plus, Search, Star, Trash2, X, Sparkles, LoaderCircle } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
+import { requestAI } from "@/lib/ai-client";
 import type { StudyMapRecord, StudyMapStatus, ThemeDifficulty, ThemeRecord } from "@/lib/learning";
 
 const emptyTheme = { name: "", description: "", icon: "✦", color: "#a78bfa", imageUrl: "", category: "", difficulty: "iniciante" as ThemeDifficulty, objective: "" };
@@ -19,6 +20,21 @@ export function ThemesWorkspace({
 }) {
   const [draft, setDraft] = useState(emptyTheme);
   const [editingId, setEditingId] = useState("");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiStatus, setAiStatus] = useState("");
+  async function generateTheme() {
+    if (aiBusy) return;
+    if (!aiPrompt.trim()) { setAiError("Descreva o tema que deseja criar."); return; }
+    setAiBusy(true); setAiError(""); setAiStatus("");
+    try {
+      const generated = await requestAI<Pick<ThemeRecord, "name" | "description" | "category" | "difficulty" | "objective">>("/api/themes/generate", { request: aiPrompt, difficulty: draft.difficulty, context: draft.objective });
+      setDraft((current) => ({ ...current, ...generated }));
+      setAiStatus("Sugestão pronta. Revise os campos e salve o tema.");
+    } catch (error) { setAiError(error instanceof Error ? error.message : "Não foi possível gerar o tema."); }
+    finally { setAiBusy(false); }
+  }
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [deletingId, setDeletingId] = useState("");
@@ -58,7 +74,8 @@ export function ThemesWorkspace({
 
       <form className="entity-form panel" onSubmit={submit}>
         <div className="panel-heading"><div><span className="eyebrow">{editingId ? "EDITAR TEMA" : "NOVO TEMA"}</span><h3>{editingId ? "Atualize sem perder os vínculos" : "Defina o próximo domínio"}</h3></div>{editingId && <button type="button" className="icon-button" onClick={() => { setEditingId(""); setDraft(emptyTheme); }} aria-label="Cancelar edição"><X size={17} /></button>}</div>
-        <div className="entity-form-grid">
+        <div className="theme-ai-builder"><label><span>Crie um tema com IA</span><textarea value={aiPrompt} disabled={aiBusy} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Ex.: espanhol para atender clientes de investimentos. Sou iniciante e quero praticar conversação." /></label><button type="button" className="outline-button" disabled={aiBusy} onClick={generateTheme}>{aiBusy ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />} {aiBusy ? "Preparando tema…" : "Preencher com IA"}</button>{aiError && <div role="alert" className="inline-error"><span>{aiError}</span><button type="button" disabled={aiBusy} onClick={generateTheme}>Tentar novamente</button></div>}{aiStatus && <p role="status">{aiStatus}</p>}</div>
+        <fieldset disabled={aiBusy} className="entity-form-grid">
           <label><span>Nome</span><input required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Ex.: Inglês para negócios" /></label>
           <label><span>Categoria</span><input value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} placeholder="Ex.: Idiomas" /></label>
           <label><span>Ícone</span><input value={draft.icon} onChange={(event) => setDraft({ ...draft, icon: event.target.value.slice(0, 4) })} aria-label="Ícone do tema" /></label>
@@ -67,8 +84,8 @@ export function ThemesWorkspace({
           <label><span>Imagem opcional (URL)</span><input value={draft.imageUrl} onChange={(event) => setDraft({ ...draft, imageUrl: event.target.value })} placeholder="https://..." /></label>
           <label className="wide-field"><span>Objetivo</span><input value={draft.objective} onChange={(event) => setDraft({ ...draft, objective: event.target.value })} placeholder="Resultado que você quer alcançar" /></label>
           <label className="wide-field"><span>Descrição</span><textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Escopo, contexto e limites deste tema" /></label>
-        </div>
-        <button className="primary-button" type="submit"><Check size={17} /> {editingId ? "Salvar alterações" : "Criar tema"}</button>
+        </fieldset>
+        <button className="primary-button" type="submit" disabled={aiBusy}><Check size={17} /> {editingId ? "Salvar alterações" : "Criar tema"}</button>
       </form>
 
       {visible.length ? <section className="entity-grid">{visible.map((theme) => {

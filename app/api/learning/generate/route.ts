@@ -1,54 +1,37 @@
-import { NextResponse } from "next/server";
-import { failure, success } from "@/lib/api-contract";
-import { attachCurriculumIds, curriculumSchema, validateCurriculum } from "@/lib/learning";
-import { createStructuredResponse, OpenAIRequestError } from "@/lib/openai";
-import { isRecord } from "@/lib/safe-json";
+import { aiRoute, InvalidAIRequest } from "@/lib/ai-route";
+import { inputText, inputTopics, relevantMaterial, specialistInstructions } from "@/lib/ai-pedagogy";
+import { lessonContentSchema, outlineSchema, validateLessonContent, validateOutline } from "@/lib/learning-generation";
+import { createStructuredResponse } from "@/lib/openai";
+import type { ThemeDifficulty } from "@/lib/learning";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
-
-function text(value: unknown, limit: number) {
-  return typeof value === "string" ? value.trim().slice(0, limit) : "";
-}
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
-  try {
-    let body: Record<string, unknown>;
-    try {
-      const parsed: unknown = await request.json();
-      if (!isRecord(parsed)) throw new Error("invalid body");
-      body = parsed;
-    } catch {
-      return NextResponse.json(failure("INVALID_REQUEST", "A solicitação enviada é inválida."), { status: 400 });
+  return aiRoute(request, "/api/learning/generate", async (body) => {
+    const theme = inputText(body.theme, 300);
+    if (!theme) throw new InvalidAIRequest("Informe o assunto que deseja aprender.");
+    if (body.mode && body.mode !== "outline" && body.mode !== "lesson") throw new InvalidAIRequest("Etapa de geração inválida.");
+    const goal = inputText(body.goal, 2000) || `Dominar os fundamentos e aplicações de ${theme}.`;
+    const difficulty = (["iniciante", "intermediario", "avancado"].includes(String(body.difficulty)) ? body.difficulty : "iniciante") as ThemeDifficulty;
+    const topics = inputTopics(body.topics);
+    const content = inputText(body.content, 60000);
+    if (body.mode === "lesson") {
+      const title = inputText(body.lessonTitle, 200);
+      if (!title) throw new InvalidAIRequest("Selecione a lição que deseja preparar.");
+      return createStructuredResponse({
+        schema: lessonContentSchema, schemaName: "learning_lesson", validate: validateLessonContent,
+        timeoutMs: 105000, maxOutputTokens: 6500, signal: request.signal,
+        instructions: `${specialistInstructions} Prepare SOMENTE a lição indicada. Escreva studyNotes com uma explicação de 150 a 250 palavras, um exemplo resolvido e os erros comuns. Gere 4 a 6 exercícios focados e variados, com explicações de 2 a 4 frases. Não expanda para outras lições. Escolha tipos adequados à habilidade, sem forçar todos na mesma lição. Inclua aplicação prática e recuperação de pré-requisitos. Em multiple_choice forneça 4 alternativas plausíveis e apenas uma correta. Em true_false use [Verdadeiro,Falso]. Se houver alternativas, answer deve ser exatamente uma delas, exceto ordering: opções embaralhadas e answer com todos os passos separados por |. Em matching: options vazio e answer com 3 a 5 pares únicos no formato termo=>definição|termo=>definição. Em typed e fill_blank: resposta curta e única. Em case_study e mock_exam prefira quatro alternativas com decisão justificada. Em flashcard: options vazio, resposta-modelo e explicação. Não use error_review sem erros reais fornecidos.`,
+        input: JSON.stringify({ tema: theme, objetivo: goal, nivel: difficulty, unidade: inputText(body.unitTitle, 200), licao: title, habilidade: inputText(body.lessonDescription, 2000), preRequisitos: inputTopics(body.previousLessons), topicos: topics, material: relevantMaterial(content, `${theme} ${title}`) }),
+      });
     }
-    const theme = text(body.theme, 160);
-    const goal = text(body.goal, 1200);
-    const content = text(body.content, 60_000);
-    const topics = Array.isArray(body.topics) ? body.topics.filter((topic): topic is string => typeof topic === "string").slice(0, 80) : [];
-    if (!theme || (!goal && !content && !topics.length)) {
-      return NextResponse.json(failure("INVALID_REQUEST", "Informe um tema e uma fonte de conteúdo para gerar a trilha."), { status: 400 });
-    }
-
-    const curriculum = await createStructuredResponse({
-      schema: curriculumSchema as unknown as Record<string, unknown>,
-      schemaName: "learning_path",
-      validate: validateCurriculum,
-      instructions: [
-        "Você é um designer instrucional rigoroso. Crie uma trilha progressiva em português do Brasil para o tema solicitado.",
-        "Produza de 3 a 5 unidades, cada uma com 2 a 4 lições e cada lição com 4 a 6 exercícios.",
-        "Distribua os tipos multiple_choice, true_false, fill_blank, matching, ordering, flashcard, typed, case_study, ai_question, error_review e mock_exam ao longo da trilha.",
-        "Para múltipla escolha, options deve ter 4 itens e answer deve ser exatamente o texto correto. Para verdadeiro/falso use options [Verdadeiro,Falso].",
-        "Para ordenar, options contém os passos embaralhados e answer contém a ordem correta separada por |. Para relacionar, answer contém pares separados por |.",
-        "Para respostas abertas, use uma resposta-modelo curta e objetiva. Dê feedback didático em explanation.",
-        "Baseie fatos somente no conteúdo fornecido. Se a fonte for apenas um objetivo, ensine fundamentos gerais sem inventar citações, páginas ou estatísticas.",
-        "A dificuldade deve avançar de iniciante para intermediário e avançado.",
-      ].join(" "),
-      input: JSON.stringify({ tema: theme, objetivo: goal, topicos: topics, conteudo: content }),
+    const path = await createStructuredResponse({
+      schema: outlineSchema, schemaName: "learning_outline", validate: validateOutline,
+      timeoutMs: 105000, maxOutputTokens: 4500, signal: request.signal,
+      instructions: `${specialistInstructions} Crie somente o planejamento da trilha: 3 a 5 unidades com 2 a 4 lições cada. Descrições de uma frase com habilidade concreta e verificável. Comece no nível informado e avance gradualmente, incluindo revisões e um estudo de caso final. Não gere exercícios, respostas, aulas completas nem XP nesta etapa; esses conteúdos serão preparados por lição. Prefira 3 unidades com 2 lições para objetivos curtos e expanda a abrangência quando o pedido exigir.`,
+      input: JSON.stringify({ tema: theme, objetivo: goal, nivelInicial: difficulty, topicos: topics, material: relevantMaterial(content, `${theme} ${goal}`) }),
     });
-    return NextResponse.json(success(attachCurriculumIds(curriculum)));
-  } catch (error) {
-    console.error("POST /api/learning/generate", error instanceof OpenAIRequestError ? error.technicalMessage : error);
-    if (error instanceof OpenAIRequestError) return NextResponse.json(failure(error.code, error.message, error.retryable), { status: error.status });
-    return NextResponse.json(failure("CURRICULUM_GENERATION_FAILED", "Não foi possível gerar a trilha de aprendizado.", true), { status: 500 });
-  }
+    return { ...path, source: { theme, goal, topics, content, difficulty } };
+  });
 }

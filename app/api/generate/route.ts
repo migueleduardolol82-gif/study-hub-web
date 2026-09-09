@@ -3,6 +3,9 @@ import { failure, success } from "@/lib/api-contract";
 import { createStructuredResponse, OpenAIRequestError } from "@/lib/openai";
 import { isRecord } from "@/lib/safe-json";
 
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
 const revisionSchema = {
   type: "object",
   additionalProperties: false,
@@ -48,6 +51,7 @@ export async function POST(request: Request) {
     }
     const output = await createStructuredResponse({
       schema: revisionSchema,
+      timeoutMs: 105000, maxOutputTokens: 6500, signal: request.signal,
       schemaName: "active_revision",
       validate(value) {
         if (!isRecord(value) || !Array.isArray(value.quiz) || !Array.isArray(value.flashcards)) throw new Error("Revisão incompleta.");

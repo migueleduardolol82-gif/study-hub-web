@@ -50,3 +50,16 @@ Depois da primeira conexão, cada atualização enviada para a branch `main` ger
 - A OpenAI recebe apenas partes de áudio normalizadas menores que 25 MB; o vídeo original não é enviado inteiro à OpenAI.
 - A apostila pode ter até 40 MB e precisa conter texto pesquisável. PDFs apenas digitalizados precisam de OCR.
 - O mapa pode analisar apenas a transcrição; a apostila passa a ser opcional quando as referências já foram cadastradas manualmente.
+
+
+## Geração por etapas e ritmo de estudo
+
+A Revisão Ativa primeiro gera e salva o planejamento das unidades. A primeira lição é preparada em outra chamada; as próximas são geradas ao abrir. Uma falha mantém o caminho e as lições anteriores, com tentativa novamente somente da etapa pendente. Cada lição é validada antes de ser salva. Trilhas antigas com exercícios já gerados continuam funcionando.
+
+Os geradores de temas, tópicos, planos e tutor consideram disciplina, nível inicial, objetivo e fontes selecionadas. Temas são apresentados como rascunhos editáveis. Os planos com IA usam tarefas específicas e revisões distribuídas conforme a disponibilidade. Não há promessa de conhecimento atualizado sem fonte nem conteúdo fictício como fallback.
+
+O timer está na Visão geral e em Estudos. Permite 1 a 1440 minutos, pausa e retomada; Pomodoro permite personalizar foco, pausa curta, pausa longa e quantidade de ciclos. Usa horário de término, evitando atraso de contagem em abas inativas. Cada etapa seguinte aguarda início manual, e só foco concluído recebe XP proporcional ao tempo. As configurações e o estado do cronômetro são salvos no painel de cada usuário, como os demais dados; sem nuvem configurada, permanecem no navegador.
+
+Planos permitem duração livre por sessão e duração diferente por dia. Novos campos são opcionais no JSONB existente; nenhuma tabela ou dado existente precisa ser apagado. As variáveis de ambiente existentes continuam válidas; esta atualização não exige novas chaves.
+
+Validação: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:http`. A chave OpenAI precisa estar configurada no servidor de implantação para testar a geração real.

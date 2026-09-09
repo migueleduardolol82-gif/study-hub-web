@@ -1215,3 +1215,36 @@ button:disabled { cursor: not-allowed; opacity: .56; }
   .auth-story h1 { font-size: 2.8rem; }
   .auth-panel { padding: 24px 12px; }
 }
+
+/* Personal study rhythm and staged AI generation */
+.timer-settings, .plan-day-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+.timer-settings label, .plan-day-times label, .theme-ai-builder label { display: grid; gap: 6px; font-size: .8rem; color: #b9bdc7; }
+.timer-settings input, .plan-day-times input, .theme-ai-builder textarea, .matching-options select { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #34373e; border-radius: 9px; background: #101114; color: #f5f5f5; }
+.timer-technique { margin-top: 14px; }
+.timer-phases { display: flex; flex-wrap: wrap; gap: 8px; }
+.timer-phases button, .flashcard-recall button { padding: 9px 12px; border: 1px solid #34373e; border-radius: 9px; color: #c8ccd5; background: #14161a; cursor: pointer; }
+.timer-phases button.active { border-color: var(--lime); color: var(--lime); }
+.timer-panel .flip-clock { margin: 25px 0 20px; }
+.timer-panel .flip-card { width: clamp(29px, 5vw, 58px); font-size: clamp(1.7rem, 4vw, 3.2rem); }
+.timer-help, .generation-help { display: block; font-size: .78rem; line-height: 1.6; color: #a4aab7; margin: 14px 0 0; }
+.sessions-page > .timer-panel { max-width: 720px; margin-bottom: 24px; }
+.check-field { display: flex !important; align-items: center; gap: 10px; font-size: .85rem; color: #bfc3ce; }
+.check-field input { width: auto !important; }
+.plan-day-times { margin-bottom: 22px; }
+.plan-strategy { padding: 15px; background: #121519; border-radius: 10px; color: #c2c6d0; font-size: .85rem; line-height: 1.6; }
+.plan-builder > .outline-button { margin-top: 12px; justify-content: center; }
+.theme-ai-builder { padding: 18px; margin-top: 16px; border: 1px solid #30313a; border-radius: 12px; background: #0b0c10; }
+.theme-ai-builder textarea { min-height: 90px; resize: vertical; }
+.theme-ai-builder button { margin-top: 12px; }
+.theme-ai-builder p { color: var(--lime); font-size: .85rem; }
+fieldset.entity-form-grid { border: 0; padding: 0; }
+.generation-status { display: flex; align-items: center; gap: 9px; color: var(--lime); font-size: .87rem; margin-top: 16px; flex-wrap: wrap; }
+.lesson-notes { padding: 14px 18px; margin: 16px 0; border: 1px solid #333743; border-radius: 12px; }
+.lesson-notes summary { cursor: pointer; color: var(--lime); }
+.lesson-notes p { white-space: pre-wrap; color: #d2d5df; font-size: .94rem; line-height: 1.75; }
+.matching-options { display: grid; gap: 14px; margin-top: 18px; }
+.matching-options label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 12px; }
+.flashcard-recall { display: flex; gap: 12px; flex-wrap: wrap; margin: 20px 0; }
+.flashcard-recall p { flex-basis: 100%; line-height: 1.7; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+@media (max-width: 520px) { .timer-settings, .plan-day-times { gap: 10px; } .matching-options label { grid-template-columns: 1fr; } .inline-error { flex-wrap: wrap; } .timer-panel .flip-clock { gap: 3px; } }

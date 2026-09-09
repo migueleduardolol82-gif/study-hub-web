@@ -6,6 +6,7 @@ export type OpenAIErrorCode =
   | "OPENAI_KEY_MISSING"
   | "OPENAI_AUTH_FAILED"
   | "OPENAI_RATE_LIMIT"
+  | "OPENAI_QUOTA_EXCEEDED"
   | "OPENAI_TIMEOUT"
   | "OPENAI_UNAVAILABLE"
   | "EMPTY_AI_RESPONSE"
@@ -23,7 +24,7 @@ export class OpenAIRequestError extends Error {
     this.code = code;
     this.status = status;
     this.retryable = retryable;
-    this.technicalMessage = technicalMessage;
+    this.technicalMessage = technicalMessage.replace(/sk-[a-zA-Z0-9_-]+/g, "[redacted]");
   }
 }
 
@@ -52,7 +53,7 @@ export function extractOutputText(payload: {
   return (
     payload.output
       ?.flatMap((item) => item.content ?? [])
-      .find((content) => content.type === "output_text")?.text ?? ""
+      .filter((content) => content.type === "output_text").map((content) => content.text || "").join("\n") ?? ""
   );
 }
 
@@ -62,19 +63,25 @@ export async function createTextResponse({
   schema,
   schemaName = "study_response",
   timeoutMs = 55_000,
+  maxOutputTokens,
+  signal,
 }: {
   instructions: string;
   input: string;
   schema?: Record<string, unknown>;
   schemaName?: string;
   timeoutMs?: number;
+  maxOutputTokens?: number;
+  signal?: AbortSignal;
 }) {
   const model = process.env.OPENAI_TEXT_MODEL || "gpt-5-mini";
   const body: Record<string, unknown> = {
     model,
     instructions,
     input,
+    store: false,
   };
+  if (maxOutputTokens) body.max_output_tokens = maxOutputTokens;
 
   // Os modelos GPT-5 raciocinam antes de responder. Esforço baixo mantém a
   // geração estruturada profunda, mas evita gastar boa parte da janela da
@@ -101,7 +108,7 @@ export async function createTextResponse({
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
     });
     // Inclui a leitura do corpo no mesmo timeout. Alguns provedores enviam os
     // cabeçalhos antes de concluir a geração; limitar apenas fetch() deixaria a
@@ -132,14 +139,22 @@ export async function createTextResponse({
   }
 
   if (!response.ok) {
-    const technical = getNestedMessage(payload) || rawBody.slice(0, 500) || `HTTP ${response.status}`;
+    const technical = (getNestedMessage(payload) || rawBody.slice(0, 500) || `HTTP ${response.status}`).replace(/sk-[a-zA-Z0-9_-]+/g, "[redacted]");
     if (response.status === 401 || response.status === 403) {
       throw new OpenAIRequestError("OPENAI_AUTH_FAILED", "A configuração da IA precisa ser revisada.", response.status, false, technical);
     }
     if (response.status === 429) {
+      const providerError = isRecord(payload) && isRecord(payload.error) ? payload.error : {};
+      if (providerError.code === "insufficient_quota" || providerError.type === "insufficient_quota") {
+        throw new OpenAIRequestError("OPENAI_QUOTA_EXCEEDED", "O saldo ou limite de gastos da IA foi atingido. Revise o faturamento da OpenAI.", 429, false, technical);
+      }
       throw new OpenAIRequestError("OPENAI_RATE_LIMIT", "O limite de uso da IA foi atingido. Aguarde e tente novamente.", 429, true, technical);
     }
     throw new OpenAIRequestError("OPENAI_UNAVAILABLE", "A IA não conseguiu processar esta solicitação agora.", response.status, response.status >= 500, technical);
+  }
+
+  if (isRecord(payload) && (payload.status === "incomplete" || payload.status === "failed")) {
+    throw new OpenAIRequestError("MALFORMED_AI_RESPONSE", "A IA não terminou este conteúdo. Tente gerar novamente apenas esta etapa.", 502, true, `Provider response ${String(payload.status)}: ${JSON.stringify(payload.incomplete_details || payload.error || {})}`);
   }
   if (!contentType.includes("application/json") || !isRecord(payload)) {
     throw new OpenAIRequestError("MALFORMED_AI_RESPONSE", "A IA devolveu uma resposta inválida. Tente novamente.", 502, true, rawBody.slice(0, 500));

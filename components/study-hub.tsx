@@ -29,15 +29,12 @@ import {
   Menu,
   MessageCircle,
   MoreVertical,
-  Pause,
-  Play,
   Plus,
   RotateCcw,
   Search,
   Send,
   SlidersHorizontal,
   Sparkles,
-  Square,
   Shield,
   Target,
   Trophy,
@@ -47,8 +44,12 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountControl } from "@/components/account-control";
+import { StudyTimer, useStudyTimer } from "@/components/study-timer";
+import { initialTimer, restoreTimer, type TimerSnapshot } from "@/lib/study-timer";
+import { requestAI } from "@/lib/ai-client";
+import { buildStudySchedule, validMinutes, weekdays, type PlanBlueprint } from "@/lib/study-planning";
 import { ActiveReview } from "@/components/active-review";
 import { StudyMapsLibrary, ThemesWorkspace } from "@/components/content-workspaces";
 import { RankAssessment } from "@/components/rank-assessment";
@@ -81,7 +82,7 @@ type PlanSession = {
   themeId?: string;
 };
 type StudyWeek = { week: number; theme: string; sessions: PlanSession[] };
-type StudyPlanRecord = { id: string; name: string; createdAt: string; weeks: StudyWeek[] };
+type StudyPlanRecord = { id: string; name: string; createdAt: string; weeks: StudyWeek[]; strategy?: string };
 type EvolutionLog = {
   id: number;
   sourceId?: string;
@@ -142,6 +143,7 @@ type DashboardState = {
   quiz: Quiz[];
   flashcards: Flashcard[];
   sessionMode: "focus" | "break";
+  timer?: TimerSnapshot;
   themes: ThemeRecord[];
   studyMaps: StudyMapRecord[];
   activeStudyMapId: string;
@@ -350,15 +352,6 @@ function StatusPill({ status }: { status: TopicStatus }) {
   return <span className={`status-pill ${status}`}>{labels[status]}</span>;
 }
 
-function FlipNumber({ value }: { value: string }) {
-  return (
-    <span className="flip-card" aria-label={value}>
-      <span>{value}</span>
-      <i />
-    </span>
-  );
-}
-
 export function StudyHub({
   accountId,
   authEnabled = false,
@@ -370,15 +363,19 @@ export function StudyHub({
 }) {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [mobileNav, setMobileNav] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(50 * 60);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [sessionMode, setSessionMode] = useState<"focus" | "break">("focus");
+  const [timerSnapshot, setTimerSnapshot] = useState<TimerSnapshot>(() => initialTimer());
+  const sessionMode = timerSnapshot.phase === "focus" ? "focus" : "break";
   const [goals, setGoals] = useState<Goal[]>(initialGoals);
   const [goalText, setGoalText] = useState("");
   const [planName, setPlanName] = useState("Meu plano de estudos");
   const [planWeeks, setPlanWeeks] = useState(8);
   const [planDays, setPlanDays] = useState(5);
   const [planMinutes, setPlanMinutes] = useState(60);
+  const [planDayMinutes, setPlanDayMinutes] = useState<number[]>(Array(7).fill(60));
+  const [planCustomDays, setPlanCustomDays] = useState(false);
+  const [planAiPrompt, setPlanAiPrompt] = useState("");
+  const [planDifficulty, setPlanDifficulty] = useState("iniciante");
+  const [planError, setPlanError] = useState("");
   const [selectedPlanTopics, setSelectedPlanTopics] = useState<string[]>([]);
   const [studyPlans, setStudyPlans] = useState<StudyPlanRecord[]>([]);
   const [activePlanId, setActivePlanId] = useState("");
@@ -470,7 +467,7 @@ export function StudyHub({
         if (typeof state.syllabusName === "string") setSyllabusName(state.syllabusName);
         if (Array.isArray(state.quiz)) setQuiz(state.quiz);
         if (Array.isArray(state.flashcards)) setFlashcards(state.flashcards);
-        if (state.sessionMode) setSessionMode(state.sessionMode);
+        if (state.timer) setTimerSnapshot(restoreTimer(state.timer));
         if (Array.isArray(state.themes)) setThemes(state.themes);
         if (Array.isArray(state.studyMaps)) setStudyMaps(state.studyMaps);
         if (typeof state.activeStudyMapId === "string") setActiveStudyMapId(state.activeStudyMapId);
@@ -543,12 +540,13 @@ export function StudyHub({
     quiz,
     flashcards,
     sessionMode,
+    timer: timerSnapshot,
     themes,
     studyMaps,
     activeStudyMapId,
     learningPaths,
     learningProgress,
-  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress]);
+  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress]);
 
   useEffect(() => {
     if (!storageReady || (cloudEnabled && !cloudLoaded)) return;
@@ -588,7 +586,7 @@ export function StudyHub({
           if (typeof state.syllabusName === "string") setSyllabusName(state.syllabusName);
           if (Array.isArray(state.quiz)) setQuiz(state.quiz);
           if (Array.isArray(state.flashcards)) setFlashcards(state.flashcards);
-          if (state.sessionMode) setSessionMode(state.sessionMode);
+          if (state.timer) setTimerSnapshot(restoreTimer(state.timer));
           if (Array.isArray(state.themes)) setThemes(state.themes);
           if (Array.isArray(state.studyMaps)) setStudyMaps(state.studyMaps);
           if (typeof state.activeStudyMapId === "string") setActiveStudyMapId(state.activeStudyMapId);
@@ -663,43 +661,21 @@ export function StudyHub({
     || mapping.topics[0]?.title
     || "Defina um tópico no seu mapa";
 
-  useEffect(() => {
-    if (!timerRunning) return;
-    const id = window.setInterval(() => {
-      setTimerSeconds((current) => {
-        if (current <= 1) {
-          setTimerRunning(false);
-          if (sessionMode === "focus") {
-            const focusedMinutes = 50;
-            const xp = focusedMinutes * activityTypes.study.xpRate;
-            setEvolutionLogs((logs) => [{
-              id: Date.now(),
-              sourceId: `focus-${Date.now()}`,
-              type: "study",
-              title: `Sessão de foco: ${focusTopic}`,
-              minutes: focusedMinutes,
-              xp,
-              createdAt: new Date().toISOString(),
-            }, ...logs]);
-            setSkillLevels((skills) => ({
-              ...skills,
-              knowledge: Math.min(100, skills.knowledge + 2),
-              discipline: Math.min(100, skills.discipline + 1),
-            }));
-            setNotice(`Sessão concluída e integrada à Ascensão: +${xp} XP.`);
-          } else {
-            setNotice("Pausa concluída. Você está pronto para uma nova sessão.");
-          }
-          return 0;
-        }
-        return current - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [timerRunning, sessionMode, focusTopic]);
+  const completeFocus = useCallback((session: TimerSnapshot) => {
+    if (session.phase === "focus") {
+      const xp = session.sessionMinutes * activityTypes.study.xpRate;
+      setEvolutionLogs((logs) => logs.some((log) => log.sourceId === `focus-${session.sessionId}`) ? logs : [{
+        id: Date.now(), sourceId: `focus-${session.sessionId}`, type: "study", title: `Sessão de foco: ${session.topic}`,
+        minutes: session.sessionMinutes, xp, createdAt: new Date(session.endsAt || Date.now()).toISOString(), status: "completed",
+      }, ...logs]);
+      setSkillLevels((skills) => ({ ...skills, knowledge: Math.min(100, skills.knowledge + Math.max(1, Math.round(session.sessionMinutes / 25))), discipline: Math.min(100, skills.discipline + 1) }));
+      setNotice(`Foco concluído: ${session.sessionMinutes} minutos, +${xp} XP. ${session.settings.technique === "pomodoro" ? "Sua pausa está pronta." : ""}`);
+    } else setNotice("Pausa concluída. Inicie o próximo bloco quando estiver pronto.");
+  }, []);
+  const timerReady = storageReady && (!cloudEnabled || cloudLoaded);
+  const timerSeconds = useStudyTimer(timerSnapshot, setTimerSnapshot, timerReady, completeFocus);
+  const timerPanel = <StudyTimer snapshot={timerSnapshot} setSnapshot={setTimerSnapshot} seconds={timerSeconds} topic={focusTopic} ready={timerReady} />;
 
-  const minutes = Math.floor(timerSeconds / 60).toString().padStart(2, "0");
-  const seconds = (timerSeconds % 60).toString().padStart(2, "0");
   const completedGoals = goals.filter((goal) => goal.done).length;
   const goalProgress = goals.length ? Math.round((completedGoals / goals.length) * 100) : 0;
   const mappedTopics = mapping.topics.filter((topic) => topic.status === "covered").length;
@@ -773,16 +749,6 @@ export function StudyHub({
     () => `TRILHA: ${courseName || "Não definida"}\nOBJETIVO: ${studyGoal || "Não definido"}\n\nTRANSCRIÇÃO:\n${transcript}\n\nAPOSTILA:\n${syllabus}\n\nMAPEAMENTO:\n${JSON.stringify(mapping)}`,
     [courseName, studyGoal, transcript, syllabus, mapping],
   );
-
-  function resetTimer(mode = sessionMode) {
-    setTimerRunning(false);
-    setTimerSeconds(mode === "focus" ? 50 * 60 : 10 * 60);
-  }
-
-  function changeMode(mode: "focus" | "break") {
-    setSessionMode(mode);
-    resetTimer(mode);
-  }
 
   function importLegacyDashboard() {
     try {
@@ -1011,6 +977,7 @@ export function StudyHub({
 
   function createStudyPlan(event: FormEvent) {
     event.preventDefault();
+    if (!validMinutes(planMinutes) || (planCustomDays && planDayMinutes.slice(0, planDays).some((time) => !validMinutes(time)))) { setNotice("Informe de 1 a 1440 minutos por sessão."); return; }
     const topics = selectedPlanTopics.length
       ? selectedPlanTopics
       : mapping.topics.map((topic) => topic.title);
@@ -1034,11 +1001,11 @@ export function StudyHub({
           day: weekdays[dayIndex],
           topic: topics[topicIndex],
           activity: activities[(weekIndex + dayIndex) % activities.length],
-          minutes: planMinutes,
+          minutes: planCustomDays ? planDayMinutes[dayIndex] : planMinutes,
           done: false,
           category: dayIndex % 3 === 1 ? "revision" as const : dayIndex % 3 === 2 ? "exercise" as const : "study" as const,
           difficulty: weekIndex < Math.ceil(planWeeks / 3) ? "easy" as const : weekIndex < Math.ceil(planWeeks * 2 / 3) ? "medium" as const : "hard" as const,
-          xp: planMinutes * activityTypes.study.xpRate,
+          xp: (planCustomDays ? planDayMinutes[dayIndex] : planMinutes) * activityTypes.study.xpRate,
           recurrence: "weekly" as const,
           mapId: activeStudyMapId || undefined,
           themeId: activeStudyMap?.themeIds[0] || undefined,
@@ -1056,6 +1023,23 @@ export function StudyHub({
     setActivePlanId(id);
     setPlanWeekView(0);
     setNotice(`Plano “${planName}” criado com ${planWeeks * planDays} sessões.`);
+  }
+
+  async function generateStudyPlan() {
+    if (busy === "plan") return;
+    if (!validMinutes(planMinutes) || (planCustomDays && planDayMinutes.slice(0, planDays).some((time) => !validMinutes(time)))) { setPlanError("Informe de 1 a 1440 minutos por sessão."); return; }
+    if (!planAiPrompt.trim() && !selectedPlanTopics.length) { setPlanError("Descreva seu objetivo ou selecione tópicos."); return; }
+    setBusy("plan"); setPlanError("");
+    try {
+      const input = { name: planName, goal: planAiPrompt || studyGoal, difficulty: planDifficulty, topics: selectedPlanTopics, weeks: planWeeks, days: planDays, minutes: planMinutes, dayMinutes: planCustomDays ? planDayMinutes.slice(0, planDays) : undefined };
+      const blueprint = await requestAI<PlanBlueprint>("/api/plans/generate", input);
+      const id = `plan-${crypto.randomUUID()}`;
+      const weeks = buildStudySchedule({ steps: blueprint.steps, weeks: input.weeks, days: input.days, minutes: input.minutes, dayMinutes: input.dayMinutes, prefix: id }).map((week) => ({ ...week, sessions: week.sessions.map((session) => ({ ...session, xp: session.minutes * activityTypes.study.xpRate, mapId: activeStudyMapId || undefined, themeId: activeStudyMap?.themeIds[0] })) }));
+      setStudyPlans((current) => [{ id, name: input.name.trim() || "Meu plano com IA", createdAt: new Date().toISOString(), weeks, strategy: blueprint.summary }, ...current]);
+      setActivePlanId(id); setPlanWeekView(0);
+      setNotice("Plano criado com estudo, prática e revisões adequados ao seu objetivo e disponibilidade.");
+    } catch (error) { setPlanError(error instanceof Error ? error.message : "Não foi possível criar o plano."); }
+    finally { setBusy(null); }
   }
 
   function togglePlanSession(sessionId: string) {
@@ -1243,7 +1227,7 @@ export function StudyHub({
       ...editingPlanSession,
       topic: editingPlanSession.topic.trim(),
       activity: editingPlanSession.activity.trim() || "Estudo dirigido",
-      minutes: Math.max(5, Number(editingPlanSession.minutes) || 5),
+      minutes: Math.max(1, Math.min(1440, Math.round(Number(editingPlanSession.minutes) || 1))),
       xp: Math.max(0, Number(editingPlanSession.xp) || 0),
     };
     setStudyPlans((current) => current.map((plan) => plan.id === activePlanRecord.id ? {
@@ -1388,17 +1372,11 @@ export function StudyHub({
     setBusy("topics");
     setNotice(null);
     try {
-      const response = await fetch("/api/topics/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          request: topicAiPrompt,
-          courseName,
-          studyGoal,
-          existingTopics: mapping.topics.map((topic) => topic.title),
-        }),
+      const payload = await requestAI<{ topics: { title: string; module: string; priority: TopicPriority; objective: string; practice: string }[] }>("/api/topics/generate", {
+        request: topicAiPrompt, courseName, studyGoal,
+        difficulty: themes.find((theme) => activeStudyMap?.themeIds.includes(theme.id))?.difficulty || "iniciante",
+        existingTopics: mapping.topics.map((topic) => topic.title),
       });
-      const payload = await readApiResponse<{ topics: { title: string; module: string; priority: TopicPriority }[] }>(response);
       const generated = payload.topics
         .filter((item) => !mapping.topics.some((topic) => topic.title.toLowerCase() === item.title.toLowerCase()))
         .map((item, index): Topic => ({
@@ -1410,7 +1388,7 @@ export function StudyHub({
           confidence: 0,
           videoEvidence: "Aguardando uma aula para analisar.",
           syllabusReference: "Referência ainda não definida",
-          action: "Adicionar material e analisar",
+          action: `${item.objective} Prática: ${item.practice}`,
         }));
       setMapping((current) => ({ ...current, topics: [...current.topics, ...generated] }));
       setSelectedPlanTopics((current) => [...new Set([...current, ...generated.map((topic) => topic.title)])]);
@@ -1751,23 +1729,7 @@ export function StudyHub({
               <button className="primary-button" onClick={() => setTab(mapping.topics.length ? "sessions" : "mapping")}>{mapping.topics.length ? "Iniciar sessão" : "Criar meu mapa"} <ArrowRight size={18} /></button>
             </section>
 
-            <section className="timer-panel panel">
-              <div className="panel-heading">
-                <div><span className="eyebrow">SESSÃO DE ESTUDO</span><h3>Flip focus</h3></div>
-                <div className="segmented"><button aria-pressed={sessionMode === "focus"} className={sessionMode === "focus" ? "active" : ""} onClick={() => changeMode("focus")}>Foco</button><button aria-pressed={sessionMode === "break"} className={sessionMode === "break" ? "active" : ""} onClick={() => changeMode("break")}>Pausa</button></div>
-              </div>
-              <div className="flip-clock" aria-live="polite">
-                <FlipNumber value={minutes[0]} /><FlipNumber value={minutes[1]} />
-                <b>:</b>
-                <FlipNumber value={seconds[0]} /><FlipNumber value={seconds[1]} />
-              </div>
-              <div className="timer-topic"><span />{focusTopic}</div>
-              <div className="timer-controls">
-                <button className="icon-button" onClick={() => resetTimer()} aria-label="Reiniciar"><RotateCcw size={19} /></button>
-                <button className="timer-main" onClick={() => setTimerRunning((running) => !running)}>{timerRunning ? <Pause fill="currentColor" /> : <Play fill="currentColor" />} {timerRunning ? "Pausar" : "Começar"}</button>
-                <button className="icon-button" onClick={() => { setTimerRunning(false); setTimerSeconds(0); }} aria-label="Encerrar"><Square size={18} /></button>
-              </div>
-            </section>
+            {timerPanel}
 
             <section className="progress-panel panel">
               <div className="panel-heading"><div><span className="eyebrow">EVOLUÇÃO</span><h3>Progresso atual</h3></div><span className="trend">{evolutionLogs.length} registros</span></div>
@@ -2077,6 +2039,7 @@ export function StudyHub({
 
         {tab === "sessions" && (
           <div className="sessions-page">
+            {timerPanel}
             <section className="session-creator panel dark-panel">
               <div className="creator-copy">
                 <span className="eyebrow lime">NOVA SESSÃO INTELIGENTE</span>
@@ -2277,13 +2240,13 @@ export function StudyHub({
                   <label className="plan-field">
                     <span>Prazo</span>
                     <select value={planWeeks} onChange={(event) => setPlanWeeks(Number(event.target.value))}>
-                      {[2, 4, 6, 8, 10, 12, 16].map((weeks) => <option key={weeks} value={weeks}>{weeks} semanas</option>)}
+                      {[1, 2, 4, 6, 8, 10, 12, 16].map((weeks) => <option key={weeks} value={weeks}>{weeks} semanas</option>)}
                     </select>
                   </label>
                   <label className="plan-field">
                     <span>Dias por semana</span>
                     <select value={planDays} onChange={(event) => setPlanDays(Number(event.target.value))}>
-                      {[3, 4, 5, 6, 7].map((days) => <option key={days} value={days}>{days} dias</option>)}
+                      {[1, 2, 3, 4, 5, 6, 7].map((days) => <option key={days} value={days}>{days} dias</option>)}
                     </select>
                   </label>
                 </div>
@@ -2304,6 +2267,12 @@ export function StudyHub({
                     ))}
                   </div>
                 </label>
+
+                <label className="plan-field"><span>Duração personalizada (minutos)</span><input type="number" min="1" max="1440" step="1" required value={planMinutes || ""} onChange={(event) => setPlanMinutes(Number(event.target.value))} /></label>
+                <label className="check-field"><input type="checkbox" checked={planCustomDays} onChange={(event) => setPlanCustomDays(event.target.checked)} /> Usar um tempo diferente em cada dia</label>
+                {planCustomDays && <div className="plan-day-times">{weekdays.slice(0, planDays).map((day, index) => <label key={day}><span>{day} (min)</span><input type="number" min="1" max="1440" required value={planDayMinutes[index] || ""} onChange={(event) => setPlanDayMinutes((current) => current.map((time, i) => i === index ? Number(event.target.value) : time))} /></label>)}</div>}
+                <label className="plan-field"><span>Objetivo e contexto para a IA</span><textarea value={planAiPrompt} onChange={(event) => setPlanAiPrompt(event.target.value)} placeholder="Ex.: aprender Python para analisar vendas; já conheço Excel, tenho 20 minutos por dia e quero construir um relatório em 4 semanas." /></label>
+                <label className="plan-field"><span>Meu nível atual</span><select value={planDifficulty} onChange={(event) => setPlanDifficulty(event.target.value)}><option value="iniciante">Iniciante</option><option value="intermediario">Intermediário</option><option value="avancado">Avançado</option></select></label>
 
                 <fieldset className="topic-selector">
                   <legend>Tópicos prioritários</legend>
@@ -2328,10 +2297,12 @@ export function StudyHub({
 
                 <div className="plan-summary-strip">
                   <span><strong>{planWeeks * planDays}</strong> sessões</span>
-                  <span><strong>{Math.round((planWeeks * planDays * planMinutes) / 60)}h</strong> totais</span>
+                  <span><strong>{Math.round(planWeeks * (planCustomDays ? planDayMinutes.slice(0, planDays).reduce((sum, time) => sum + time, 0) : planDays * planMinutes) / 60)}h</strong> totais</span>
                   <span><strong>{selectedPlanTopics.length}</strong> prioridades</span>
                 </div>
-                <button className="primary-button wide" type="submit"><CalendarDays size={18} /> Criar plano personalizado</button>
+                <button className="primary-button wide" type="button" disabled={busy === "plan"} onClick={generateStudyPlan}>{busy === "plan" ? <LoaderCircle size={18} className="spin" /> : <Sparkles size={18} />} {busy === "plan" ? "Preparando tarefas para seu objetivo…" : "Gerar plano com IA"}</button>
+                {planError && <div className="inline-error" role="alert"><span>{planError}</span><button type="button" disabled={busy === "plan"} onClick={generateStudyPlan}>Tentar novamente</button></div>}
+                <button className="outline-button wide" type="submit" disabled={busy === "plan"}><CalendarDays size={18} /> Criar com os tópicos selecionados</button>
               </form>
 
               <section className="plan-preview panel">
@@ -2341,6 +2312,7 @@ export function StudyHub({
                       <div><span className="eyebrow">{(activePlanRecord?.name || planName).toUpperCase()}</span><h3>Semana {activePlanWeek.week} de {studyPlan.length}</h3></div>
                       <button className="outline-button compact" onClick={addPlanToGoals}><Target size={16} /> Levar para metas</button>
                     </div>
+                    {activePlanRecord?.strategy && <p className="plan-strategy">{activePlanRecord.strategy}</p>}
                     <div className="week-focus"><span>TEMA DA SEMANA</span><strong>{activePlanWeek.theme}</strong></div>
                     <div className="plan-session-list">
                       {activePlanWeek.sessions.map((session) => (
@@ -2396,7 +2368,7 @@ export function StudyHub({
               <label className="wide-field"><span>Nome</span><input value={editingPlanSession.topic} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, topic: event.target.value })} required /></label>
               <label className="wide-field"><span>Descrição</span><textarea value={editingPlanSession.activity} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, activity: event.target.value })} /></label>
               <label><span>Dia</span><input value={editingPlanSession.day} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, day: event.target.value })} /></label>
-              <label><span>Duração</span><input type="number" min="5" max="1440" value={editingPlanSession.minutes} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, minutes: Number(event.target.value) })} /></label>
+              <label><span>Duração</span><input type="number" min="1" max="1440" value={editingPlanSession.minutes} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, minutes: Number(event.target.value) })} /></label>
               <label><span>Categoria</span><select value={editingPlanSession.category || "study"} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, category: event.target.value as NonNullable<PlanSession["category"]> })}><option value="study">Estudo</option><option value="revision">Revisão</option><option value="exercise">Exercícios</option><option value="reading">Leitura</option><option value="project">Projeto</option></select></label>
               <label><span>Dificuldade</span><select value={editingPlanSession.difficulty || "medium"} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, difficulty: event.target.value as NonNullable<PlanSession["difficulty"]> })}><option value="easy">Fácil</option><option value="medium">Média</option><option value="hard">Difícil</option></select></label>
               <label><span>XP</span><input type="number" min="0" max="10000" value={editingPlanSession.xp || 0} onChange={(event) => setEditingPlanSession({ ...editingPlanSession, xp: Number(event.target.value) })} /></label>

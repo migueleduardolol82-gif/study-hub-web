@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 
 const port = 3107;
-const server = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "start", "--", "-H", "127.0.0.1", "-p", String(port)], {
+const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-H", "127.0.0.1", "-p", String(port)], {
   cwd: process.cwd(),
   env: { ...process.env, OPENAI_API_KEY: "", NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "", CLERK_SECRET_KEY: "", DATABASE_URL: "", POSTGRES_URL: "", PORT: String(port) },
   stdio: ["ignore", "pipe", "pipe"],
@@ -74,6 +74,21 @@ try {
   });
   assert.equal(invalidShape.status, 400);
   assert.equal((await invalidShape.json()).error.code, "INVALID_REQUEST");
+
+  for (const [route, body] of [
+    ["/api/learning/generate", {theme:"Álgebra", mode:"outline"}],
+    ["/api/learning/generate", {theme:"Álgebra", mode:"lesson", lessonTitle:"Equações"}],
+    ["/api/topics/generate", {request:"Aprender álgebra"}],
+    ["/api/themes/generate", {request:"Aprender álgebra"}],
+    ["/api/plans/generate", {goal:"Aprender álgebra", minutes:17}],
+  ]) {
+    const response = await fetch(`http://127.0.0.1:${port}${route}`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    assert.equal(response.status,503,route);
+    assert.equal((await response.json()).error.code,"OPENAI_KEY_MISSING",route);
+    const invalid = await fetch(`http://127.0.0.1:${port}${route}`, {method:"POST", headers:{"Content-Type":"application/json"}, body:"null"});
+    assert.equal(invalid.status,400,route);
+    assert.equal((await invalid.json()).error.code,"INVALID_REQUEST",route);
+  }
 
   const userData = await fetch(`http://127.0.0.1:${port}/api/user-data`);
   assert.equal(userData.status, 503);

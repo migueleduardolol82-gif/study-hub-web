@@ -1,4 +1,4 @@
-import { isRecord } from "@/lib/safe-json";
+import { isRecord } from "./safe-json.ts";
 
 export type TopicStatus = "planned" | "covered" | "partial" | "gap";
 export type TopicPriority = "high" | "medium" | "low";
@@ -78,6 +78,7 @@ export type LearningLesson = {
   difficulty: ThemeDifficulty;
   xp: number;
   exercises: LearningExercise[];
+  studyNotes?: string;
 };
 
 export type LearningUnit = {
@@ -95,6 +96,7 @@ export type LearningPath = {
   createdAt: string;
   updatedAt: string;
   units: LearningUnit[];
+  source?: { theme: string; goal: string; topics: string[]; content: string; difficulty: ThemeDifficulty };
 };
 
 export type LessonResult = { correct: number; total: number; wrongExerciseIds: string[]; completedAt: string };

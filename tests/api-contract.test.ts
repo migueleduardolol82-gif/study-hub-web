@@ -49,3 +49,22 @@ test("camada OpenAI extrai JSON cercado por Markdown", async () => {
     else process.env.OPENAI_API_KEY = previousKey;
   }
 });
+
+test("OpenAI timeout cobre chamada e leitura sem vazar segredos", async () => {
+  const key = process.env.OPENAI_API_KEY; const original = globalThis.fetch;
+  process.env.OPENAI_API_KEY = 'test-key-not-real';
+  globalThis.fetch = async (_url, init) => new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('abort', 'AbortError'))));
+  try { await assert.rejects(() => createStructuredResponse({ instructions: 'test', input: 'test', timeoutMs: 15, validate: (x) => x }), (error) => error instanceof OpenAIRequestError && error.code === 'OPENAI_TIMEOUT' && error.retryable); }
+  finally { globalThis.fetch = original; if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key; }
+});
+
+test("OpenAI diferencia cota esgotada de limite temporário e rejeita saída truncada", async () => {
+  const key = process.env.OPENAI_API_KEY; const original = globalThis.fetch;
+  process.env.OPENAI_API_KEY = 'test-key-not-real';
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({error:{code:'insufficient_quota',message:'Quota exhausted'}}), {status:429,headers:{'content-type':'application/json'}});
+    await assert.rejects(() => createStructuredResponse({instructions:'test',input:'test',validate:(x)=>x}), (error) => error instanceof OpenAIRequestError && error.code === 'OPENAI_QUOTA_EXCEEDED' && !error.retryable);
+    globalThis.fetch = async () => new Response(JSON.stringify({status:'incomplete',incomplete_details:{reason:'max_output_tokens'},output_text:'{"partial":true}'}), {headers:{'content-type':'application/json'}});
+    await assert.rejects(() => createStructuredResponse({instructions:'test',input:'test',validate:(x)=>x}), (error) => error instanceof OpenAIRequestError && error.code === 'MALFORMED_AI_RESPONSE');
+  } finally { globalThis.fetch = original; if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key; }
+});
