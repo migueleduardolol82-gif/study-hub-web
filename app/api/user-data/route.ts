@@ -19,11 +19,11 @@ async function ensureTable() {
     CREATE TABLE IF NOT EXISTS nexo_user_state (
       user_id TEXT PRIMARY KEY,
       state JSONB NOT NULL DEFAULT '{}'::jsonb,
-      schema_version SMALLINT NOT NULL DEFAULT 4,
+      schema_version SMALLINT NOT NULL DEFAULT 5,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
-  await sql`ALTER TABLE nexo_user_state ADD COLUMN IF NOT EXISTS schema_version SMALLINT NOT NULL DEFAULT 4`;
+  await sql`ALTER TABLE nexo_user_state ADD COLUMN IF NOT EXISTS schema_version SMALLINT NOT NULL DEFAULT 5`;
   return sql;
 }
 
@@ -74,9 +74,9 @@ export async function PUT(request: Request) {
     const sql = await ensureTable();
     await sql`
       INSERT INTO nexo_user_state (user_id, state, schema_version, updated_at)
-      VALUES (${userId}, ${serialized}::jsonb, 4, NOW())
+      VALUES (${userId}, ${serialized}::jsonb, 5, NOW())
       ON CONFLICT (user_id)
-      DO UPDATE SET state = EXCLUDED.state, schema_version = 4, updated_at = NOW()
+      DO UPDATE SET state = EXCLUDED.state, schema_version = 5, updated_at = NOW()
     `;
     return NextResponse.json(success({ saved: true, updatedAt: new Date().toISOString() }));
   } catch (error) {

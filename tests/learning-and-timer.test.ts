@@ -45,16 +45,24 @@ test('plano respeita minutos personalizados por dia e não modifica as etapas', 
   assert.throws(() => buildStudySchedule({ steps, weeks: 2, days: 3, minutes: 0, prefix: 'bad' }));
 });
 
+test('plano com datas pula descanso e mantém referências das fontes', () => {
+  const steps = [{ title: 'Risco', study: 'Estudar risco', practice: 'Resolver caso', review: 'Revisar', difficulty: 'hard' as const, references: ['Manual.pdf — Página 12'] }];
+  const weeks = buildStudySchedule({ steps, weeks: 1, days: 3, minutes: 25, prefix: 'dated', startDate: '2026-09-07', restDays: ['Terça', 'Quinta'] });
+  const sessions = weeks.flatMap((week) => week.sessions);
+  assert.deepEqual(sessions.map((session) => session.dueDate), ['2026-09-07', '2026-09-09', '2026-09-11']);
+  assert.deepEqual(sessions[0].references, ['Manual.pdf — Página 12']);
+});
+
 test('planejamento é salvo sem inventar exercícios prontos', () => {
-  const path = validateOutline({ title: 'Python', units: Array.from({length: 3}, (_, i) => ({ title: `Unidade ${i}`, description: 'Aprender uma habilidade', lessons: Array.from({length: 2}, (_, j) => ({title: `Lição ${j}`, description: 'Aplicar uma técnica', difficulty: 'iniciante'})) })) });
+  const path = validateOutline({ title: 'Python', units: Array.from({length: 3}, (_, i) => ({ title: `Unidade ${i}`, description: 'Aprender uma habilidade', objective: 'Aplicar a habilidade', contents: ['Fundamentos'], concepts: ['Conceito'], references: ['Apostila — Página 1'], lessons: Array.from({length: 2}, (_, j) => ({title: `Lição ${j}`, description: 'Aplicar uma técnica', difficulty: 'iniciante', references: ['Apostila — Página 1']})) })) });
   assert.equal(path.units.flatMap((u) => u.lessons).length, 6);
   assert.ok(path.units.every((u) => u.lessons.every((l) => l.exercises.length === 0 && l.id)));
   assert.equal(new Set(path.units.flatMap((u) => u.lessons.map((l) => l.id))).size, 6);
 });
 
 test('lição rejeita resposta ausente, alternativas duplicadas e ordenação inválida', () => {
-  const exercise = { type: 'multiple_choice', prompt: 'Quanto é 2 + 2?', options: ['1','2','3','4'], answer: '4', explanation: 'Somamos duas unidades a duas unidades.' };
-  const content = { studyNotes: 'Adição', exercises: Array.from({length: 4}, () => ({...exercise})) };
+  const exercise = { type: 'multiple_choice', prompt: 'Quanto é 2 + 2?', options: ['1','2','3','4'], answer: '4', explanation: 'Somamos duas unidades a duas unidades.', optionExplanations: ['Incorreta','Incorreta','Incorreta','Correta'], sourceReference: 'Material — Página 1' };
+  const content = { studyNotes: 'Adição', summary: 'Resumo', keyConcepts: ['Soma'], examples: ['2 + 2'], commonErrors: ['Subtrair'], references: ['Material — Página 1'], exercises: Array.from({length: 4}, () => ({...exercise})) };
   assert.equal(validateLessonContent(content).exercises.length, 4);
   assert.throws(() => validateLessonContent({ ...content, exercises: [{...exercise, answer: '5'}, ...content.exercises.slice(1)] }));
   assert.throws(() => validateLessonContent({ ...content, exercises: [{...exercise, options: ['1','2','4','4']}, ...content.exercises.slice(1)] }));

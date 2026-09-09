@@ -57,6 +57,9 @@ import { ApiClientError, readApiResponse } from "@/lib/api-contract";
 import { professionalAreas, type AssessmentResult, type ProfessionalArea, type SkillKey, type SkillLevels } from "@/lib/assessment";
 import type { GeneratedArchetype } from "@/lib/archetypes";
 import { emptyPathProgress, type ContentMapping, type LearningPath, type LearningTopic, type PathProgress, type StudyMapRecord, type ThemeRecord, type TopicPriority as LearningTopicPriority, type TopicStatus as LearningTopicStatus } from "@/lib/learning";
+import type { StudyDocument } from "@/lib/study-documents";
+import { DocumentUploadPanel } from "@/components/document-upload-panel";
+import { analyzeStudyDocuments } from "@/lib/document-analysis-client";
 
 type Tab = "dashboard" | "mapping" | "themes" | "review" | "evolution" | "sessions" | "plans";
 type TopicStatus = LearningTopicStatus;
@@ -78,11 +81,23 @@ type PlanSession = {
   xp?: number;
   dueDate?: string;
   recurrence?: "none" | "daily" | "weekly" | "monthly";
+  references?: string[];
   mapId?: string;
   themeId?: string;
 };
 type StudyWeek = { week: number; theme: string; sessions: PlanSession[] };
-type StudyPlanRecord = { id: string; name: string; createdAt: string; weeks: StudyWeek[]; strategy?: string };
+type StudyPlanRecord = {
+  id: string;
+  name: string;
+  createdAt: string;
+  weeks: StudyWeek[];
+  strategy?: string;
+  startDate?: string;
+  deadline?: string;
+  profile?: string;
+  pomodoro?: boolean;
+  documentIds?: string[];
+};
 type EvolutionLog = {
   id: number;
   sourceId?: string;
@@ -120,7 +135,7 @@ type Archetype = {
 };
 
 type DashboardState = {
-  version: 4;
+  version: 5;
   goals: Goal[];
   studyPlans: StudyPlanRecord[];
   activePlanId: string;
@@ -149,6 +164,7 @@ type DashboardState = {
   activeStudyMapId: string;
   learningPaths: LearningPath[];
   learningProgress: Record<string, PathProgress>;
+  documents: StudyDocument[];
 };
 
 const initialMapping: Mapping = {
@@ -375,6 +391,12 @@ export function StudyHub({
   const [planCustomDays, setPlanCustomDays] = useState(false);
   const [planAiPrompt, setPlanAiPrompt] = useState("");
   const [planDifficulty, setPlanDifficulty] = useState("iniciante");
+  const [planDesiredLevel, setPlanDesiredLevel] = useState("avançado");
+  const [planProfile, setPlanProfile] = useState("equilibrado");
+  const [planStartDate, setPlanStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [planDeadline, setPlanDeadline] = useState("");
+  const [planPomodoro, setPlanPomodoro] = useState(false);
+  const [planRestDays, setPlanRestDays] = useState<string[]>([]);
   const [planError, setPlanError] = useState("");
   const [selectedPlanTopics, setSelectedPlanTopics] = useState<string[]>([]);
   const [studyPlans, setStudyPlans] = useState<StudyPlanRecord[]>([]);
@@ -434,16 +456,17 @@ export function StudyHub({
   const [activeStudyMapId, setActiveStudyMapId] = useState("");
   const [learningPaths, setLearningPaths] = useState<LearningPath[]>([]);
   const [learningProgress, setLearningProgress] = useState<Record<string, PathProgress>>({});
+  const [documents, setDocuments] = useState<StudyDocument[]>([]);
   const [editingActivityId, setEditingActivityId] = useState<number | null>(null);
   const [activityMenuId, setActivityMenuId] = useState<number | null>(null);
   const [planSessionMenuId, setPlanSessionMenuId] = useState<string | null>(null);
   const [editingPlanSession, setEditingPlanSession] = useState<PlanSession | null>(null);
-  const dashboardStorageKey = accountId ? `nexo-dashboard-v4:${accountId}` : "nexo-dashboard-v4";
+  const dashboardStorageKey = accountId ? `nexo-dashboard-v5:${accountId}` : "nexo-dashboard-v5";
   const legacyMarkerKey = `nexo-legacy-reviewed:${accountId || "local"}`;
 
   useEffect(() => {
     try {
-      const v3 = window.localStorage.getItem(dashboardStorageKey) || window.localStorage.getItem(accountId ? `nexo-dashboard-v3:${accountId}` : "nexo-dashboard-v3");
+      const v3 = window.localStorage.getItem(dashboardStorageKey) || window.localStorage.getItem(accountId ? `nexo-dashboard-v4:${accountId}` : "nexo-dashboard-v4") || window.localStorage.getItem(accountId ? `nexo-dashboard-v3:${accountId}` : "nexo-dashboard-v3");
       if (v3) {
         const state = JSON.parse(v3) as Partial<DashboardState>;
         if (Array.isArray(state.goals)) setGoals(state.goals);
@@ -473,6 +496,7 @@ export function StudyHub({
         if (typeof state.activeStudyMapId === "string") setActiveStudyMapId(state.activeStudyMapId);
         if (Array.isArray(state.learningPaths)) setLearningPaths(state.learningPaths);
         if (state.learningProgress && typeof state.learningProgress === "object") setLearningProgress(state.learningProgress);
+        if (Array.isArray(state.documents)) setDocuments(state.documents);
       } else if (!authEnabled) {
         const stored = window.localStorage.getItem("nexo-goals-v1");
         if (stored) setGoals(JSON.parse(stored));
@@ -517,7 +541,7 @@ export function StudyHub({
   }, [authEnabled, dashboardStorageKey, legacyMarkerKey, accountId]);
 
   const dashboardState = useMemo<DashboardState>(() => ({
-    version: 4,
+    version: 5,
     goals,
     studyPlans,
     activePlanId,
@@ -546,7 +570,8 @@ export function StudyHub({
     activeStudyMapId,
     learningPaths,
     learningProgress,
-  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress]);
+    documents,
+  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents]);
 
   useEffect(() => {
     if (!storageReady || (cloudEnabled && !cloudLoaded)) return;
@@ -592,6 +617,7 @@ export function StudyHub({
           if (typeof state.activeStudyMapId === "string") setActiveStudyMapId(state.activeStudyMapId);
           if (Array.isArray(state.learningPaths)) setLearningPaths(state.learningPaths);
           if (state.learningProgress && typeof state.learningProgress === "object") setLearningProgress(state.learningProgress);
+          if (Array.isArray(state.documents)) setDocuments(state.documents);
         }
         setCloudStatus(state ? "saved" : "saving");
       } catch (error) {
@@ -1019,7 +1045,7 @@ export function StudyHub({
     });
 
     const id = `plan-${Date.now()}`;
-    setStudyPlans((current) => [{ id, name: planName.trim(), createdAt: new Date().toISOString(), weeks: plan }, ...current]);
+    setStudyPlans((current) => [{ id, name: planName.trim(), createdAt: new Date().toISOString(), weeks: plan, startDate: planStartDate, deadline: planDeadline, profile: "personalizado", pomodoro: planPomodoro, documentIds: documents.filter((item) => item.selected).map((item) => item.id) }, ...current]);
     setActivePlanId(id);
     setPlanWeekView(0);
     setNotice(`Plano “${planName}” criado com ${planWeeks * planDays} sessões.`);
@@ -1031,11 +1057,14 @@ export function StudyHub({
     if (!planAiPrompt.trim() && !selectedPlanTopics.length) { setPlanError("Descreva seu objetivo ou selecione tópicos."); return; }
     setBusy("plan"); setPlanError("");
     try {
-      const input = { name: planName, goal: planAiPrompt || studyGoal, difficulty: planDifficulty, topics: selectedPlanTopics, weeks: planWeeks, days: planDays, minutes: planMinutes, dayMinutes: planCustomDays ? planDayMinutes.slice(0, planDays) : undefined };
+      const selectedDocuments = documents.filter((item) => item.selected && item.status === "ready");
+      const material = selectedDocuments.length ? await analyzeStudyDocuments(selectedDocuments, setPlanError) : "";
+      setPlanError("");
+      const input = { name: planName, goal: planAiPrompt || studyGoal, difficulty: planDifficulty, desiredLevel: planDesiredLevel, profile: planProfile, startDate: planStartDate, deadline: planDeadline, pomodoro: planPomodoro, restDays: planRestDays, topics: selectedPlanTopics, weeks: planWeeks, days: planDays, minutes: planMinutes, dayMinutes: planCustomDays ? planDayMinutes.slice(0, planDays) : undefined, material };
       const blueprint = await requestAI<PlanBlueprint>("/api/plans/generate", input);
       const id = `plan-${crypto.randomUUID()}`;
-      const weeks = buildStudySchedule({ steps: blueprint.steps, weeks: input.weeks, days: input.days, minutes: input.minutes, dayMinutes: input.dayMinutes, prefix: id }).map((week) => ({ ...week, sessions: week.sessions.map((session) => ({ ...session, xp: session.minutes * activityTypes.study.xpRate, mapId: activeStudyMapId || undefined, themeId: activeStudyMap?.themeIds[0] })) }));
-      setStudyPlans((current) => [{ id, name: input.name.trim() || "Meu plano com IA", createdAt: new Date().toISOString(), weeks, strategy: blueprint.summary }, ...current]);
+      const weeks = buildStudySchedule({ steps: blueprint.steps, weeks: input.weeks, days: input.days, minutes: input.minutes, dayMinutes: input.dayMinutes, prefix: id, startDate: input.startDate, restDays: input.restDays }).map((week) => ({ ...week, sessions: week.sessions.map((session) => ({ ...session, xp: session.minutes * activityTypes.study.xpRate, mapId: activeStudyMapId || undefined, themeId: activeStudyMap?.themeIds[0] })) }));
+      setStudyPlans((current) => [{ id, name: input.name.trim() || "Meu plano com IA", createdAt: new Date().toISOString(), weeks, strategy: blueprint.summary, startDate: input.startDate, deadline: input.deadline, profile: input.profile, pomodoro: input.pomodoro, documentIds: selectedDocuments.map((item) => item.id) }, ...current]);
       setActivePlanId(id); setPlanWeekView(0);
       setNotice("Plano criado com estudo, prática e revisões adequados ao seu objetivo e disponibilidade.");
     } catch (error) { setPlanError(error instanceof Error ? error.message : "Não foi possível criar o plano."); }
@@ -1268,6 +1297,58 @@ export function StudyHub({
       return { ...plan, weeks };
     }));
     setPlanSessionMenuId(null);
+  }
+
+  function renameActivePlan() {
+    if (!activePlanRecord) return;
+    const name = window.prompt("Novo nome do plano", activePlanRecord.name)?.trim();
+    if (!name) return;
+    setStudyPlans((current) => current.map((plan) => plan.id === activePlanRecord.id ? { ...plan, name } : plan));
+    setNotice(`Plano renomeado para “${name}”.`);
+  }
+
+  function duplicateActivePlan() {
+    if (!activePlanRecord) return;
+    const id = `plan-${crypto.randomUUID()}`;
+    const copy: StudyPlanRecord = {
+      ...activePlanRecord,
+      id,
+      name: `${activePlanRecord.name} — cópia`,
+      createdAt: new Date().toISOString(),
+      weeks: activePlanRecord.weeks.map((week) => ({ ...week, sessions: week.sessions.map((session) => ({ ...session, id: `session-${crypto.randomUUID()}`, done: false })) })),
+    };
+    setStudyPlans((current) => [copy, ...current]);
+    setActivePlanId(id);
+    setPlanWeekView(0);
+    setNotice("Plano duplicado. A cópia começa sem atividades concluídas.");
+  }
+
+  function deleteActivePlan() {
+    if (!activePlanRecord || !window.confirm(`Excluir o plano “${activePlanRecord.name}”? As atividades concluídas do histórico de Ascensão serão preservadas.`)) return;
+    const id = activePlanRecord.id;
+    setStudyPlans((current) => current.filter((plan) => plan.id !== id));
+    setActivePlanId("");
+    setPlanWeekView(0);
+    setNotice(`Plano “${activePlanRecord.name}” excluído.`);
+  }
+
+  function recalculatePendingPlan() {
+    if (!activePlanRecord) return;
+    const today = new Date();
+    today.setUTCHours(12, 0, 0, 0);
+    const pending = activePlanRecord.weeks.flatMap((week) => week.sessions).filter((session) => !session.done);
+    if (!pending.length) { setNotice("Este plano não tem atividades pendentes para reorganizar."); return; }
+    const allowedDays = weekdays.filter((day) => !planRestDays.includes(day));
+    const cursor = new Date(today);
+    const nextDate = () => {
+      while (allowedDays.length && !allowedDays.includes(weekdays[(cursor.getUTCDay() + 6) % 7])) cursor.setUTCDate(cursor.getUTCDate() + 1);
+      const value = cursor.toISOString().slice(0, 10);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      return value;
+    };
+    const dates = new Map(pending.map((session) => [session.id, nextDate()]));
+    setStudyPlans((current) => current.map((plan) => plan.id !== activePlanRecord.id ? plan : { ...plan, weeks: plan.weeks.map((week) => ({ ...week, sessions: week.sessions.map((session) => session.done ? session : { ...session, dueDate: dates.get(session.id) }) })) }));
+    setNotice(`${pending.length} atividade(s) pendente(s) foram redistribuídas a partir de hoje; as concluídas não foram alteradas.`);
   }
 
   function completeAssessment(result: AssessmentResult) {
@@ -2213,6 +2294,8 @@ export function StudyHub({
               )}
             </section>
 
+            <DocumentUploadPanel documents={documents} setDocuments={setDocuments} title="Criar plano usando arquivos" notify={setNotice} />
+
             {studyPlans.length > 0 && (
               <section className="plan-library panel">
                 <div><span className="eyebrow">MEUS PLANOS</span><strong>{studyPlans.length} plano(s) salvo(s)</strong></div>
@@ -2273,6 +2356,11 @@ export function StudyHub({
                 {planCustomDays && <div className="plan-day-times">{weekdays.slice(0, planDays).map((day, index) => <label key={day}><span>{day} (min)</span><input type="number" min="1" max="1440" required value={planDayMinutes[index] || ""} onChange={(event) => setPlanDayMinutes((current) => current.map((time, i) => i === index ? Number(event.target.value) : time))} /></label>)}</div>}
                 <label className="plan-field"><span>Objetivo e contexto para a IA</span><textarea value={planAiPrompt} onChange={(event) => setPlanAiPrompt(event.target.value)} placeholder="Ex.: aprender Python para analisar vendas; já conheço Excel, tenho 20 minutos por dia e quero construir um relatório em 4 semanas." /></label>
                 <label className="plan-field"><span>Meu nível atual</span><select value={planDifficulty} onChange={(event) => setPlanDifficulty(event.target.value)}><option value="iniciante">Iniciante</option><option value="intermediario">Intermediário</option><option value="avancado">Avançado</option></select></label>
+                <label className="plan-field"><span>Tipo de plano</span><select value={planProfile} onChange={(event) => setPlanProfile(event.target.value)}><option value="rapido">Rápido</option><option value="equilibrado">Equilibrado</option><option value="aprofundado">Aprofundado</option><option value="personalizado">Personalizado</option></select></label>
+                <div className="plan-field-grid"><label className="plan-field"><span>Data inicial</span><input type="date" value={planStartDate} onChange={(event) => setPlanStartDate(event.target.value)} /></label><label className="plan-field"><span>Data da prova/prazo</span><input type="date" value={planDeadline} onChange={(event) => setPlanDeadline(event.target.value)} /></label></div>
+                <label className="plan-field"><span>Nível desejado</span><input value={planDesiredLevel} onChange={(event) => setPlanDesiredLevel(event.target.value)} placeholder="Ex.: aprovação, avançado, 80% de acertos" /></label>
+                <label className="check-field"><input type="checkbox" checked={planPomodoro} onChange={(event) => setPlanPomodoro(event.target.checked)} /> Organizar sessões com técnica Pomodoro</label>
+                <fieldset className="plan-rest-days"><legend>Dias de descanso</legend>{weekdays.map((day) => <label key={day}><input type="checkbox" checked={planRestDays.includes(day)} onChange={(event) => setPlanRestDays((current) => event.target.checked ? [...current, day] : current.filter((item) => item !== day))} /> {day}</label>)}</fieldset>
 
                 <fieldset className="topic-selector">
                   <legend>Tópicos prioritários</legend>
@@ -2310,7 +2398,13 @@ export function StudyHub({
                   <>
                     <div className="panel-heading plan-preview-heading">
                       <div><span className="eyebrow">{(activePlanRecord?.name || planName).toUpperCase()}</span><h3>Semana {activePlanWeek.week} de {studyPlan.length}</h3></div>
-                      <button className="outline-button compact" onClick={addPlanToGoals}><Target size={16} /> Levar para metas</button>
+                      <div className="plan-record-actions">
+                        <button className="outline-button compact" onClick={renameActivePlan}>Renomear</button>
+                        <button className="outline-button compact" onClick={duplicateActivePlan}>Duplicar</button>
+                        <button className="outline-button compact" onClick={recalculatePendingPlan}><RotateCcw size={15} /> Recalcular atrasos</button>
+                        <button className="outline-button compact" onClick={addPlanToGoals}><Target size={16} /> Levar para metas</button>
+                        <button className="outline-button compact danger" onClick={deleteActivePlan}>Excluir plano</button>
+                      </div>
                     </div>
                     {activePlanRecord?.strategy && <p className="plan-strategy">{activePlanRecord.strategy}</p>}
                     <div className="week-focus"><span>TEMA DA SEMANA</span><strong>{activePlanWeek.theme}</strong></div>
@@ -2318,7 +2412,7 @@ export function StudyHub({
                       {activePlanWeek.sessions.map((session) => (
                         <article key={session.id} className={session.done ? "done" : ""}>
                           <button className="session-check" onClick={() => togglePlanSession(session.id)} aria-label={session.done ? `Marcar ${session.topic} como pendente` : `Concluir ${session.topic}`}>{session.done ? <Check size={16} /> : session.day.slice(0, 3)}</button>
-                          <div><strong>{session.topic}</strong><small>{session.activity}</small></div>
+                          <div><strong>{session.topic}</strong><small>{session.activity}</small>{session.references?.length ? <small>Fontes: {session.references.join("; ")}</small> : null}</div>
                           <span className="session-time"><Clock3 size={14} /> {session.minutes} min</span>
                           <button className="activity-menu-button" aria-label={`Ações de ${session.topic}`} onClick={() => setPlanSessionMenuId(planSessionMenuId === session.id ? null : session.id)}><MoreVertical size={18} /></button>
                           {planSessionMenuId === session.id && <div className="card-menu activity-card-menu"><button onClick={() => editPlanSession(session)}>Editar</button><button onClick={() => duplicatePlanSession(session)}>Duplicar</button><button onClick={() => togglePlanSession(session.id)}>{session.done ? "Marcar pendente" : "Marcar concluída"}</button><button disabled={allPlanSessions.findIndex((item) => item.id === session.id) === 0} onClick={() => movePlanSession(session, -1)}>Mover para cima</button><button disabled={allPlanSessions.findIndex((item) => item.id === session.id) === allPlanSessions.length - 1} onClick={() => movePlanSession(session, 1)}>Mover para baixo</button><button className="danger" onClick={() => deletePlanSession(session)}>Excluir</button></div>}
@@ -2355,10 +2449,19 @@ export function StudyHub({
             themes={themes}
             maps={studyMaps}
             materialContext={[transcript, syllabus].filter(Boolean).join("\n\n")}
+            documents={documents}
+            setDocuments={setDocuments}
             notify={setNotice}
           />
         )}
       </main>
+
+      <nav className="mobile-bottom-nav" aria-label="Navegação principal no celular">
+        {tabs.map((item) => {
+          const Icon = item.icon;
+          return <button key={item.id} className={tab === item.id ? "active" : ""} aria-current={tab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); setMobileNav(false); }}><Icon size={19} /><span>{item.label.replace("Mapas de Estudos", "Mapas").replace("Revisão Ativa", "Revisão")}</span></button>;
+        })}
+      </nav>
 
       {editingPlanSession && (
         <div className="modal-backdrop" role="presentation">

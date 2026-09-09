@@ -10,6 +10,9 @@ export class InvalidAIRequest extends Error {}
 export async function aiRoute(request: Request, route: string, generate: (body: Record<string, unknown>) => Promise<unknown>) {
   const started = Date.now();
   try {
+    const origin = request.headers.get("origin");
+    const host = request.headers.get("host");
+    if (origin && host && new URL(origin).host !== host) return NextResponse.json(failure("ORIGIN_NOT_ALLOWED", "Origem não autorizada."), { status: 403 });
     if (isClerkConfigured() && !(await auth()).userId) {
       return NextResponse.json(failure("AUTH_REQUIRED", "Faça login para usar a inteligência artificial."), { status: 401 });
     }

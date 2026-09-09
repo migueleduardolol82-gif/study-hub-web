@@ -59,6 +59,7 @@ export type StudyMapRecord = {
 export const exerciseKinds = [
   "multiple_choice", "true_false", "fill_blank", "matching", "ordering",
   "flashcard", "typed", "case_study", "ai_question", "error_review", "mock_exam",
+  "open_question", "calculation", "error_identification", "cumulative_review",
 ] as const;
 export type ExerciseKind = (typeof exerciseKinds)[number];
 
@@ -69,6 +70,8 @@ export type LearningExercise = {
   options: string[];
   answer: string;
   explanation: string;
+  optionExplanations?: string[];
+  sourceReference?: string;
 };
 
 export type LearningLesson = {
@@ -79,12 +82,22 @@ export type LearningLesson = {
   xp: number;
   exercises: LearningExercise[];
   studyNotes?: string;
+  summary?: string;
+  keyConcepts?: string[];
+  examples?: string[];
+  commonErrors?: string[];
+  references?: string[];
 };
 
 export type LearningUnit = {
   id: string;
   title: string;
   description: string;
+  objective?: string;
+  contents?: string[];
+  concepts?: string[];
+  summary?: string;
+  references?: string[];
   lessons: LearningLesson[];
 };
 
@@ -96,10 +109,13 @@ export type LearningPath = {
   createdAt: string;
   updatedAt: string;
   units: LearningUnit[];
+  unlockAll?: boolean;
+  documentIds?: string[];
   source?: { theme: string; goal: string; topics: string[]; content: string; difficulty: ThemeDifficulty };
 };
 
-export type LessonResult = { correct: number; total: number; wrongExerciseIds: string[]; completedAt: string };
+export type ExerciseAttempt = { selected: string; correct: string; wasCorrect: boolean };
+export type LessonResult = { correct: number; total: number; wrongExerciseIds: string[]; completedAt: string; answers?: Record<string, ExerciseAttempt> };
 export type PathProgress = {
   xp: number;
   streak: number;
@@ -107,6 +123,8 @@ export type PathProgress = {
   completedLessonIds: string[];
   lessonResults: Record<string, LessonResult>;
   achievements: string[];
+  mastery?: Record<string, number>;
+  speedRecords?: Record<string, number>;
 };
 
 export const emptyPathProgress: PathProgress = {
@@ -116,6 +134,8 @@ export const emptyPathProgress: PathProgress = {
   completedLessonIds: [],
   lessonResults: {},
   achievements: [],
+  mastery: {},
+  speedRecords: {},
 };
 
 export const curriculumSchema = {
