@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { validateDocumentAnalysis } from "../lib/document-analysis.ts";
-import { acceptedStudyExtensions, DOCUMENT_CHUNK_CHARS, extractStudyDocument, MAX_STUDY_FILE_BYTES, MAX_STUDY_FILES, studyFileFormat } from "../lib/study-documents.ts";
+import { acceptedStudyExtensions, DOCUMENT_CHUNK_CHARS, extractStudyDocument, MAX_STUDY_FILE_BYTES, MAX_STUDY_FILE_MB, MAX_STUDY_FILES, studyFileFormat } from "../lib/study-documents.ts";
 import JSZip from "jszip";
 
 test("biblioteca aceita todos os formatos solicitados sem confiar em maiúsculas", () => {
@@ -9,7 +9,8 @@ test("biblioteca aceita todos os formatos solicitados sem confiar em maiúsculas
   for (const extension of acceptedStudyExtensions) assert.equal(studyFileFormat({ name: `material.${extension.toUpperCase()}` }), extension);
   assert.equal(studyFileFormat({ name: "video.mp4" }), null);
   assert.equal(MAX_STUDY_FILES, 12);
-  assert.equal(MAX_STUDY_FILE_BYTES, 30 * 1024 * 1024);
+  assert.equal(MAX_STUDY_FILE_BYTES, 200 * 1024 * 1024);
+  assert.equal(MAX_STUDY_FILE_MB, 200);
   assert.ok(DOCUMENT_CHUNK_CHARS >= 4000);
 });
 

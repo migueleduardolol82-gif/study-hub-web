@@ -27,7 +27,8 @@ export type StudyDocument = {
   createdAt: string;
 };
 
-export const MAX_STUDY_FILE_BYTES = 30 * 1024 * 1024;
+export const MAX_STUDY_FILE_BYTES = 200 * 1024 * 1024;
+export const MAX_STUDY_FILE_MB = MAX_STUDY_FILE_BYTES / (1024 * 1024);
 export const MAX_STUDY_FILES = 12;
 export const DOCUMENT_CHUNK_CHARS = 6000;
 

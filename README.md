@@ -50,7 +50,7 @@ Depois da primeira conexão, cada atualização enviada para a branch `main` ger
 - O arquivo enviado para transcrição pode ter até 250 MB. Arquivos locais acima de 4 MB exigem o Vercel Blob ativado.
 - Links precisam ser públicos e apontar para um arquivo baixável. Plataformas com login, DRM e YouTube não são baixadas.
 - A OpenAI recebe apenas partes de áudio normalizadas menores que 25 MB; o vídeo original não é enviado inteiro à OpenAI.
-- A biblioteca aceita até 12 arquivos por painel, com até 30 MB por arquivo. PDFs digitalizados e imagens usam OCR em português e inglês.
+- A biblioteca aceita até 12 arquivos por painel, com até 200 MB por arquivo. PDFs digitalizados e imagens usam OCR em português e inglês.
 - O mapa pode analisar apenas a transcrição; a apostila passa a ser opcional quando as referências já foram cadastradas manualmente.
 
 

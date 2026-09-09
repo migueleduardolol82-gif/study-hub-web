@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, Check, FileText, LoaderCircle, Plus, Trash2, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
-import { deleteLocalChunks, extractStudyDocument, hashFile, MAX_STUDY_FILE_BYTES, MAX_STUDY_FILES, saveLocalChunks, studyFileFormat, type StudyDocument } from "@/lib/study-documents";
+import { deleteLocalChunks, extractStudyDocument, hashFile, MAX_STUDY_FILE_BYTES, MAX_STUDY_FILE_MB, MAX_STUDY_FILES, saveLocalChunks, studyFileFormat, type StudyDocument } from "@/lib/study-documents";
 
 function sizeLabel(bytes: number) { return bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
 
@@ -22,7 +22,7 @@ export function DocumentUploadPanel({ documents, setDocuments, title = "Criar us
     for (const file of files) {
       const format = studyFileFormat(file);
       if (!format) { notify(`${file.name}: formato não suportado.`); continue; }
-      if (file.size > MAX_STUDY_FILE_BYTES) { notify(`${file.name}: limite de 30 MB por arquivo.`); continue; }
+      if (file.size > MAX_STUDY_FILE_BYTES) { notify(`${file.name}: limite de ${MAX_STUDY_FILE_MB} MB por arquivo.`); continue; }
       const hash = await hashFile(file);
       if (documents.some((item) => item.hash === hash)) { notify(`${file.name} já foi adicionado.`); continue; }
       const id = `doc-${crypto.randomUUID()}`;
@@ -71,7 +71,7 @@ export function DocumentUploadPanel({ documents, setDocuments, title = "Criar us
   return <section className="document-uploader panel">
     <div className="panel-heading"><div><span className="eyebrow">FONTES DO CONTEÚDO</span><h3>{title}</h3></div><UploadCloud /></div>
     <button type="button" className={`document-dropzone ${dragging ? "dragging" : ""}`} onClick={() => inputRef.current?.click()} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); void addFiles(event.dataTransfer.files); }}>
-      <UploadCloud /><strong>Arraste os arquivos ou toque para selecionar</strong><small>PDF, DOCX, PPTX, TXT, JPG, JPEG e PNG · até 12 arquivos de 30 MB</small>
+      <UploadCloud /><strong>Arraste os arquivos ou toque para selecionar</strong><small>PDF, DOCX, PPTX, TXT, JPG, JPEG e PNG · até 12 arquivos de {MAX_STUDY_FILE_MB} MB</small>
     </button>
     <input ref={inputRef} hidden type="file" multiple accept=".pdf,.docx,.pptx,.txt,.jpg,.jpeg,.png,application/pdf,text/plain,image/jpeg,image/png" onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.currentTarget.value = ""; }} />
     {documents.length > 0 && <div className="document-list">{documents.map((document, index) => <article key={document.id}>
