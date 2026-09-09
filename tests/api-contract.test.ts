@@ -65,6 +65,49 @@ test("OpenAI diferencia cota esgotada de limite temporário e rejeita saída tru
     globalThis.fetch = async () => new Response(JSON.stringify({error:{code:'insufficient_quota',message:'Quota exhausted'}}), {status:429,headers:{'content-type':'application/json'}});
     await assert.rejects(() => createStructuredResponse({instructions:'test',input:'test',validate:(x)=>x}), (error) => error instanceof OpenAIRequestError && error.code === 'OPENAI_QUOTA_EXCEEDED' && !error.retryable);
     globalThis.fetch = async () => new Response(JSON.stringify({status:'incomplete',incomplete_details:{reason:'max_output_tokens'},output_text:'{"partial":true}'}), {headers:{'content-type':'application/json'}});
-    await assert.rejects(() => createStructuredResponse({instructions:'test',input:'test',validate:(x)=>x}), (error) => error instanceof OpenAIRequestError && error.code === 'MALFORMED_AI_RESPONSE');
+    await assert.rejects(() => createStructuredResponse({instructions:'test',input:'test',validate:(x)=>x}), (error) => error instanceof OpenAIRequestError && error.code === 'AI_OUTPUT_LIMIT');
   } finally { globalThis.fetch = original; if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key; }
+});
+
+test("recupera truncamento uma vez com mais tokens e valida somente a resposta completa", async () => {
+  const original = globalThis.fetch;
+  const key = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key-not-real";
+  const limits: number[] = [];
+  let validations = 0;
+  globalThis.fetch = async (_url, init) => {
+    limits.push(JSON.parse(String(init?.body)).max_output_tokens);
+    return Response.json(limits.length === 1
+      ? { status: "incomplete", incomplete_details: { reason: "max_output_tokens" }, output_text: '{"partial":true}' }
+      : { status: "completed", output_text: '{"ok":true}' });
+  };
+  try {
+    const result = await createStructuredResponse({ instructions: "test", input: "test", maxOutputTokens: 6000, validate: (x) => { validations++; return x; } });
+    assert.deepEqual(result, { ok: true });
+    assert.deepEqual(limits, [6000, 12000]);
+    assert.equal(validations, 1);
+  } finally {
+    globalThis.fetch = original;
+    if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key;
+  }
+});
+
+test("limita recuperação a duas chamadas e não repete outros motivos de falha", async () => {
+  const original = globalThis.fetch;
+  const key = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key-not-real";
+  let calls = 0;
+  let reason = "max_output_tokens";
+  globalThis.fetch = async () => { calls++; return Response.json({ status: "incomplete", incomplete_details: { reason }, output_text: '{"partial":true}' }); };
+  try {
+    const options = { instructions: "test", input: "test", maxOutputTokens: 12000, validate: (x: unknown) => x };
+    await assert.rejects(() => createStructuredResponse(options), (e) => e instanceof OpenAIRequestError && e.code === "AI_OUTPUT_LIMIT");
+    assert.equal(calls, 2);
+    calls = 0; reason = "content_filter";
+    await assert.rejects(() => createStructuredResponse(options), (e) => e instanceof OpenAIRequestError && e.code === "MALFORMED_AI_RESPONSE");
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = original;
+    if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key;
+  }
 });

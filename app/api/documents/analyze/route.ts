@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     if (!documentName || !locator || !content) throw new InvalidAIRequest("Documento, localização e conteúdo são obrigatórios.");
     return createStructuredResponse({
       schema: documentAnalysisSchema, schemaName: "document_section_analysis", validate: validateDocumentAnalysis,
-      timeoutMs: 105000, maxOutputTokens: 2600, signal: request.signal,
+      timeoutMs: 105000, maxOutputTokens: 6000, signal: request.signal,
       instructions: `${specialistInstructions} Analise integralmente o trecho fornecido como fonte primária. Extraia apenas o que está presente. Preserve termos técnicos, fórmulas, exceções, exemplos e relações. Em warnings, registre contradições internas, limitações, texto ilegível ou informação que exija confirmação; não complete lacunas com conhecimento externo. Toda referência deve repetir exatamente o nome do documento e a localização recebida. Seja compacto, mas não omita conceitos examináveis.`,
       input: JSON.stringify({ documento: documentName, localizacao: locator, conteudoIntegralDoTrecho: content }),
     });

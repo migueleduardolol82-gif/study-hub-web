@@ -10,7 +10,8 @@ export type OpenAIErrorCode =
   | "OPENAI_TIMEOUT"
   | "OPENAI_UNAVAILABLE"
   | "EMPTY_AI_RESPONSE"
-  | "MALFORMED_AI_RESPONSE";
+  | "MALFORMED_AI_RESPONSE"
+  | "AI_OUTPUT_LIMIT";
 
 export class OpenAIRequestError extends Error {
   readonly code: OpenAIErrorCode;
@@ -57,7 +58,7 @@ export function extractOutputText(payload: {
   );
 }
 
-export async function createTextResponse({
+async function createTextResponseAttempt({
   instructions,
   input,
   schema,
@@ -153,6 +154,10 @@ export async function createTextResponse({
     throw new OpenAIRequestError("OPENAI_UNAVAILABLE", "A IA não conseguiu processar esta solicitação agora.", response.status, response.status >= 500, technical);
   }
 
+  if (isRecord(payload) && payload.status === "incomplete" && isRecord(payload.incomplete_details) && payload.incomplete_details.reason === "max_output_tokens") {
+    throw new OpenAIRequestError("AI_OUTPUT_LIMIT", "O conteúdo excedeu o tamanho desta etapa. Tente gerar menos unidades por vez.", 502, true,
+      `Output limit reached: ${JSON.stringify({ responseId: payload.id, maxOutputTokens, usage: payload.usage })}`);
+  }
   if (isRecord(payload) && (payload.status === "incomplete" || payload.status === "failed")) {
     throw new OpenAIRequestError("MALFORMED_AI_RESPONSE", "A IA não terminou este conteúdo. Tente gerar novamente apenas esta etapa.", 502, true, `Provider response ${String(payload.status)}: ${JSON.stringify(payload.incomplete_details || payload.error || {})}`);
   }
@@ -165,6 +170,23 @@ export async function createTextResponse({
     throw new OpenAIRequestError("EMPTY_AI_RESPONSE", "A IA devolveu uma resposta vazia. Tente novamente.", 502, true);
   }
   return output;
+}
+
+// Uma única recuperação, somente para truncamento explícito. As duas chamadas
+// compartilham o prazo original; respostas parciais nunca são aceitas.
+export async function createTextResponse(options: Parameters<typeof createTextResponseAttempt>[0]) {
+  const deadline = Date.now() + (options.timeoutMs ?? 55_000);
+  try {
+    return await createTextResponseAttempt(options);
+  } catch (error) {
+    const remaining = deadline - Date.now();
+    if (!(error instanceof OpenAIRequestError) || error.code !== "AI_OUTPUT_LIMIT" ||
+        !options.maxOutputTokens || options.maxOutputTokens >= 24000 ||
+        remaining < 1000 || options.signal?.aborted) throw error;
+    const expanded = Math.min(24000, options.maxOutputTokens * 2);
+    console.warn("ai_output_limit_retry", { schema: options.schemaName, previousLimit: options.maxOutputTokens, nextLimit: expanded, remainingMs: remaining });
+    return createTextResponseAttempt({ ...options, maxOutputTokens: expanded, timeoutMs: remaining });
+  }
 }
 
 export async function createStructuredResponse<T>({
