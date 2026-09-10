@@ -61,6 +61,8 @@ import type { StudyDocument } from "@/lib/study-documents";
 import { DocumentUploadPanel } from "@/components/document-upload-panel";
 import { analyzeStudyDocuments } from "@/lib/document-analysis-client";
 import { JourneysWorkspace, TodayWorkspace } from "@/components/journeys-workspace";
+import { AscensionIndex } from "@/components/ascension-index";
+import type { SkillTrack } from "@/lib/ascension-index";
 import { migrateStudyOrganizationToJourneys, journeyProgress, type JourneyRecord } from "@/lib/journeys";
 
 type Tab = "dashboard" | "today" | "journeys" | "mapping" | "themes" | "review" | "evolution" | "sessions" | "plans";
@@ -168,6 +170,7 @@ type DashboardState = {
   learningProgress: Record<string, PathProgress>;
   documents: StudyDocument[];
   journeys: JourneyRecord[];
+  skillTracks: SkillTrack[];
 };
 
 const initialMapping: Mapping = {
@@ -461,6 +464,7 @@ export function StudyHub({
   const [learningProgress, setLearningProgress] = useState<Record<string, PathProgress>>({});
   const [documents, setDocuments] = useState<StudyDocument[]>([]);
   const [journeys, setJourneys] = useState<JourneyRecord[]>([]);
+  const [skillTracks, setSkillTracks] = useState<SkillTrack[]>([]);
   const [editingActivityId, setEditingActivityId] = useState<number | null>(null);
   const [activityMenuId, setActivityMenuId] = useState<number | null>(null);
   const [planSessionMenuId, setPlanSessionMenuId] = useState<string | null>(null);
@@ -502,6 +506,7 @@ export function StudyHub({
         if (state.learningProgress && typeof state.learningProgress === "object") setLearningProgress(state.learningProgress);
         if (Array.isArray(state.documents)) setDocuments(state.documents);
         if (Array.isArray(state.journeys)) setJourneys(state.journeys);
+        if (Array.isArray(state.skillTracks)) setSkillTracks(state.skillTracks);
       } else if (!authEnabled) {
         const stored = window.localStorage.getItem("nexo-goals-v1");
         if (stored) setGoals(JSON.parse(stored));
@@ -577,7 +582,8 @@ export function StudyHub({
     learningProgress,
     documents,
     journeys,
-  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys]);
+    skillTracks,
+  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks]);
 
   useEffect(() => {
     if (!storageReady || (cloudEnabled && !cloudLoaded)) return;
@@ -625,15 +631,15 @@ export function StudyHub({
           if (state.learningProgress && typeof state.learningProgress === "object") setLearningProgress(state.learningProgress);
           if (Array.isArray(state.documents)) setDocuments(state.documents);
           if (Array.isArray(state.journeys)) setJourneys(state.journeys);
+          setSkillTracks(Array.isArray(state.skillTracks) ? state.skillTracks : []);
         }
         setCloudStatus(state ? "saved" : "saving");
+        if (!cancelled) setCloudLoaded(true);
       } catch (error) {
         if (!cancelled) {
           setCloudStatus("error");
           setNotice(error instanceof Error ? `${error.message} Seus dados locais continuam disponíveis.` : "Não foi possível carregar a nuvem.");
         }
-      } finally {
-        if (!cancelled) setCloudLoaded(true);
       }
     }
     loadCloudState();
@@ -737,8 +743,6 @@ export function StudyHub({
   const activePlanWeek = studyPlan[planWeekView];
   const completedEvolutionLogs = evolutionLogs.filter((log) => log.status !== "pending");
   const totalXp = completedEvolutionLogs.reduce((total, log) => total + log.xp, 0);
-  const evolutionLevel = totalXp ? Math.floor(totalXp / 500) + 1 : 0;
-  const levelXp = totalXp % 500;
   const accumulatedMinutes = completedEvolutionLogs.reduce((total, log) => total + log.minutes, 0);
   const evidenceDays = new Set(completedEvolutionLogs.map((log) => log.createdAt.slice(0, 10))).size;
   const evidencePillars = new Set(completedEvolutionLogs.map((log) => log.type)).size;
@@ -1822,6 +1826,7 @@ export function StudyHub({
 
         {tab === "dashboard" && (
           <div className="page-grid dashboard-page">
+            {skillTracks.some(track => !track.archived) && <div style={{ gridColumn: "1 / -1" }}><AscensionIndex compact tracks={skillTracks} onChange={setSkillTracks} journeys={journeys} xp={totalXp} /></div>}
             <section className="welcome-row">
               <div>
                 <span className="eyebrow lime">{mapping.topics.length ? "PRÓXIMO PASSO" : "CONSTRUA SUA TRILHA"}</span>
@@ -1886,6 +1891,7 @@ export function StudyHub({
 
         {tab === "evolution" && (
           <div className="evolution-page">
+            <AscensionIndex tracks={skillTracks} onChange={setSkillTracks} journeys={journeys} xp={totalXp} />
             <section className="ascension-hero panel">
               <div className="rank-emblem" aria-label={`Rank ${evolutionRank}`}>
                 <span>RANK</span>
@@ -1896,8 +1902,7 @@ export function StudyHub({
                 <h2>Construa uma versão de você que só existe depois de anos.</h2>
                 <p>Sem atalhos ou progresso fictício. Estudo, treino, leitura, projetos e liderança alimentam uma jornada mensurável de longo prazo.</p>
                 <div className="level-progress">
-                  <div><strong>Nível {evolutionLevel}</strong><span>{levelXp} / 500 XP para o próximo nível</span></div>
-                  <div className="xp-track"><i style={{ width: `${levelXp / 5}%` }} /></div>
+                  <div><strong>Histórico de esforço e diagnóstico anterior</strong><span>O XP é preservado e não determina seu nível de habilidade.</span></div>
                 </div>
               </div>
               <div className="ascension-stats">
