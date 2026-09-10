@@ -1417,3 +1417,73 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .evolution-page .hli-metrics article > strong { font-size: 30px; }
   .evolution-page .hli-score > strong { font-size: 36px; }
 }
+
+/* Aula ao vivo */
+.live-class { padding: clamp(18px, 3vw, 30px); overflow: hidden; border-color: #3a4530; background: radial-gradient(circle at 95% 0, rgba(208,255,101,.09), transparent 28rem), #0d0f10; }
+.live-class-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.live-class-header h2 { margin: 7px 0; font-size: clamp(1.55rem, 3vw, 2.25rem); letter-spacing: -.04em; }
+.live-class-header p, .live-privacy { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.55; }
+.live-stop { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 17px; color: #ffd4d0; background: #321a1a; border: 1px solid #713431; border-radius: 10px; cursor: pointer; font-weight: 800; }
+.live-setup { display: grid; gap: 14px; margin-top: 24px; }
+.live-setup > label:first-child { display: grid; gap: 7px; color: #c4c7ce; font-size: .88rem; font-weight: 800; }
+.live-setup input { width: 100%; min-height: 46px; padding: 0 13px; color: var(--text); color-scheme: dark; background: #08090a; border: 1px solid #32363c; border-radius: 10px; outline: 0; }
+.live-source { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.live-source button, .live-video-picker { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 68px; padding: 12px 14px; color: #aeb2bb; background: #090a0c; border: 1px solid #30343a; border-radius: 11px; cursor: pointer; text-align: left; }
+.live-source button.active { color: #efffd2; background: #17200f; border-color: #5f7738; }
+.live-source button > span, .live-video-picker > span { display: grid; min-width: 0; gap: 3px; }
+.live-source strong, .live-video-picker strong { color: var(--text); font-size: .92rem; }
+.live-source small, .live-video-picker small { color: var(--muted); font-size: .78rem; line-height: 1.4; }
+.live-video-picker { position: relative; }
+.live-video-picker input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.live-video-picker:focus-within { outline: 2px solid var(--lime); outline-offset: 3px; }
+.live-video { display: block; width: 100%; max-height: min(55dvh, 620px); background: #000; border: 1px solid #30343a; border-radius: 12px; }
+.live-start { justify-self: start; }
+.live-recording { display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 10px 14px; color: #e6f9c5; background: #141a10; border: 1px solid #415329; border-radius: 10px; }
+.live-recording i { width: 10px; height: 10px; background: #ff6257; border-radius: 50%; box-shadow: 0 0 0 5px rgba(255,98,87,.12); animation: livePulse 1.3s infinite; }
+.live-recording small { color: #8d977f; }
+@keyframes livePulse { 50% { opacity: .45; transform: scale(.8); } }
+.live-privacy { font-size: .78rem; }
+.live-history { display: grid; gap: 10px; margin-top: 28px; }
+.live-history > h3 { margin: 0 0 4px; font-size: 1rem; }
+.live-session { overflow: hidden; background: #090a0c; border: 1px solid #2c3035; border-radius: 12px; }
+.live-session-head { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: 11px; width: 100%; min-height: 70px; padding: 11px 13px; color: var(--text); background: transparent; border: 0; cursor: pointer; text-align: left; }
+.live-session-head > span { display: grid; place-items: center; width: 40px; height: 40px; color: #b9a5ff; background: #231e33; border-radius: 10px; }
+.live-session-head > span.recording { color: #ff8d85; background: #311919; }
+.live-session-head > div { min-width: 0; }
+.live-session-head strong, .live-session-head small { display: block; overflow-wrap: anywhere; }
+.live-session-head strong { font-size: .92rem; }
+.live-session-head small { margin-top: 4px; color: var(--muted); font-size: .78rem; }
+.live-session-body { display: grid; gap: 12px; padding: 14px; border-top: 1px solid #292d32; }
+.live-segment { padding: 16px; background: #0e1012; border: 1px solid #292d32; border-radius: 10px; }
+.live-segment > span { color: var(--lime); font-size: .78rem; font-weight: 900; }
+.live-segment h4 { margin: 6px 0 12px; font-size: 1rem; }
+.live-segment p, .live-segment li { color: #b2b6be; font-size: .9rem; line-height: 1.65; }
+.live-segment.analyzing p { display: flex; align-items: center; gap: 8px; }
+.live-segment summary { min-height: 42px; padding: 10px 0; color: #c9cbd0; cursor: pointer; font-size: .88rem; }
+.live-explanation { margin-top: 13px; padding: 14px; background: #151812; border-left: 2px solid var(--lime); }
+.live-explanation p { margin: 6px 0 0; }
+.live-cards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 14px; }
+.live-cards details { padding: 5px 12px 10px; background: #171321; border: 1px solid #3d3452; border-radius: 9px; }
+.live-cards p { margin: 5px 0; }.live-cards small { color: #9c8cc9; font-size: .76rem; }
+.live-session-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 4px; }
+.live-session-actions button { min-height: 44px; }
+.live-empty { color: var(--muted); text-align: center; }
+
+@media (max-width: 640px) {
+  .live-class { padding: 18px 15px; }
+  .live-class-header { flex-direction: column; }
+  .live-class-header p { font-size: 1rem; }
+  .live-stop, .live-start { width: 100%; }
+  .live-source, .live-cards { grid-template-columns: minmax(0,1fr); }
+  .live-source button, .live-video-picker { min-height: 76px; }
+  .live-source strong, .live-video-picker strong { font-size: 1rem; }
+  .live-source small, .live-video-picker small, .live-session-head small, .live-privacy { font-size: .88rem; }
+  .live-recording { align-items: flex-start; flex-wrap: wrap; }
+  .live-recording small { width: 100%; padding-left: 19px; }
+  .live-session-head { grid-template-columns: auto minmax(0,1fr) auto; }
+  .live-session-head > svg:nth-last-child(2) { display: none; }
+  .live-session-body { padding: 10px; }
+  .live-segment { padding: 15px 13px; }
+  .live-segment p, .live-segment li, .live-segment summary { font-size: 1rem; }
+  .live-session-actions button { width: 100%; justify-content: center; }
+}

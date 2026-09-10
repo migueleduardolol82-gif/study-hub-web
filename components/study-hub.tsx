@@ -64,6 +64,8 @@ import { JourneysWorkspace, TodayWorkspace } from "@/components/journeys-workspa
 import { AscensionIndex } from "@/components/ascension-index";
 import type { SkillTrack } from "@/lib/ascension-index";
 import { migrateStudyOrganizationToJourneys, journeyProgress, type JourneyRecord } from "@/lib/journeys";
+import { LiveClassStudio } from "@/components/live-class-studio";
+import { formatLiveTime, liveClassFlashcards, liveClassTranscript, type LiveClassSession } from "@/lib/live-class";
 
 type Tab = "dashboard" | "today" | "journeys" | "mapping" | "themes" | "review" | "evolution" | "sessions" | "plans";
 type TopicStatus = LearningTopicStatus;
@@ -171,6 +173,7 @@ type DashboardState = {
   documents: StudyDocument[];
   journeys: JourneyRecord[];
   skillTracks: SkillTrack[];
+  liveClasses: LiveClassSession[];
 };
 
 const initialMapping: Mapping = {
@@ -465,6 +468,7 @@ export function StudyHub({
   const [documents, setDocuments] = useState<StudyDocument[]>([]);
   const [journeys, setJourneys] = useState<JourneyRecord[]>([]);
   const [skillTracks, setSkillTracks] = useState<SkillTrack[]>([]);
+  const [liveClasses, setLiveClasses] = useState<LiveClassSession[]>([]);
   const [editingActivityId, setEditingActivityId] = useState<number | null>(null);
   const [activityMenuId, setActivityMenuId] = useState<number | null>(null);
   const [planSessionMenuId, setPlanSessionMenuId] = useState<string | null>(null);
@@ -507,6 +511,7 @@ export function StudyHub({
         if (Array.isArray(state.documents)) setDocuments(state.documents);
         if (Array.isArray(state.journeys)) setJourneys(state.journeys);
         if (Array.isArray(state.skillTracks)) setSkillTracks(state.skillTracks);
+        if (Array.isArray(state.liveClasses)) setLiveClasses(state.liveClasses);
       } else if (!authEnabled) {
         const stored = window.localStorage.getItem("nexo-goals-v1");
         if (stored) setGoals(JSON.parse(stored));
@@ -583,7 +588,8 @@ export function StudyHub({
     documents,
     journeys,
     skillTracks,
-  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks]);
+    liveClasses,
+  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks, liveClasses]);
 
   useEffect(() => {
     if (!storageReady || (cloudEnabled && !cloudLoaded)) return;
@@ -632,6 +638,7 @@ export function StudyHub({
           if (Array.isArray(state.documents)) setDocuments(state.documents);
           if (Array.isArray(state.journeys)) setJourneys(state.journeys);
           setSkillTracks(Array.isArray(state.skillTracks) ? state.skillTracks : []);
+          setLiveClasses(Array.isArray(state.liveClasses) ? state.liveClasses : []);
         }
         setCloudStatus(state ? "saved" : "saving");
         if (!cancelled) setCloudLoaded(true);
@@ -1723,6 +1730,54 @@ export function StudyHub({
     }
   }
 
+  function createLiveClassReview(session: LiveClassSession) {
+    const segments = session.segments.filter(segment => segment.status === "ready" && segment.flashcards.length);
+    if (!segments.length) {
+      setNotice("Esta aula ainda não possui flashcards prontos para revisar.");
+      return;
+    }
+    const pathId = `path-live-${session.id}`;
+    const updatedAt = new Date().toISOString();
+    const path: LearningPath = {
+      id: pathId,
+      title: `Aula ao vivo — ${session.title}`,
+      createdAt: session.createdAt,
+      updatedAt,
+      units: [{
+        id: `unit-live-${session.id}`,
+        title: session.title,
+        description: "Revisão criada a partir dos trechos transcritos desta aula.",
+        objective: "Recuperar os conceitos explicados durante a aula.",
+        references: segments.map(segment => `${formatLiveTime(segment.start)}–${formatLiveTime(segment.end)}`),
+        lessons: segments.map(segment => ({
+          id: `lesson-live-${segment.id}`,
+          title: `${formatLiveTime(segment.start)} · ${segment.title}`,
+          description: segment.explanation,
+          difficulty: "intermediario",
+          xp: Math.max(20, segment.flashcards.length * 10),
+          studyNotes: segment.explanation,
+          keyConcepts: segment.keyPoints,
+          references: [`${session.title} · ${formatLiveTime(segment.start)}–${formatLiveTime(segment.end)}`],
+          exercises: segment.flashcards.map(card => ({
+            id: `exercise-live-${card.id}`,
+            type: "flashcard",
+            prompt: card.front,
+            options: [],
+            answer: card.back,
+            explanation: `${card.back}\n\nOrigem: ${session.title}, ${formatLiveTime(card.sourceStart)}–${formatLiveTime(card.sourceEnd)}.`,
+            sourceReference: `${session.title} · ${formatLiveTime(card.sourceStart)}–${formatLiveTime(card.sourceEnd)}`,
+          })),
+        })),
+      }],
+    };
+    setLearningPaths(current => [path, ...current.filter(item => item.id !== pathId)]);
+    setLearningProgress(current => ({ ...current, [pathId]: current[pathId] || { ...emptyPathProgress } }));
+    setFlashcards(current => [...liveClassFlashcards(session).map(card => ({ front: card.front, back: card.back, topic: `${card.topic} · ${formatLiveTime(card.sourceStart)}` })), ...current]);
+    setTranscript(liveClassTranscript(session));
+    setTab("review");
+    setNotice("A aula foi transformada em uma unidade da Revisão Ativa.");
+  }
+
   async function sendChat(event: FormEvent) {
     event.preventDefault();
     const message = chatText.trim();
@@ -2164,6 +2219,7 @@ export function StudyHub({
         {tab === "sessions" && (
           <div className="sessions-page">
             {timerPanel}
+            <LiveClassStudio sessions={liveClasses} setSessions={setLiveClasses} onCreateReview={createLiveClassReview} />
             <section className="session-creator panel dark-panel">
               <div className="creator-copy">
                 <span className="eyebrow lime">NOVA SESSÃO INTELIGENTE</span>
