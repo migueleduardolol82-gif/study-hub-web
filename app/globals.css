@@ -1376,3 +1376,44 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .hli-history { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
 .hli :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 @media (max-width: 700px) { .hli-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; } .hli-tracks, .hli-form { grid-template-columns: 1fr; } .hli-toolbar button { flex-grow: 1; } }
+
+/* Ascensão: leitura e controles confortáveis sem reduzir a página no celular. */
+@media (max-width: 700px) {
+  .evolution-page { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+  .evolution-page :where(section, article, form, fieldset, label, div, p) { min-width: 0; }
+  .evolution-page :where(p, li, label, small, strong, span, a, button) { overflow-wrap: anywhere; }
+  .evolution-page :is(p, li, label, small, .eyebrow, .source-help, .mission-note, .archetype-lock) { font-size: 14px; line-height: 1.6; }
+  .evolution-page :is(p strong, article strong, label > span, .requirements-list strong, .archetype-name strong, .archetype-selection-summary strong) { font-size: 16px; line-height: 1.45; }
+  .evolution-page :is(input, select, textarea) { min-width: 0; max-width: 100%; font-size: 16px; }
+  .evolution-page button { min-height: 44px; font-size: 14px; white-space: normal; }
+  .evolution-page :is(.icon-button, .activity-menu-button) { min-width: 44px; }
+  .evolution-page :is(.evolution-top-grid, .activity-fields-grid, .archetype-detail, .archetype-cards, .archetype-ai-form, .archetype-selection-summary, .assessment-form-grid, .assessment-insights, .knowledge-list, .daily-protocol-grid, .weekly-archetype-path, .case-models) { grid-template-columns: minmax(0, 1fr); }
+  .evolution-page :is(.panel-heading, .archetype-header, .daily-path-heading, .assessment-actions) { flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+  .evolution-page :is(.archetype-detail-intro, .roadmap-column, .daily-archetype-path) { padding: 20px 16px; }
+  .evolution-page :is(.archetype-name small, .archetype-selection-summary strong, .skills-grid article small) { white-space: normal; overflow: visible; text-overflow: clip; }
+  .evolution-page .archetype-card-head { grid-template-columns: auto minmax(0, 1fr); }
+  .evolution-page .archetype-role-actions { grid-template-columns: minmax(0, 1fr); }
+  .evolution-page .archetype-context { grid-column: auto; }
+  .evolution-page :is(.weekly-archetype-path article, .daily-protocol-grid button) { padding: 16px; }
+  .evolution-page .weekly-archetype-path article > span { font-size: 14px; }
+  .evolution-page .weekly-archetype-path ul { padding-left: 18px; gap: 8px; }
+  .evolution-page .roadmap-timeline article { grid-template-columns: 32px minmax(0, 1fr); gap: 10px; }
+  .evolution-page .roadmap-node { width: 32px; height: 32px; }
+  .evolution-page .roadmap-timeline::before { left: 15px; }
+  .evolution-page .roadmap-timeline article > div > span { font-size: 14px; }
+  .evolution-page .roadmap-timeline h4 { font-size: 18px; line-height: 1.4; }
+  .evolution-page .requirements-list > div > div:first-child { flex-wrap: wrap; gap: 8px; font-size: 14px; }
+  .evolution-page .personality-list button { width: 44px; height: 44px; flex-shrink: 0; }
+  .evolution-page .personality-list > div > span { flex-wrap: wrap; }
+  .evolution-page .assessment-actions > span { width: 100%; font-size: 14px; }
+  .evolution-page .assessment-steps span { font-size: 14px; }
+  .evolution-page .assessment-steps span i { flex-shrink: 0; }
+  .evolution-page .evolution-history-list > div { flex-wrap: wrap; padding-block: 14px; }
+  .evolution-page .evolution-history-list p { flex: 1 1 150px; }
+  .evolution-page .evolution-history-list .history-icon { flex-shrink: 0; }
+  .evolution-page .hli-history { flex-wrap: wrap; }
+  .evolution-page .hli-metrics { grid-template-columns: minmax(0, 1fr); }
+  .evolution-page .hli-metrics article { padding-block: 12px; border-bottom: 1px solid var(--line); }
+  .evolution-page .hli-metrics article > strong { font-size: 30px; }
+  .evolution-page .hli-score > strong { font-size: 36px; }
+}
