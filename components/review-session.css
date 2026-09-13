@@ -36,7 +36,11 @@
 .review-app-actions button:last-child { flex: 1; color: #111706; background: #ceff58; border-color: #ceff58; font-weight: 750; }
 .review-result { overflow-wrap: anywhere; }
 .review-result details { margin: 16px 0; padding: 14px 0; border-bottom: 1px solid #363a42; }
-.review-teaching { display: grid; gap: 18px; }
+.review-teaching { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 18px; }
+.review-teaching > *, .review-teaching-card > *, .review-app-scroll > * { min-width: 0; max-width: 100%; }
+.review-app-scroll { width: 100%; min-width: 0; }
+.review-teaching-card { width: 100%; overflow-wrap: anywhere; }
+.review-teaching-card :is(p, li, th, td) { overflow-wrap: anywhere; white-space: normal; }
 .review-lesson-step { width: fit-content; padding: 7px 10px; color: #c8ff55; background: #1d2615; border-radius: 8px; font-size: .72rem; font-weight: 850; letter-spacing: .1em; }
 .review-teaching-card { padding: clamp(20px, 4vw, 34px); background: #f7f8fa; border-radius: 24px; color: #111827; box-shadow: 0 18px 55px rgba(0,0,0,.2); }
 .review-teaching-card h2 { margin: 0 0 20px; color: #0d1528; font-size: clamp(1.75rem, 5vw, 2.6rem); line-height: 1.12; letter-spacing: -.035em; }
@@ -56,7 +60,7 @@
 .review-memory-tip { background: #fff7d6; border: 1px solid #eadb99; }
 .review-memory-tip h3::before { content: "DICA  "; color: #9a6b00; font-size: .72rem; letter-spacing: .08em; }
 .review-teaching-card .review-source { margin: 22px 0 0; color: #657084; font-size: .78rem; }
-.review-explain-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.review-explain-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .review-explain-actions button { background: #15191f; }
 .review-explain-actions button:last-child { grid-column: 1 / -1; }
 .review-understood { width: 100%; color: #111706 !important; background: #ceff58 !important; border-color: #ceff58 !important; font-weight: 800 !important; }
@@ -203,4 +207,27 @@
   .review-creator { padding-inline: 16px; }
   .review-preview > article { grid-template-columns: 1fr; }
   .review-preview article > div { justify-content: flex-start; }
+}
+
+/* Keep teaching content within the phone viewport, including long tables. */
+@media (max-width: 600px) {
+  .review-app { width: 100%; max-width: 100%; }
+  .review-app-header { gap: 10px; padding-inline: 12px; }
+  .review-app-header small { font-size: 12px; }
+  .review-app-header strong { font-size: 16px; }
+  .review-app-header > button { flex-shrink: 0; padding: 10px 12px; }
+  .review-app-scroll { padding: 18px 12px; }
+  .review-question-meta { font-size: 12px; margin-bottom: 12px; }
+  .review-question-meta > small { min-width: 0; }
+  .review-question-meta > span { flex-shrink: 0; white-space: nowrap; }
+  .review-teaching { gap: 14px; }
+  .review-teaching-card { padding: 20px 16px; border-radius: 18px; }
+  .review-teaching-card h2 { font-size: 24px; line-height: 1.25; margin-bottom: 16px; }
+  .review-teaching-card :is(p, li) { font-size: 16px; line-height: 1.6; }
+  .review-key-points, .review-example, .review-memory-tip { padding: 14px; }
+  .review-comparison { width: 100%; margin-inline: 0; }
+  .review-comparison table { min-width: 0; table-layout: fixed; }
+  .review-comparison :is(th, td) { padding: 10px 8px; font-size: 14px; }
+  .review-explain-actions { grid-template-columns: minmax(0, 1fr); }
+  .review-app-actions { padding-inline: 12px; }
 }
