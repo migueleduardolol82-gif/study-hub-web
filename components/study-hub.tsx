@@ -57,6 +57,9 @@ import { StudyMapsLibrary, ThemesWorkspace } from "@/components/content-workspac
 import { RankAssessment } from "@/components/rank-assessment";
 import { ApiClientError, readApiResponse } from "@/lib/api-contract";
 import { professionalAreas, type AssessmentResult, type ProfessionalArea, type SkillKey, type SkillLevels } from "@/lib/assessment";
+import { emptyRoutine, normalizeRoutine, due, complete, entryFor, localDate, type RoutineState } from "@/lib/routine";
+import { RoutineWorkspace } from "@/components/routine-workspace";
+import { AscensionPlan } from "@/components/ascension-plan";
 import type { GeneratedArchetype } from "@/lib/archetypes";
 import { emptyPathProgress, type ContentMapping, type LearningPath, type LearningTopic, type PathProgress, type StudyMapRecord, type ThemeRecord, type TopicPriority as LearningTopicPriority, type TopicStatus as LearningTopicStatus } from "@/lib/learning";
 import type { StudyDocument } from "@/lib/study-documents";
@@ -150,6 +153,8 @@ type Archetype = {
 };
 
 type DashboardState = {
+  routine?: RoutineState;
+  tertiaryArchetypeId?: string;
   version: 6;
   goals: Goal[];
   studyPlans: StudyPlanRecord[];
@@ -355,7 +360,7 @@ const tabs: { id: Tab; label: string; icon: typeof BarChart3 }[] = [
 ];
 
 const viewLabels: Record<Tab, string> = {
-  dashboard: "Início", study: "Estudar", mentor: "Mentor", profile: "Perfil", today: "Hoje", journeys: "Jornadas",
+  dashboard: "Início", study: "Estudar", mentor: "Mentor", profile: "Perfil", today: "Rotina", journeys: "Jornadas",
   mapping: "Mapas preservados", themes: "Temas preservados", review: "Revisão Ativa", evolution: "Evolução", sessions: "Aulas e estudos", plans: "Planos",
 };
 
@@ -442,6 +447,9 @@ export function StudyHub({
   const [activityThemeId, setActivityThemeId] = useState("");
   const [activityStatus, setActivityStatus] = useState<NonNullable<EvolutionLog["status"]>>("completed");
   const [selectedArchetype, setSelectedArchetype] = useState("sage");
+  const [routine, setRoutine] = useState<RoutineState>(emptyRoutine);
+  const [tertiaryArchetype, setTertiaryArchetype] = useState("");
+  const [ascensionView, setAscensionView] = useState("overview");
   const [secondaryArchetype, setSecondaryArchetype] = useState("entrepreneur");
   const [generatedArchetypes, setGeneratedArchetypes] = useState<GeneratedArchetype[]>([]);
   const [archetypeSummary, setArchetypeSummary] = useState("");
@@ -505,6 +513,8 @@ export function StudyHub({
         if (Array.isArray(state.dailyMissionChecks)) setDailyMissionChecks(state.dailyMissionChecks);
         if (typeof state.primaryArchetypeId === "string") setSelectedArchetype(state.primaryArchetypeId);
         if (typeof state.secondaryArchetypeId === "string") setSecondaryArchetype(state.secondaryArchetypeId);
+        setRoutine(normalizeRoutine(state.routine));
+        setTertiaryArchetype(state.tertiaryArchetypeId || "");
         if (Array.isArray(state.generatedArchetypes)) setGeneratedArchetypes(state.generatedArchetypes);
         if (typeof state.archetypeSummary === "string") setArchetypeSummary(state.archetypeSummary);
         if (state.archetypeArea) setArchetypeArea(state.archetypeArea);
@@ -579,6 +589,8 @@ export function StudyHub({
     evolutionLogs,
     assessmentResult,
     dailyMissionChecks,
+    routine,
+    tertiaryArchetypeId: tertiaryArchetype,
     primaryArchetypeId: selectedArchetype,
     secondaryArchetypeId: secondaryArchetype,
     generatedArchetypes,
@@ -604,7 +616,7 @@ export function StudyHub({
     journeys,
     skillTracks,
     liveClasses,
-  }), [goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks, liveClasses]);
+  }), [routine, tertiaryArchetype, goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks, liveClasses]);
 
   useEffect(() => {
     if (!storageReady || (cloudEnabled && !cloudLoaded)) return;
@@ -636,6 +648,8 @@ export function StudyHub({
           if (Array.isArray(state.dailyMissionChecks)) setDailyMissionChecks(state.dailyMissionChecks);
           if (typeof state.primaryArchetypeId === "string") setSelectedArchetype(state.primaryArchetypeId);
           if (typeof state.secondaryArchetypeId === "string") setSecondaryArchetype(state.secondaryArchetypeId);
+        setRoutine(normalizeRoutine(state.routine));
+        setTertiaryArchetype(state.tertiaryArchetypeId || "");
           if (Array.isArray(state.generatedArchetypes)) setGeneratedArchetypes(state.generatedArchetypes);
           if (typeof state.archetypeSummary === "string") setArchetypeSummary(state.archetypeSummary);
           if (state.archetypeArea) setArchetypeArea(state.archetypeArea);
@@ -841,6 +855,8 @@ export function StudyHub({
     completedEvolutionLogs.some((log) => log.type === "study"),
     completedEvolutionLogs.some((log) => log.type === "business" || log.type === "communication"),
   ].filter(Boolean).length;
+  const routineToday = routine.habits.filter(h => due(h, localDate(), routine));
+  const routinePending = routineToday.filter(h => !complete(entryFor(routine,h.id,localDate()))).length;
   const currentPath = learningPaths.find(path => learningProgress[path.id]?.reviewSession) || learningPaths[0];
   const currentPathProgress = currentPath ? learningProgress[currentPath.id] || emptyPathProgress : emptyPathProgress;
   const currentPathLessons = currentPath?.units.flatMap(unit => unit.lessons) || [];
@@ -879,6 +895,8 @@ export function StudyHub({
         if (Array.isArray(state.dailyMissionChecks)) setDailyMissionChecks(state.dailyMissionChecks);
         if (typeof state.primaryArchetypeId === "string") setSelectedArchetype(state.primaryArchetypeId);
         if (typeof state.secondaryArchetypeId === "string") setSecondaryArchetype(state.secondaryArchetypeId);
+        setRoutine(normalizeRoutine(state.routine));
+        setTertiaryArchetype(state.tertiaryArchetypeId || "");
         if (Array.isArray(state.generatedArchetypes)) setGeneratedArchetypes(state.generatedArchetypes);
         if (typeof state.archetypeSummary === "string") setArchetypeSummary(state.archetypeSummary);
         if (state.archetypeArea) setArchetypeArea(state.archetypeArea);
@@ -1458,13 +1476,15 @@ export function StudyHub({
   }
 
   function choosePrimaryArchetype(id: string) {
+    if (id === tertiaryArchetype) setTertiaryArchetype("");
     if (id === selectedArchetype) return;
     if (id === secondaryArchetype) setSecondaryArchetype(selectedArchetype);
     setSelectedArchetype(id);
   }
 
   function chooseSecondaryArchetype(id: string) {
-    if (id === secondaryArchetype) return;
+    if (id === tertiaryArchetype) setTertiaryArchetype("");
+    if (id === secondaryArchetype || (id === selectedArchetype && !secondaryArchetype)) return;
     if (id === selectedArchetype) setSelectedArchetype(secondaryArchetype);
     setSecondaryArchetype(id);
   }
@@ -1946,6 +1966,7 @@ export function StudyHub({
             <section className="home-today panel">
               <div className="home-section-title"><span>HOJE</span><button onClick={() => setTab("today")}>Ver agenda</button></div>
               <div className="home-action-list">
+                {routineToday.length > 0 && <button onClick={() => setTab("today")}><span className="home-action-icon green"><CheckCircle2 /></span><span><strong>{routinePending ? `${routinePending} hábitos pendentes` : "Rotina de hoje concluída"}</strong><small>{routineToday.length-routinePending} de {routineToday.length} atividades</small></span><ArrowRight /></button>}
                 {dueReviews > 0 && <button onClick={() => setTab("review")}><span className="home-action-icon purple"><BrainCircuit /></span><span><strong>{dueReviews} conceitos para revisar</strong><small>Revisão espaçada disponível agora</small></span><ArrowRight /></button>}
                 {nextPlanSession && <button onClick={() => setTab("plans")}><span className="home-action-icon blue"><CalendarDays /></span><span><strong>{nextPlanSession.topic}</strong><small>{nextPlanSession.minutes} min · próximo item do plano</small></span><ArrowRight /></button>}
                 {todayJourneyActions.filter(item => !item.done).slice(0, 2).map(item => <button key={item.id} onClick={() => setTab("today")}><span className="home-action-icon amber"><Target /></span><span><strong>{item.title}</strong><small>{item.minutes} min · atividade de hoje</small></span><ArrowRight /></button>)}
@@ -1963,15 +1984,16 @@ export function StudyHub({
           </div>
         )}
 
-        {tab === "study" && <div className="study-hub-page"><section className="study-hub-hero"><span className="eyebrow lime">CENTRAL DE APRENDIZAGEM</span><h2>O que você quer fazer agora?</h2><p>Suas trilhas, aulas, materiais e planos em um só lugar.</p></section><section className="study-hub-primary panel"><button onClick={() => setTab("review")}><span><BrainCircuit /></span><div><small>REVISÃO ATIVA</small><strong>{currentPath ? `Continuar ${currentPath.title}` : "Criar uma trilha"}</strong><p>{currentPath ? `${currentPathCompletion}% concluído · ${currentPathMastery}% de domínio` : "Importe um material e comece a aprender."}</p></div><ArrowRight /></button></section><section className="study-area-grid"><button onClick={() => setTab("review")}><Layers3 /><span><strong>Trilhas</strong><small>{learningPaths.length} disponíveis</small></span></button><button onClick={() => setTab("sessions")}><Video /><span><strong>Aulas e estudos</strong><small>Timer, vídeo e transcrição</small></span></button><button onClick={() => setTab("plans")}><CalendarDays /><span><strong>Planos</strong><small>{studyPlans.length} salvos</small></span></button><button onClick={() => setTab("journeys")}><Target /><span><strong>Jornadas</strong><small>Metas de qualquer área</small></span></button><button onClick={() => setTab("mapping")}><ListChecks /><span><strong>Organização</strong><small>Mapas preservados</small></span></button><button onClick={() => setTab("themes")}><BookMarked /><span><strong>Temas</strong><small>Conteúdos preservados</small></span></button></section>{timerPanel}</div>}
+        {tab === "study" && <div className="study-hub-page"><section className="study-hub-hero"><span className="eyebrow lime">CENTRAL DE APRENDIZAGEM</span><h2>O que você quer fazer agora?</h2><p>Suas trilhas, aulas, materiais e planos em um só lugar.</p></section><section className="study-hub-primary panel"><button onClick={() => setTab("review")}><span><BrainCircuit /></span><div><small>REVISÃO ATIVA</small><strong>{currentPath ? `Continuar ${currentPath.title}` : "Criar uma trilha"}</strong><p>{currentPath ? `${currentPathCompletion}% concluído · ${currentPathMastery}% de domínio` : "Importe um material e comece a aprender."}</p></div><ArrowRight /></button></section><section className="study-area-grid"><button onClick={() => setTab("today")}><CheckCircle2 /><span><strong>Rotina</strong><small>Hoje, hábitos e habilidades</small></span></button><button onClick={() => setTab("review")}><Layers3 /><span><strong>Trilhas</strong><small>{learningPaths.length} disponíveis</small></span></button><button onClick={() => setTab("sessions")}><Video /><span><strong>Aulas e estudos</strong><small>Timer, vídeo e transcrição</small></span></button><button onClick={() => setTab("plans")}><CalendarDays /><span><strong>Planos</strong><small>{studyPlans.length} salvos</small></span></button><button onClick={() => setTab("journeys")}><Target /><span><strong>Jornadas</strong><small>Metas de qualquer área</small></span></button><button onClick={() => setTab("mapping")}><ListChecks /><span><strong>Organização</strong><small>Mapas preservados</small></span></button><button onClick={() => setTab("themes")}><BookMarked /><span><strong>Temas</strong><small>Conteúdos preservados</small></span></button></section>{timerPanel}</div>}
 
-        {tab === "today" && <TodayWorkspace journeys={journeys} setJourneys={setJourneys} />}
+        {tab === "today" && <RoutineWorkspace state={routine} onChange={setRoutine} tracks={skillTracks} archetypes={availableArchetypes} skills={<AscensionIndex tracks={skillTracks} onChange={setSkillTracks} journeys={journeys} xp={totalXp} />} legacy={<TodayWorkspace journeys={journeys} setJourneys={setJourneys} />} />}
 
         {tab === "journeys" && <JourneysWorkspace journeys={journeys} setJourneys={setJourneys} openLegacy={(view) => setTab(view)} />}
 
         {tab === "evolution" && (
           <div className="evolution-page">
-            <AscensionIndex tracks={skillTracks} onChange={setSkillTracks} journeys={journeys} xp={totalXp} />
+            <div className="ascension-increment"><header className="routine-heading"><h2>Ascensão</h2><button className="secondary-button" onClick={() => setTab("today")}>Rotina</button></header><nav className="routine-tabs" aria-label="Ascensão">{[["overview","Visão geral"],["plan","Plano"],["archetypes","Arquétipos"],["goals","Objetivos"],["evolution","Evolução"]].map(([id,label])=><button key={id} aria-current={ascensionView===id?"page":undefined} onClick={()=>setAscensionView(id)}>{label}</button>)}</nav><AscensionPlan view={ascensionView} state={routine} onChange={setRoutine} archetypes={availableArchetypes} ids={[selectedArchetype,secondaryArchetype,tertiaryArchetype]} onIds={ids=>{setSelectedArchetype(ids[0]);setSecondaryArchetype(ids[1]||"");setTertiaryArchetype(ids[2]||"");}} tracks={skillTracks} onView={setAscensionView} onRoutine={()=>setTab("today")} /></div>
+            {ascensionView === "evolution" && <><AscensionIndex tracks={skillTracks} onChange={setSkillTracks} journeys={journeys} xp={totalXp} />
             <section className="ascension-hero panel">
               <div className="rank-emblem" aria-label={`Rank ${evolutionRank}`}>
                 <span>RANK</span>
@@ -2101,12 +2123,14 @@ export function StudyHub({
               </div>
             </section>
 
+            </>}
+            {ascensionView === "archetypes" && <details className="archetype-section"><summary>Gerar opções com IA e explorar os caminhos existentes</summary>
             <section className="archetype-section">
               <div className="archetype-header">
                 <div>
                   <span className="eyebrow ascension-label"><Crown size={14} /> CAMINHOS DE MAESTRIA</span>
                   <h2>Construa uma combinação que faça sentido para sua área.</h2>
-                  <p>Escolha um arquétipo principal para direção e um secundário para ampliar sua forma de agir. Você pode mudar ambos sem perder XP, histórico ou atributos.</p>
+                  <p>Escolha até três arquétipos nas opções acima. Você pode mudar a combinação sem perder XP, histórico ou atributos.</p>
                 </div>
                 <div className="years-warning"><Clock3 size={20} /><span><strong>Horizonte real</strong><small>3 a 10 anos de evidências</small></span></div>
               </div>
@@ -2134,7 +2158,7 @@ export function StudyHub({
               <div className="archetype-selection-summary panel">
                 <div><span>PRINCIPAL</span><strong>{activeArchetype.name}</strong><small>Define direção, marcos e três ações diárias.</small></div>
                 <i>+</i>
-                <div><span>SECUNDÁRIO</span><strong>{activeSecondaryArchetype.name}</strong><small>Adiciona uma ação complementar ao sistema diário.</small></div>
+                <div><span>SECUNDÁRIO</span><strong>{secondaryArchetype ? activeSecondaryArchetype.name : "Não selecionado"}</strong><small>Adiciona uma ação complementar ao sistema diário.</small></div>
               </div>
 
               <div className="archetype-cards">
@@ -2158,7 +2182,7 @@ export function StudyHub({
                 <div className="archetype-detail-intro">
                   <div className="archetype-title-row">
                     <span><ActiveArchetypeIcon size={27} /></span>
-                    <div><span className="eyebrow">ARQUÉTIPO PRINCIPAL</span><h3>{activeArchetype.name}</h3><small className="secondary-label">Secundário: {activeSecondaryArchetype.name}</small></div>
+                    <div><span className="eyebrow">ARQUÉTIPO PRINCIPAL</span><h3>{activeArchetype.name}</h3><small className="secondary-label">Secundário: {secondaryArchetype ? activeSecondaryArchetype.name : "Não selecionado"}</small></div>
                   </div>
                   <p>{activeArchetype.subtitle}</p>
                   {activeArchetype.rationale && <div className="archetype-rationale"><strong>Por que combina com seu perfil</strong><p>{activeArchetype.rationale}</p></div>}
@@ -2198,11 +2222,11 @@ export function StudyHub({
                   </div>
                 </div>
                 <section className="daily-archetype-path">
-                  <div className="daily-path-heading"><div><span className="eyebrow">PROTOCOLO HÍBRIDO</span><h3>O que fazer hoje: {activeArchetype.name} + {activeSecondaryArchetype.name}</h3></div><span suppressHydrationWarning>{new Date().toLocaleDateString("pt-BR", { weekday: "long" })}</span></div>
+                  <div className="daily-path-heading"><div><span className="eyebrow">PROTOCOLO HÍBRIDO</span><h3>O que fazer hoje: {activeArchetype.name} + {secondaryArchetype ? activeSecondaryArchetype.name : "Não selecionado"}</h3></div><span suppressHydrationWarning>{new Date().toLocaleDateString("pt-BR", { weekday: "long" })}</span></div>
                   <div className="daily-protocol-grid">
                     {[
                       ...activeArchetype.dailyProtocol.slice(0, 3).map((mission, index) => ({ mission, index, archetype: activeArchetype, role: "Principal" })),
-                      ...activeSecondaryArchetype.dailyProtocol.slice(0, 1).map((mission, index) => ({ mission, index, archetype: activeSecondaryArchetype, role: "Secundário" })),
+                      ...(secondaryArchetype ? activeSecondaryArchetype.dailyProtocol : []).slice(0, 1).map((mission, index) => ({ mission, index, archetype: activeSecondaryArchetype, role: "Secundário" })),
                     ].map(({ mission, index, archetype, role }) => {
                       const missionId = `${new Date().toISOString().slice(0, 10)}-${archetype.id}-${index}`;
                       const done = dailyMissionChecks.includes(missionId);
@@ -2220,7 +2244,8 @@ export function StudyHub({
               </div>
             </section>
 
-            <section className="evolution-history panel">
+            </details>}
+            {ascensionView === "evolution" && <section className="evolution-history panel">
               <div className="panel-heading"><div><span className="eyebrow">HISTÓRICO DE ESFORÇO</span><h3>As evidências da sua construção</h3></div><span>{evolutionLogs.length} registros</span></div>
               {evolutionLogs.length ? (
                 <div className="evolution-history-list">
@@ -2237,7 +2262,7 @@ export function StudyHub({
               ) : (
                 <div className="history-empty"><Shield size={27} /><p><strong>Sua história começa com a primeira evidência.</strong><small>Registre uma leitura, treino ou sessão de trabalho acima.</small></p></div>
               )}
-            </section>
+            </section>}
           </div>
         )}
 
