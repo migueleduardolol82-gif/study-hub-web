@@ -17,8 +17,8 @@ export const outlineSchema = {
 export const lessonContentSchema = {
   type: "object", additionalProperties: false, required: ["studyNotes", "summary", "keyConcepts", "examples", "commonErrors", "references", "exercises"],
   properties: { studyNotes: string, summary: string, keyConcepts: { type: "array", items: string, maxItems: 12 }, examples: { type: "array", items: string, maxItems: 8 }, commonErrors: { type: "array", items: string, maxItems: 8 }, references: { type: "array", items: string, maxItems: 12 }, exercises: { type: "array", minItems: 4, maxItems: 10, items: {
-    type: "object", additionalProperties: false, required: ["type", "prompt", "options", "answer", "explanation", "optionExplanations", "sourceReference"],
-    properties: { type: { type: "string", enum: exerciseKinds }, prompt: string, options: { type: "array", items: string, maxItems: 8 }, answer: string, explanation: string, optionExplanations: { type: "array", items: string, maxItems: 8 }, sourceReference: string },
+    type: "object", additionalProperties: false, required: ["type", "prompt", "options", "answer", "explanation", "optionExplanations", "sourceReference", "essentialCriteria", "concept", "difficulty", "teaching", "example"],
+    properties: { type: { type: "string", enum: exerciseKinds }, prompt: string, options: { type: "array", items: string, maxItems: 8 }, answer: string, explanation: string, optionExplanations: { type: "array", items: string, maxItems: 8 }, sourceReference: string, essentialCriteria: { type: "array", minItems: 1, maxItems: 12, items: string }, concept: string, difficulty, teaching: string, example: string },
   } } },
 };
 
@@ -65,7 +65,17 @@ export function validateLessonContent(value: unknown): Omit<import("./learning.t
     }
     const optionExplanations = Array.isArray(exercise.optionExplanations) ? exercise.optionExplanations.map((item) => String(item).trim()).filter(Boolean) : [];
     if (options.length && optionExplanations.length !== options.length) throw new Error("Explanações das alternativas inválidas.");
-    return { id: `exercise-${crypto.randomUUID()}`, type, options, answer, prompt: field(exercise, "prompt"), explanation: field(exercise, "explanation", 4000), optionExplanations, sourceReference: field(exercise, "sourceReference", 500) };
+    const essentialCriteria = exercise.essentialCriteria;
+    if (essentialCriteria !== undefined && (!Array.isArray(essentialCriteria) || !essentialCriteria.length || essentialCriteria.length > 12 || essentialCriteria.some(p => typeof p !== "string" || !p.trim() || p.length > 1000))) throw new Error("Critérios essenciais inválidos.");
+    if (exercise.difficulty !== undefined && !difficulty.enum.includes(String(exercise.difficulty))) throw new Error("Dificuldade da questão inválida.");
+    return { id: `exercise-${crypto.randomUUID()}`, type, options, answer, prompt: field(exercise, "prompt"), explanation: field(exercise, "explanation", 4000), optionExplanations, sourceReference: field(exercise, "sourceReference", 500), essentialCriteria: essentialCriteria as string[] | undefined, concept: exercise.concept === undefined ? undefined : field(exercise, "concept", 200), difficulty: exercise.difficulty as ThemeDifficulty | undefined, teaching: exercise.teaching === undefined ? undefined : field(exercise, "teaching", 3000), example: exercise.example === undefined ? undefined : field(exercise, "example", 3000) };
   });
   return { studyNotes: field(value, "studyNotes", 12000), summary: field(value, "summary", 3000), keyConcepts: readList("keyConcepts", 12), examples: readList("examples", 8), commonErrors: readList("commonErrors", 8), references: readList("references", 12), exercises };
+}
+
+// Ten is a batch size, never a cap on the saved lesson bank.
+export const questionBatchSchema = { type: "object", additionalProperties: false, required: ["exercises"], properties: { exercises: lessonContentSchema.properties.exercises } };
+export function validateQuestionBatch(value: unknown) {
+  if (!isRecord(value)) throw new Error("Lote inválido.");
+  return { exercises: validateLessonContent({ studyNotes: "Lote adicional", summary: "Lote adicional", keyConcepts: [], examples: [], commonErrors: [], references: [], exercises: value.exercises }).exercises };
 }

@@ -72,6 +72,22 @@ export type LearningExercise = {
   explanation: string;
   optionExplanations?: string[];
   sourceReference?: string;
+  essentialCriteria?: string[];
+  concept?: string;
+  difficulty?: ThemeDifficulty;
+  teaching?: string;
+  example?: string;
+};
+
+export type LearningConcept = {
+  id: string;
+  unitId: string;
+  topic: string;
+  title: string;
+  essentialCriteria: string[];
+  exerciseIds: string[];
+  flashcardIds: string[];
+  sourceReferences: string[];
 };
 
 export type LearningLesson = {
@@ -87,6 +103,8 @@ export type LearningLesson = {
   examples?: string[];
   commonErrors?: string[];
   references?: string[];
+  preparation?: "waiting" | "processing" | "ready" | "error";
+  preparationError?: string;
 };
 
 export type LearningUnit = {
@@ -112,6 +130,7 @@ export type LearningPath = {
   unlockAll?: boolean;
   documentIds?: string[];
   source?: { theme: string; goal: string; topics: string[]; content: string; difficulty: ThemeDifficulty };
+  knowledgeBase?: { version: 1; concepts: LearningConcept[]; updatedAt: string };
 };
 
 export type ExerciseAttempt = { selected: string; correct: string; wasCorrect: boolean };
@@ -125,6 +144,9 @@ export type PathProgress = {
   achievements: string[];
   mastery?: Record<string, number>;
   speedRecords?: Record<string, number>;
+  reviewSession?: import("./review-engine.ts").ReviewSession;
+  reviewHistory?: import("./review-engine.ts").ReviewAttempt[];
+  conceptMastery?: Record<string, { correct: number; answered: number; streak: number; dueAt: string; lastReviewedAt?: string; mastery?: number }>;
 };
 
 export const emptyPathProgress: PathProgress = {

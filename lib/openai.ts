@@ -3,6 +3,8 @@ export const OPENAI_API_URL = "https://api.openai.com/v1";
 import { getNestedMessage, isRecord, parseJsonSafely, SafeJsonError } from "./safe-json.ts";
 
 export type OpenAIErrorCode =
+  | "AUTH_REQUIRED"
+  | "GENERATION_IN_PROGRESS"
   | "OPENAI_KEY_MISSING"
   | "OPENAI_AUTH_FAILED"
   | "OPENAI_RATE_LIMIT"
@@ -66,6 +68,7 @@ async function createTextResponseAttempt({
   timeoutMs = 55_000,
   maxOutputTokens,
   signal,
+  onUsage,
 }: {
   instructions: string;
   input: string;
@@ -74,6 +77,7 @@ async function createTextResponseAttempt({
   timeoutMs?: number;
   maxOutputTokens?: number;
   signal?: AbortSignal;
+  onUsage?: (usage: unknown) => void;
 }) {
   const model = process.env.OPENAI_TEXT_MODEL || "gpt-5-mini";
   const body: Record<string, unknown> = {
@@ -154,6 +158,7 @@ async function createTextResponseAttempt({
     throw new OpenAIRequestError("OPENAI_UNAVAILABLE", "A IA não conseguiu processar esta solicitação agora.", response.status, response.status >= 500, technical);
   }
 
+  if (isRecord(payload) && payload.usage) onUsage?.({ model, responseId: payload.id, usage: payload.usage });
   if (isRecord(payload) && payload.status === "incomplete" && isRecord(payload.incomplete_details) && payload.incomplete_details.reason === "max_output_tokens") {
     throw new OpenAIRequestError("AI_OUTPUT_LIMIT", "O conteúdo excedeu o tamanho desta etapa. Tente gerar menos unidades por vez.", 502, true,
       `Output limit reached: ${JSON.stringify({ responseId: payload.id, maxOutputTokens, usage: payload.usage })}`);

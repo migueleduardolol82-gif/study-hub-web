@@ -29,7 +29,7 @@ try {
   const home = await waitUntilReady();
   const html = await home.text();
   assert.match(html, /NEXO/);
-  assert.match(html, /Mapas de Estudos/);
+  assert.match(html, /Jornadas|Mapas de Estudos/);
   assert.match(html, /Revisão Ativa/);
 
   const signIn = await fetch(`http://127.0.0.1:${port}/sign-in`);
@@ -76,6 +76,9 @@ try {
   assert.equal((await invalidShape.json()).error.code, "INVALID_REQUEST");
 
   for (const [route, body] of [
+    ["/api/learning/grade", {question:"Defina reavaliação",answer:"Recalcular o valor",referenceAnswer:"Reavaliação do valor",criteria:["Reavaliar"]}],
+    ["/api/learning/tutor", {question:"Explique o conceito",material:"Conteúdo da lição",context:"Questão atual"}],
+    ["/api/learning/generate", {theme:"Álgebra", mode:"bank", lessonTitle:"Equações",studyNotes:"Equações de primeiro grau"}],
     ["/api/learning/generate", {theme:"Álgebra", mode:"outline"}],
     ["/api/learning/generate", {theme:"Álgebra", mode:"lesson", lessonTitle:"Equações"}],
     ["/api/topics/generate", {request:"Aprender álgebra"}],
