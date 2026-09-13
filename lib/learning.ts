@@ -77,6 +77,9 @@ export type LearningExercise = {
   difficulty?: ThemeDifficulty;
   teaching?: string;
   example?: string;
+  teachingHighlights?: string[];
+  memoryTip?: string;
+  comparisonRows?: Array<{ term: string; explanation: string }>;
 };
 
 export type LearningConcept = {

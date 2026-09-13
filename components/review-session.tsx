@@ -8,6 +8,30 @@ import { validateSemanticGrade, type SemanticGrade } from "@/lib/semantic-gradin
 import { validateTutorAnswer, type TutorAnswer } from "@/lib/learning-tutor";
 
 type Props = { path: LearningPath; progress: PathProgress; session: Session; setProgress: React.Dispatch<React.SetStateAction<Record<string, PathProgress>>>; onClose: () => void };
+type TutorStyle = "child" | "detailed" | "question";
+type TutorPanelProps = {
+  open: boolean;
+  style: TutorStyle;
+  question: string;
+  answer: TutorAnswer | null;
+  busy: boolean;
+  error: string;
+  onQuestionChange: (value: string) => void;
+  onAsk: () => void;
+};
+
+function TutorPanel({ open, style, question, answer, busy, error, onQuestionChange, onAsk }: TutorPanelProps) {
+  if (!open) return null;
+  const title = style === "child" ? "Explicação simples" : style === "detailed" ? "Explicação aprofundada" : "Tutor da trilha";
+  return <div className="review-tutor-panel">
+    <p>O tutor usa esta lição como fonte principal e identifica qualquer complemento externo.</p>
+    <label><span>Sua dúvida</span><textarea value={question} onChange={event => onQuestionChange(event.target.value)} maxLength={3000} placeholder="Ex.: explique de outro jeito ou dê um exemplo." /></label>
+    <button disabled={busy || !question.trim()} onClick={onAsk}>{busy ? "Explicando…" : "Perguntar"}</button>
+    {error && <p role="alert" className="review-tutor-error">{error}</p>}
+    {answer && <article aria-live="polite"><h4>{title}</h4><p>{answer.fromMaterial || "O material não traz informação suficiente para responder."}</p>{answer.complement && <><h4>Complementação da IA</h4><p>{answer.complement}</p></>}{answer.caveat && <p><small>{answer.caveat}</small></p>}{answer.suggestedQuestion && <p><b>Para testar:</b> {answer.suggestedQuestion}</p>}</article>}
+  </div>;
+}
+
 // Read the wall clock at event time, never while computing a rendered verdict.
 const eventTime = () => Date.now();
 export function ReviewSession({ path, progress, session, setProgress, onClose }: Props) {
@@ -23,6 +47,7 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
   const [tutorAnswer, setTutorAnswer] = useState<TutorAnswer | null>(null);
   const [tutorBusy, setTutorBusy] = useState(false);
   const [tutorError, setTutorError] = useState("");
+  const [tutorStyle, setTutorStyle] = useState<TutorStyle>("question");
   const request = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const enteredAt = useRef(0);
@@ -87,20 +112,21 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
     if (grading) return;
     if (expired || session.index + 1 >= session.items.length) { finish(skip && current ? { ...session, skipped: [...session.skipped, current.exerciseId] } : session); return; }
     update({ index: session.index + 1, draft: "", revealed: false, taught: false, skipped: skip && current ? [...session.skipped, current.exerciseId] : session.skipped });
-    setDraft(""); setRevealed(false); setTaught(false); setError(""); setTutorOpen(false); setTutorQuestion(""); setTutorAnswer(null); setTutorError(""); enteredAt.current = Date.now(); scroll.current?.scrollTo({ top: 0, behavior: "instant" });
+    setDraft(""); setRevealed(false); setTaught(false); setError(""); setTutorOpen(false); setTutorQuestion(""); setTutorAnswer(null); setTutorError(""); setTutorStyle("question"); enteredAt.current = Date.now(); scroll.current?.scrollTo({ top: 0, behavior: "instant" });
   }
   function close() {
     request.current?.abort();
     update({ draft, revealed, taught, ...(session.mode === "speed" && !session.finished ? { remainingSeconds: seconds, deadline: undefined } : {}) });
     onClose();
   }
-  async function askTutor(question = tutorQuestion) {
+  async function askTutor(question = tutorQuestion, style: TutorStyle = "question") {
     const clean = question.trim();
     if (!clean || !exercise || !row || tutorBusy) return;
-    setTutorQuestion(clean); setTutorBusy(true); setTutorError(""); setTutorAnswer(null);
+    setTutorOpen(true); setTutorStyle(style); setTutorQuestion(clean); setTutorBusy(true); setTutorError(""); setTutorAnswer(null);
     try {
       const answer = await requestAI<unknown>("/api/learning/tutor", {
         question: clean,
+        style,
         material: [row.lesson.studyNotes, row.lesson.description, exercise.sourceReference, exercise.explanation].filter(Boolean).join("\n\n").slice(0, 24000),
         context: JSON.stringify({ trail: path.title, unit: row.unit.title, concept: exercise.concept || row.lesson.title, currentQuestion: exercise.prompt, userAnswer: draft }).slice(0, 10000),
       });
@@ -109,6 +135,19 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
     finally { if (mounted.current) setTutorBusy(false); }
   }
 
+  const teaching = exercise && row ? exercise.teaching || row.lesson.studyNotes || row.lesson.description : "";
+  const teachingParagraphs = teaching.split(/\n{2,}/).map(paragraph => paragraph.trim()).filter(Boolean);
+  const teachingHighlights = exercise && row ? exercise.teachingHighlights?.length ? exercise.teachingHighlights : (exercise.essentialCriteria?.slice(0, 5) || row.lesson.keyConcepts?.slice(0, 5) || []) : [];
+  const lessonExamples = row?.lesson.examples || [];
+  const teachingExample = exercise ? exercise.example || lessonExamples[session.index % Math.max(lessonExamples.length, 1)] : "";
+  const memoryTip = exercise?.memoryTip || "";
+  const comparisonRows = exercise?.comparisonRows || [];
+  const openTutor = (style: TutorStyle) => {
+    if (style === "question") { setTutorStyle(style); setTutorOpen(true); setTutorAnswer(null); setTutorError(""); return; }
+    const prompt = style === "child" ? "Explique este conceito como para uma criança curiosa, usando uma analogia simples sem perder os pontos importantes." : "Aprofunde este conceito passo a passo, conectando causas, consequências e um exemplo prático.";
+    void askTutor(prompt, style);
+  };
+
   return <section className="review-app" aria-label="Sessão de revisão" style={viewport ? { top: viewport.top, height: viewport.height } : undefined}>
     <header className="review-app-header"><button onClick={close} aria-label="Salvar e sair da sessão">Sair</button><div><small>{path.title} · {modeLabels[session.mode]}</small><strong>{Math.min(session.index + 1, session.items.length)} / {session.items.length}</strong><progress value={session.finished ? session.items.length : session.index} max={session.items.length || 1} /></div>{session.mode === "speed" && <strong aria-label="Segundos restantes">{seconds}s</strong>}</header>
     <div className="review-app-scroll" ref={scroll}>
@@ -116,7 +155,24 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
       : !exercise || !row ? <div><h2>Esta questão não está mais disponível.</h2><p>O conteúdo pode ter sido editado. Seu histórico permanece salvo.</p><button onClick={() => next(true)}>Pular questão indisponível</button></div>
       : <article className="review-question" key={exercise.id}>
         <div className="review-question-meta"><small>{row.unit.title} · {exercise.concept || row.lesson.title}</small><span>Domínio {mastery}%</span></div>
-        {session.mode === "estudar" && !taught ? <div className="review-teaching"><h2>{exercise.concept || row.lesson.title}</h2><p>{exercise.teaching || row.lesson.studyNotes || row.lesson.description}</p>{exercise.example || row.lesson.examples?.length ? <><h3>Exemplo</h3><p>{exercise.example || row.lesson.examples?.[session.index % row.lesson.examples.length]}</p></> : null}<button onClick={() => setTaught(true)}>Praticar este conteúdo</button></div> : <>
+        {session.mode === "estudar" && !taught ? <div className="review-teaching">
+          <span className="review-lesson-step">APRENDA O CONCEITO</span>
+          <section className="review-teaching-card">
+            <h2>{exercise.concept || row.lesson.title}</h2>
+            <div className="review-teaching-copy">{teachingParagraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+            {teachingHighlights.length > 0 && <div className="review-key-points"><h3>Pontos essenciais</h3><ul>{teachingHighlights.map(point => <li key={point}>{point}</li>)}</ul></div>}
+            {comparisonRows.length > 0 && <div className="review-comparison" role="region" aria-label="Comparação do conteúdo"><table><thead><tr><th>Conceito</th><th>Como identificar</th></tr></thead><tbody>{comparisonRows.map(row => <tr key={`${row.term}:${row.explanation}`}><th scope="row">{row.term}</th><td>{row.explanation}</td></tr>)}</tbody></table></div>}
+            {teachingExample && <div className="review-example"><h3>Exemplo</h3><p>{teachingExample}</p></div>}
+            {memoryTip && <aside className="review-memory-tip"><h3>Dica para não esquecer</h3><p>{memoryTip}</p></aside>}
+            <p className="review-source">Fonte: {exercise.sourceReference || "conteúdo da trilha"}</p>
+          </section>
+          <div className="review-explain-actions" aria-label="Opções de explicação">
+            <button onClick={() => openTutor("child")}>Explique para uma criança</button>
+            <button onClick={() => openTutor("detailed")}>Mais detalhes</button>
+            <button onClick={() => openTutor("question")}>Fazer uma pergunta</button>
+          </div>
+          <TutorPanel open={tutorOpen} style={tutorStyle} question={tutorQuestion} answer={tutorAnswer} busy={tutorBusy} error={tutorError} onQuestionChange={setTutorQuestion} onAsk={() => void askTutor(tutorQuestion, tutorStyle)} />
+        </div> : <>
           <h2>{exercise.prompt}</h2>
           {flashcard ? <div className="review-flashcard">{!revealed ? <button onClick={() => setRevealed(true)}>Revelar resposta</button> : <><p>{exercise.answer}</p><div><button disabled={Boolean(attempt)} onClick={() => handleGrade({ correct: true, missingPoints: [], feedback: exercise.explanation, referenceAnswer: exercise.answer }, "Autoavaliação: lembrei", undefined, eventTime())}>Acertei</button><button disabled={Boolean(attempt)} onClick={() => handleGrade({ correct: false, missingPoints: [], feedback: exercise.explanation, referenceAnswer: exercise.answer }, "Autoavaliação: não lembrei", undefined, eventTime())}>Errei</button></div></>}</div>
           : exercise.type === "ordering" ? <div className="review-options"><p>Toque nos passos na ordem correta.</p>{current.optionOrder.map(i => <button key={i} disabled={grading || Boolean(attempt) || draft.split("|").includes(exercise.options[i])} onClick={() => setDraft(currentDraft => [currentDraft, exercise.options[i]].filter(Boolean).join("|"))}>{exercise.options[i]}</button>)}<p>Sua ordem: {draft.replaceAll("|", " → ")}</p><button disabled={grading || Boolean(attempt)} onClick={() => setDraft("")}>Refazer ordem</button></div>
@@ -125,10 +181,10 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
           : <label className="review-written"><span>Sua resposta</span><textarea autoComplete="off" maxLength={6000} value={draft} disabled={grading || Boolean(attempt)} onChange={e => setDraft(e.target.value)} onBlur={persistTransient} placeholder="Explique com suas palavras." /></label>}
           {error && <div role="alert" className="review-service-error"><p>{error}</p><button onClick={() => void check()} disabled={grading}>Tentar novamente</button></div>}
           {attempt && <section className={`review-verdict ${attempt.grade.correct ? "correct" : "wrong"}`} role="status"><h3>{attempt.grade.correct ? "Correto" : "Errado"}</h3>{session.mode !== "speed" && <><p>{attempt.grade.feedback}</p><h4>Resposta de referência</h4><p>{attempt.grade.referenceAnswer}</p><small>Esta é uma forma de responder, não a única aceita.</small>{exercise.optionExplanations?.length ? <details><summary>Por que cada alternativa?</summary>{exercise.options.map((o, i) => <p key={i}><b>{o}:</b> {exercise.optionExplanations?.[i]}</p>)}</details> : null}<p><small>Fonte: {exercise.sourceReference || "Referência não informada nesta questão."}</small></p></>}</section>}
-          {session.mode !== "speed" && <section className="review-tutor"><button onClick={() => setTutorOpen(value => !value)}>{tutorOpen ? "Fechar tutor" : "Perguntar à IA"}</button>{tutorOpen && <div><p>O tutor usa esta lição como fonte principal e separa qualquer complemento externo.</p><div className="review-tutor-chips"><button onClick={() => void askTutor("Explique este conceito de forma mais simples.")}>Simplificar</button><button onClick={() => void askTutor("Aprofunde este conceito tecnicamente.")}>Aprofundar</button><button onClick={() => void askTutor("Dê um exemplo prático deste conceito.")}>Exemplo</button></div><label><span>Sua dúvida</span><textarea value={tutorQuestion} onChange={event => setTutorQuestion(event.target.value)} maxLength={3000} placeholder="Ex.: por que esta alternativa está errada?" /></label><button disabled={tutorBusy || !tutorQuestion.trim()} onClick={() => void askTutor()}>{tutorBusy ? "Explicando…" : "Explicar"}</button>{tutorError && <p role="alert">{tutorError}</p>}{tutorAnswer && <article><h4>Segundo seu material</h4><p>{tutorAnswer.fromMaterial || "O material não traz informação suficiente para responder."}</p>{tutorAnswer.complement && <><h4>Complementação da IA</h4><p>{tutorAnswer.complement}</p></>}{tutorAnswer.caveat && <p><small>{tutorAnswer.caveat}</small></p>}{tutorAnswer.suggestedQuestion && <p><b>Para testar:</b> {tutorAnswer.suggestedQuestion}</p>}</article>}</div>}</section>}
+          {session.mode !== "speed" && <section className="review-tutor"><div className="review-tutor-chips"><button onClick={() => openTutor("child")}>Explique para uma criança</button><button onClick={() => openTutor("detailed")}>Mais detalhes</button><button onClick={() => tutorOpen ? setTutorOpen(false) : openTutor("question")}>{tutorOpen ? "Fechar tutor" : "Fazer uma pergunta"}</button></div><TutorPanel open={tutorOpen} style={tutorStyle} question={tutorQuestion} answer={tutorAnswer} busy={tutorBusy} error={tutorError} onQuestionChange={setTutorQuestion} onAsk={() => void askTutor(tutorQuestion, tutorStyle)} /></section>}
         </>}
       </article>}
     </div>
-    {!session.finished && <footer className="review-app-actions"><button disabled={grading || Boolean(attempt)} onClick={() => next(true)}>Pular</button>{expired ? <button onClick={() => finish()}>Finalizar Speed Run</button> : attempt ? <button onClick={() => next()}>{session.index + 1 === session.items.length ? "Concluir" : "Próxima"}</button> : <button disabled={grading || flashcard || !draft.trim() || session.mode === "estudar" && !taught} onClick={() => void check()}>{grading ? "Corrigindo…" : "Responder"}</button>}</footer>}
+    {!session.finished && <footer className="review-app-actions">{session.mode === "estudar" && !taught ? <button className="review-understood" onClick={() => { setTaught(true); setTutorOpen(false); scroll.current?.scrollTo({ top: 0, behavior: "smooth" }); }}>Entendi, continuar</button> : <><button disabled={grading || Boolean(attempt)} onClick={() => next(true)}>Pular</button>{expired ? <button onClick={() => finish()}>Finalizar Speed Run</button> : attempt ? <button onClick={() => next()}>{session.index + 1 === session.items.length ? "Concluir" : "Próxima"}</button> : <button disabled={grading || flashcard || !draft.trim()} onClick={() => void check()}>{grading ? "Corrigindo…" : "Responder"}</button>}</>}</footer>}
   </section>;
 }
