@@ -21,6 +21,7 @@ import {
   FileText,
   Flame,
   HardDrive,
+  Home,
   Layers3,
   Link2,
   ListChecks,
@@ -40,17 +41,18 @@ import {
   Trophy,
   TrendingUp,
   Upload,
+  UserRound,
   Video,
   X,
   Zap,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { AccountControl } from "@/components/account-control";
 import { StudyTimer, useStudyTimer } from "@/components/study-timer";
 import { initialTimer, restoreTimer, type TimerSnapshot } from "@/lib/study-timer";
 import { requestAI } from "@/lib/ai-client";
 import { buildStudySchedule, validMinutes, weekdays, type PlanBlueprint } from "@/lib/study-planning";
-import { ActiveReview } from "@/components/active-review";
 import { StudyMapsLibrary, ThemesWorkspace } from "@/components/content-workspaces";
 import { RankAssessment } from "@/components/rank-assessment";
 import { ApiClientError, readApiResponse } from "@/lib/api-contract";
@@ -60,14 +62,21 @@ import { emptyPathProgress, type ContentMapping, type LearningPath, type Learnin
 import type { StudyDocument } from "@/lib/study-documents";
 import { DocumentUploadPanel } from "@/components/document-upload-panel";
 import { analyzeStudyDocuments } from "@/lib/document-analysis-client";
-import { JourneysWorkspace, TodayWorkspace } from "@/components/journeys-workspace";
-import { AscensionIndex } from "@/components/ascension-index";
 import type { SkillTrack } from "@/lib/ascension-index";
 import { migrateStudyOrganizationToJourneys, journeyProgress, type JourneyRecord } from "@/lib/journeys";
-import { LiveClassStudio } from "@/components/live-class-studio";
 import { formatLiveTime, liveClassFlashcards, liveClassTranscript, type LiveClassSession } from "@/lib/live-class";
 
-type Tab = "dashboard" | "today" | "journeys" | "mapping" | "themes" | "review" | "evolution" | "sessions" | "plans";
+type Tab = "dashboard" | "study" | "mentor" | "profile" | "today" | "journeys" | "mapping" | "themes" | "review" | "evolution" | "sessions" | "plans";
+
+function WorkspaceSkeleton() {
+  return <div className="workspace-skeleton" aria-label="Carregando área"><span /><div><i /><i /><i /></div></div>;
+}
+
+const ActiveReview = dynamic(() => import("@/components/active-review").then(module => module.ActiveReview), { loading: WorkspaceSkeleton });
+const AscensionIndex = dynamic(() => import("@/components/ascension-index").then(module => module.AscensionIndex), { loading: WorkspaceSkeleton });
+const JourneysWorkspace = dynamic(() => import("@/components/journeys-workspace").then(module => module.JourneysWorkspace), { loading: WorkspaceSkeleton });
+const TodayWorkspace = dynamic(() => import("@/components/journeys-workspace").then(module => module.TodayWorkspace), { loading: WorkspaceSkeleton });
+const LiveClassStudio = dynamic(() => import("@/components/live-class-studio").then(module => module.LiveClassStudio), { loading: WorkspaceSkeleton });
 type TopicStatus = LearningTopicStatus;
 type TopicPriority = LearningTopicPriority;
 type Topic = LearningTopic;
@@ -338,14 +347,17 @@ const archetypes: Archetype[] = [
 ];
 
 const tabs: { id: Tab; label: string; icon: typeof BarChart3 }[] = [
-  { id: "dashboard", label: "Visão geral", icon: BarChart3 },
-  { id: "today", label: "Hoje", icon: CalendarDays },
-  { id: "journeys", label: "Jornadas", icon: Target },
-  { id: "review", label: "Revisão Ativa", icon: BrainCircuit },
-  { id: "evolution", label: "Ascensão", icon: Shield },
-  { id: "sessions", label: "Estudos", icon: Video },
-  { id: "plans", label: "Planos", icon: CalendarDays },
+  { id: "dashboard", label: "Início", icon: Home },
+  { id: "study", label: "Estudar", icon: BookOpen },
+  { id: "evolution", label: "Evolução", icon: Shield },
+  { id: "mentor", label: "Mentor", icon: Bot },
+  { id: "profile", label: "Perfil", icon: UserRound },
 ];
+
+const viewLabels: Record<Tab, string> = {
+  dashboard: "Início", study: "Estudar", mentor: "Mentor", profile: "Perfil", today: "Hoje", journeys: "Jornadas",
+  mapping: "Mapas preservados", themes: "Temas preservados", review: "Revisão Ativa", evolution: "Evolução", sessions: "Aulas e estudos", plans: "Planos",
+};
 
 function calculateCoverage(topics: Topic[]) {
   if (!topics.length) return 0;
@@ -388,6 +400,9 @@ export function StudyHub({
 }) {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [mobileNav, setMobileNav] = useState(false);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [timerSnapshot, setTimerSnapshot] = useState<TimerSnapshot>(() => initialTimer());
   const sessionMode = timerSnapshot.phase === "focus" ? "focus" : "break";
   const [goals, setGoals] = useState<Goal[]>(initialGoals);
@@ -688,6 +703,25 @@ export function StudyHub({
   }, [cloudEnabled, cloudLoaded, storageReady, dashboardState]);
 
   useEffect(() => {
+    if (!quickActionsOpen && !mobileNav && !searchOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setQuickActionsOpen(false);
+      setMobileNav(false);
+      setSearchOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [quickActionsOpen, mobileNav, searchOpen]);
+
+  useEffect(() => {
+    if (!quickActionsOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [quickActionsOpen]);
+
+  useEffect(() => {
     if (!storageReady || (cloudEnabled && !cloudLoaded) || studyMaps.length || (!mapping.topics.length && !courseName && !studyGoal)) return;
     const id = `map-migrated-${Date.now()}`;
     const now = new Date().toISOString();
@@ -738,7 +772,6 @@ export function StudyHub({
 
   const completedGoals = goals.filter((goal) => goal.done).length;
   const goalProgress = goals.length ? Math.round((completedGoals / goals.length) * 100) : 0;
-  const mappedTopics = mapping.topics.filter((topic) => topic.status === "covered").length;
   const activeStudyMap = studyMaps.find((map) => map.id === activeStudyMapId);
   const activePlanRecord = studyPlans.find((plan) => plan.id === activePlanId) || studyPlans[0];
   const studyPlan = activePlanRecord?.weeks || [];
@@ -808,6 +841,24 @@ export function StudyHub({
     completedEvolutionLogs.some((log) => log.type === "study"),
     completedEvolutionLogs.some((log) => log.type === "business" || log.type === "communication"),
   ].filter(Boolean).length;
+  const currentPath = learningPaths.find(path => learningProgress[path.id]?.reviewSession) || learningPaths[0];
+  const currentPathProgress = currentPath ? learningProgress[currentPath.id] || emptyPathProgress : emptyPathProgress;
+  const currentPathLessons = currentPath?.units.flatMap(unit => unit.lessons) || [];
+  const currentPathCompletion = currentPathLessons.length ? Math.round(currentPathProgress.completedLessonIds.length / currentPathLessons.length * 100) : 0;
+  const currentPathMasteryValues = Object.values(currentPathProgress.conceptMastery || {}).map(value => value.mastery || 0);
+  const currentPathMastery = currentPathMasteryValues.length ? Math.round(currentPathMasteryValues.reduce((total, value) => total + value, 0) / currentPathMasteryValues.length) : 0;
+  const dueReviews = learningPaths.reduce((total, path) => total + Object.values(learningProgress[path.id]?.conceptMastery || {}).filter(value => new Date(value.dueAt).getTime() <= Date.now()).length, 0);
+  const nextPlanSession = allPlanSessions.find(session => !session.done);
+  const overallLevel = Math.round(averageSkill);
+  const normalizedSearch = globalSearch.trim().toLocaleLowerCase("pt-BR");
+  const searchResults = normalizedSearch ? [
+    ...learningPaths.filter(path => path.title.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(path => ({ id: path.id, title: path.title, detail: "Trilha", tab: "review" as Tab })),
+    ...learningPaths.flatMap(path => path.units.filter(unit => `${unit.title} ${unit.description}`.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(unit => ({ id: unit.id, title: unit.title, detail: `Unidade · ${path.title}`, tab: "review" as Tab }))),
+    ...journeys.filter(journey => `${journey.name} ${journey.objective}`.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(journey => ({ id: journey.id, title: journey.name, detail: "Jornada", tab: "journeys" as Tab })),
+    ...documents.filter(document => document.name.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(document => ({ id: document.id, title: document.name, detail: "Material", tab: "review" as Tab })),
+    ...studyPlans.filter(plan => plan.name.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(plan => ({ id: plan.id, title: plan.name, detail: "Plano", tab: "plans" as Tab })),
+  ].slice(0, 12) : [];
+  const activeGlobalTab: Tab = ["study", "today", "journeys", "mapping", "themes", "review", "sessions", "plans"].includes(tab) ? "study" : tab;
 
   const context = useMemo(
     () => `TRILHA: ${courseName || "Não definida"}\nOBJETIVO: ${studyGoal || "Não definido"}\n\nTRANSCRIÇÃO:\n${transcript}\n\nAPOSTILA:\n${syllabus}\n\nMAPEAMENTO:\n${JSON.stringify(mapping)}`,
@@ -1811,15 +1862,15 @@ export function StudyHub({
     return (
       <main className="cloud-loading">
         <span className="brand"><span className="brand-mark"><Zap size={18} fill="currentColor" /></span><span>NEXO</span></span>
-        <LoaderCircle className="spin" size={30} />
-        <h1>Carregando seu painel individual</h1>
-        <p>Sincronizando ranking, planos, materiais e arquétipos.</p>
+        <div className="app-skeleton" aria-label="Carregando seu painel"><span /><span /><div><i /><i /><i /></div><span /></div>
+        <p>Organizando seu painel…</p>
       </main>
     );
   }
 
   return (
     <div className="app-shell">
+      {mobileNav && <button className="nav-backdrop" onClick={() => setMobileNav(false)} aria-label="Fechar navegação" />}
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
         <div className="brand">
           <span className="brand-mark"><Zap size={18} fill="currentColor" /></span>
@@ -1828,10 +1879,10 @@ export function StudyHub({
         <button className="mobile-close" onClick={() => setMobileNav(false)} aria-label="Fechar menu"><X /></button>
 
         <div className="course-card">
-          <span className="eyebrow">TRILHA ATUAL</span>
-          <strong>{courseName || "SUA TRILHA PERSONALIZADA"}</strong>
-          <div className="mini-progress"><i style={{ width: `${mapping.coverage}%` }} /></div>
-          <small>{mapping.coverage}% do conteúdo mapeado</small>
+          <span className="eyebrow">CONTINUAR</span>
+          <strong>{currentPath?.title || activePlanRecord?.name || "Comece sua primeira jornada"}</strong>
+          <div className="mini-progress"><i style={{ width: `${currentPath ? currentPathCompletion : planProgress}%` }} /></div>
+          <small>{currentPath ? `${currentPathCompletion}% da trilha` : activePlanRecord ? `${planProgress}% do plano` : "Tudo começa com uma ação"}</small>
         </div>
 
         <nav className="main-nav" aria-label="Navegação principal">
@@ -1840,13 +1891,13 @@ export function StudyHub({
             return (
               <button
                 key={item.id}
-                className={tab === item.id ? "active" : ""}
-                aria-current={tab === item.id ? "page" : undefined}
+                className={activeGlobalTab === item.id ? "active" : ""}
+                aria-current={activeGlobalTab === item.id ? "page" : undefined}
                 onClick={() => { setTab(item.id); setMobileNav(false); }}
               >
                 <Icon size={19} />
                 <span>{item.label}</span>
-                {item.id === "journeys" && journeys.length > 0 && <em>{journeys.length}</em>}
+                {item.id === "study" && dueReviews > 0 && <em>{dueReviews}</em>}
               </button>
             );
           })}
@@ -1863,12 +1914,12 @@ export function StudyHub({
           <button className="menu-button" onClick={() => setMobileNav(true)} aria-label="Abrir menu"><Menu /></button>
           <div>
             <span className="eyebrow" suppressHydrationWarning>{new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" }).toUpperCase()}</span>
-            <h1>{tabs.find((item) => item.id === tab)?.label || (tab === "mapping" ? "Mapas preservados" : "Temas preservados")}</h1>
+            <h1>{viewLabels[tab]}</h1>
           </div>
           <div className="top-actions">
             <span className={`cloud-status ${cloudStatus}`}>{cloudStatus === "saved" ? "Salvo na nuvem" : cloudStatus === "saving" ? "Salvando…" : cloudStatus === "error" ? "Cópia local" : cloudStatus === "loading" ? "Sincronizando…" : "Modo local"}</span>
-            <div className="search-box"><Search size={17} /><input aria-label="Pesquisar" placeholder="Buscar nas suas aulas" /></div>
-            <button className="outline-button" onClick={() => setChatOpen(true)}><Sparkles size={17} /> Perguntar à IA</button>
+            <div className="global-search"><label className="search-box"><Search size={17} /><input aria-label="Pesquisar em toda a plataforma" placeholder="Buscar em tudo" value={globalSearch} onFocus={() => setSearchOpen(true)} onChange={(event) => { setGlobalSearch(event.target.value); setSearchOpen(true); }} /></label>{searchOpen && normalizedSearch && <div className="search-results" role="listbox" aria-label="Resultados da busca">{searchResults.length ? searchResults.map(result => <button role="option" aria-selected="false" key={`${result.detail}:${result.id}`} onClick={() => { setTab(result.tab); setGlobalSearch(""); setSearchOpen(false); }}><span><strong>{result.title}</strong><small>{result.detail}</small></span><ArrowRight size={16} /></button>) : <p>Nenhum resultado encontrado.</p>}</div>}</div>
+            <button className="outline-button" onClick={() => setTab("mentor")}><Sparkles size={17} /> Abrir Mentor</button>
           </div>
         </header>
 
@@ -1884,65 +1935,35 @@ export function StudyHub({
         )}
 
         {tab === "dashboard" && (
-          <div className="page-grid dashboard-page">
-            {skillTracks.some(track => !track.archived) && <div style={{ gridColumn: "1 / -1" }}><AscensionIndex compact tracks={skillTracks} onChange={setSkillTracks} journeys={journeys} xp={totalXp} /></div>}
-            <section className="welcome-row">
-              <div>
-                <span className="eyebrow lime">{mapping.topics.length ? "PRÓXIMO PASSO" : "CONSTRUA SUA TRILHA"}</span>
-                <h2>{mapping.topics.length ? "Continue de onde você parou." : "Defina o que você quer dominar."}</h2>
-                <p>{mapping.topics.length
-                  ? `${focusTopic} é o próximo tópico sugerido pelo seu mapa pessoal.`
-                  : "Crie seu curso, módulos e tópicos. O Nexo só analisará o conteúdo que você escolher."}</p>
-              </div>
-              <button className="primary-button" onClick={() => setTab(mapping.topics.length ? "sessions" : "mapping")}>{mapping.topics.length ? "Iniciar sessão" : "Criar meu mapa"} <ArrowRight size={18} /></button>
+          <div className="home-app">
+            <section className="home-greeting"><span className="eyebrow lime">SEU DIA</span><h2>Olá, Miguel.</h2><p>O que vamos evoluir hoje?</p></section>
+
+            <section className="home-continue panel">
+              <div className="home-section-title"><span>CONTINUAR</span><small>{currentPathProgress.reviewSession ? `Questão ${currentPathProgress.reviewSession.index + 1}` : "Seu último progresso"}</small></div>
+              {currentPath ? <button onClick={() => setTab("review")}><span className="home-continue-icon"><BrainCircuit /></span><span><small>TRILHA</small><strong>{currentPath.title}</strong><em>{currentPathCompletion}% concluído · {currentPathMastery}% de domínio</em><i><b style={{ width: `${currentPathCompletion}%` }} /></i></span><ArrowRight /></button> : <button onClick={() => setTab("review")}><span className="home-continue-icon"><Plus /></span><span><small>PRIMEIRO PASSO</small><strong>Crie sua primeira trilha</strong><em>Transforme qualquer material em estudo ativo.</em></span><ArrowRight /></button>}
             </section>
 
-            {timerPanel}
-
-            <section className="progress-panel panel">
-              <div className="panel-heading"><div><span className="eyebrow">EVOLUÇÃO</span><h3>Progresso atual</h3></div><span className="trend">{evolutionLogs.length} registros</span></div>
-              <div className="progress-content">
-                <div className="radial" style={{ "--value": `${mapping.coverage * 3.6}deg` } as React.CSSProperties}><div><strong>{mapping.coverage}%</strong><small>cobertura</small></div></div>
-                <div className="stat-list">
-                  <div><span className="dot green" /><p><strong>{mappedTopics}</strong><small>Tópicos dominados</small></p></div>
-                  <div><span className="dot amber" /><p><strong>{mapping.topics.filter((t) => t.status === "partial").length}</strong><small>Em desenvolvimento</small></p></div>
-                  <div><span className="dot coral" /><p><strong>{mapping.topics.filter((t) => t.status === "gap").length}</strong><small>Lacunas prioritárias</small></p></div>
-                </div>
-              </div>
-              <button className="text-button" onClick={() => setTab("mapping")}>Ver mapa completo <ArrowRight size={16} /></button>
+            <section className="home-today panel">
+              <div className="home-section-title"><span>HOJE</span><button onClick={() => setTab("today")}>Ver agenda</button></div>
+              <div className="home-action-list">
+                {dueReviews > 0 && <button onClick={() => setTab("review")}><span className="home-action-icon purple"><BrainCircuit /></span><span><strong>{dueReviews} conceitos para revisar</strong><small>Revisão espaçada disponível agora</small></span><ArrowRight /></button>}
+                {nextPlanSession && <button onClick={() => setTab("plans")}><span className="home-action-icon blue"><CalendarDays /></span><span><strong>{nextPlanSession.topic}</strong><small>{nextPlanSession.minutes} min · próximo item do plano</small></span><ArrowRight /></button>}
+                {todayJourneyActions.filter(item => !item.done).slice(0, 2).map(item => <button key={item.id} onClick={() => setTab("today")}><span className="home-action-icon amber"><Target /></span><span><strong>{item.title}</strong><small>{item.minutes} min · atividade de hoje</small></span><ArrowRight /></button>)}
+                {!dueReviews && !nextPlanSession && !todayJourneyActions.some(item => !item.done) && <button onClick={() => setQuickActionsOpen(true)}><span className="home-action-icon green"><Plus /></span><span><strong>Planeje sua próxima ação</strong><small>Adicione estudo, treino, leitura ou uma meta.</small></span><ArrowRight /></button>}
+              </div><details className="home-goals"><summary>Metas da semana <span>{completedGoals}/{goals.length}</span></summary><div className="goal-bar"><i style={{ width: `${goalProgress}%` }} /></div><div className="goal-list">{goals.slice(0, 4).map(goal => <button key={goal.id} onClick={() => setGoals(current => current.map(item => item.id === goal.id ? { ...item, done: !item.done } : item))}>{goal.done ? <CheckCircle2 className="checked" size={20} /> : <Circle size={20} />}<span className={goal.done ? "done" : ""}>{goal.title}</span></button>)}</div><form className="add-goal" onSubmit={addGoal}><input value={goalText} onChange={event => setGoalText(event.target.value)} placeholder="Nova meta..." aria-label="Nova meta" /><button aria-label="Adicionar meta"><Plus size={17} /></button></form></details>
             </section>
 
-            <section className="goals-panel panel">
-              <div className="panel-heading"><div><span className="eyebrow">METAS DA SEMANA</span><h3>{completedGoals} de {goals.length} concluídas</h3></div><strong className="goal-percent">{goalProgress}%</strong></div>
-              <div className="goal-bar"><i style={{ width: `${goalProgress}%` }} /></div>
-              <div className="goal-list">
-                {goals.map((goal) => (
-                  <button key={goal.id} onClick={() => setGoals((current) => current.map((item) => item.id === goal.id ? { ...item, done: !item.done } : item))}>
-                    {goal.done ? <CheckCircle2 className="checked" size={20} /> : <Circle size={20} />}
-                    <span className={goal.done ? "done" : ""}>{goal.title}</span>
-                  </button>
-                ))}
-              </div>
-              <form className="add-goal" onSubmit={addGoal}><input value={goalText} onChange={(event) => setGoalText(event.target.value)} placeholder="Nova meta..." aria-label="Nova meta" /><button aria-label="Adicionar meta"><Plus size={17} /></button></form>
+            <section className="home-evolution panel">
+              <div className="home-section-title"><span>EVOLUÇÃO</span><button onClick={() => setTab("evolution")}>Ver detalhes</button></div>
+              <div className="home-evolution-grid"><div><strong>{overallLevel || "—"}</strong><small>Nível geral</small></div><div><strong>{evolutionRank}</strong><small>Ranking</small></div><div><strong>{totalXp.toLocaleString("pt-BR")}</strong><small>XP</small></div><div><strong>{currentStreak}</strong><small>Sequência</small></div></div>
+              <p><TrendingUp size={17} /> Esta semana: {Math.round(weeklyByType("study") / 60 * 10) / 10}h estudadas, {Math.round((weeklyByType("run") + weeklyByType("strength")) / 60 * 10) / 10}h de treino e {journeyAverage}% de progresso médio nas jornadas.</p>
             </section>
 
-            <section className="activity-panel panel">
-              <div className="panel-heading"><div><span className="eyebrow">ATIVIDADE RECENTE</span><h3>Suas últimas evidências</h3></div><button className="text-button" onClick={() => setTab("evolution")}>Ver todas</button></div>
-              {evolutionLogs.length ? <div className="session-list compact">{evolutionLogs.slice(0, 3).map((log) => <div key={log.id}><span className="session-icon purple"><Activity size={19} /></span><p><strong>{log.title}</strong><small>{activityTypes[log.type].label} · {log.minutes} min · {new Date(log.createdAt).toLocaleDateString("pt-BR")}</small></p><span className="score">+{log.xp} XP</span></div>)}</div> : <div className="history-empty dashboard-empty"><Shield size={24} /><p><strong>Nenhuma evidência registrada.</strong><small>Use Ascensão para registrar estudo, leitura, treino ou projetos.</small></p></div>}
-            </section>
-
-            <section className="life-dashboard panel">
-              <div className="panel-heading"><div><span className="eyebrow">PAINEL GERAL</span><h3>Resumo da sua semana</h3></div><button className="text-button" onClick={() => setTab("journeys")}>Ver jornadas <ArrowRight size={16} /></button></div>
-              <div className="life-metric-grid">
-                <article><BookOpen /><span><strong>{Math.round(weeklyByType("study") / 60 * 10) / 10}h</strong><small>Estudos</small></span></article>
-                <article><Dumbbell /><span><strong>{Math.round((weeklyByType("run") + weeklyByType("strength")) / 60 * 10) / 10}h</strong><small>Treinos</small></span></article>
-                <article><BookMarked /><span><strong>{Math.round(weeklyByType("reading") / 60 * 10) / 10}h</strong><small>Leitura</small></span></article>
-                <article><Target /><span><strong>{journeyAverage}%</strong><small>Média das jornadas</small></span></article>
-              </div>
-              <div className="dashboard-journeys"><span><strong>{activeJourneys.length}</strong> jornadas ativas</span><span><strong>{todayJourneyActions.filter((item) => item.done).length}/{todayJourneyActions.length}</strong> ações de hoje</span><span><strong>{weeklyLogs.length}</strong> registros na semana</span></div>
-            </section>
+            <section className="home-shortcuts"><div className="home-section-title"><span>ACESSOS RÁPIDOS</span></div><div><button onClick={() => setTab("sessions")}><Video /><span>Estudar</span></button><button onClick={() => setTab("review")}><BrainCircuit /><span>Revisão</span></button><button onClick={() => setTab("plans")}><CalendarDays /><span>Planos</span></button><button onClick={() => setTab("evolution")}><Shield /><span>Evolução</span></button><button onClick={() => setTab("mentor")}><Bot /><span>Mentor</span></button><button onClick={() => setTab("profile")}><UserRound /><span>Perfil</span></button></div></section>
           </div>
         )}
+
+        {tab === "study" && <div className="study-hub-page"><section className="study-hub-hero"><span className="eyebrow lime">CENTRAL DE APRENDIZAGEM</span><h2>O que você quer fazer agora?</h2><p>Suas trilhas, aulas, materiais e planos em um só lugar.</p></section><section className="study-hub-primary panel"><button onClick={() => setTab("review")}><span><BrainCircuit /></span><div><small>REVISÃO ATIVA</small><strong>{currentPath ? `Continuar ${currentPath.title}` : "Criar uma trilha"}</strong><p>{currentPath ? `${currentPathCompletion}% concluído · ${currentPathMastery}% de domínio` : "Importe um material e comece a aprender."}</p></div><ArrowRight /></button></section><section className="study-area-grid"><button onClick={() => setTab("review")}><Layers3 /><span><strong>Trilhas</strong><small>{learningPaths.length} disponíveis</small></span></button><button onClick={() => setTab("sessions")}><Video /><span><strong>Aulas e estudos</strong><small>Timer, vídeo e transcrição</small></span></button><button onClick={() => setTab("plans")}><CalendarDays /><span><strong>Planos</strong><small>{studyPlans.length} salvos</small></span></button><button onClick={() => setTab("journeys")}><Target /><span><strong>Jornadas</strong><small>Metas de qualquer área</small></span></button><button onClick={() => setTab("mapping")}><ListChecks /><span><strong>Organização</strong><small>Mapas preservados</small></span></button><button onClick={() => setTab("themes")}><BookMarked /><span><strong>Temas</strong><small>Conteúdos preservados</small></span></button></section>{timerPanel}</div>}
 
         {tab === "today" && <TodayWorkspace journeys={journeys} setJourneys={setJourneys} />}
 
@@ -2557,14 +2578,21 @@ export function StudyHub({
             notify={setNotice}
           />
         )}
+
+        {tab === "mentor" && <div className="mentor-page"><section className="mentor-page-head"><span className="bot-avatar"><Bot /></span><div><span className="eyebrow lime">MENTOR NEXO</span><h2>Converse, decida e aprenda.</h2><p>O mentor considera sua trilha, seu material e seu contexto atual.</p></div></section><section className="mentor-workspace panel"><div className="mentor-prompts"><button onClick={() => setChatText("Analise esta situação comigo")}>Analisar situação</button><button onClick={() => setChatText("Ajude-me a tomar uma decisão")}>Decidir</button><button onClick={() => setChatText("Explique minha maior lacuna de forma simples")}>Aprender</button><button onClick={() => setChatText("Questione minhas premissas e me contradiga se necessário")}>Me contradiga</button></div><div className="mentor-messages" aria-live="polite">{chatMessages.map((message, index) => <div key={index} className={`chat-message ${message.role}`}>{message.text}</div>)}{busy === "chat" && <div className="chat-message assistant typing"><i /><i /><i /></div>}</div><form className="mentor-composer" onSubmit={sendChat}><label><span className="sr-only">Mensagem para o mentor</span><textarea value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Converse com seu mentor..." /></label><button aria-label="Enviar mensagem" disabled={!chatText.trim() || busy === "chat"}><Send /></button></form></section></div>}
+
+        {tab === "profile" && <div className="profile-page"><section className="profile-hero panel"><span className="profile-avatar">ME</span><div><span className="eyebrow lime">SEU PERFIL</span><h2>Miguel</h2><p>{cloudEnabled ? "Conta conectada e dados sincronizados." : "Dados preservados neste dispositivo."}</p></div></section><section className="profile-settings panel"><div className="home-section-title"><span>CONTA E DADOS</span></div><div className="profile-setting-row"><span><strong>Sincronização</strong><small>Trilhas, atividades, planos e progresso</small></span><em className={cloudStatus}>{cloudStatus === "saved" ? "Tudo salvo" : cloudStatus === "saving" ? "Salvando" : cloudStatus === "error" ? "Cópia local" : cloudEnabled ? "Sincronizando" : "Modo local"}</em></div><div className="profile-setting-row"><span><strong>Conteúdo preservado</strong><small>{learningPaths.length} trilhas · {studyPlans.length} planos · {journeys.length} jornadas</small></span><CheckCircle2 /></div><div className="profile-account"><AccountControl enabled={authEnabled} /></div></section><section className="profile-settings panel"><div className="home-section-title"><span>PREFERÊNCIAS</span></div><button className="profile-link" onClick={() => setTab("evolution")}><span><strong>Evolução e atributos</strong><small>Níveis, ranking e histórico</small></span><ArrowRight /></button><button className="profile-link" onClick={() => setTab("journeys")}><span><strong>Jornadas pessoais</strong><small>Estudos, treino, leitura e metas</small></span><ArrowRight /></button></section></div>}
       </main>
 
       <nav className="mobile-bottom-nav" aria-label="Navegação principal no celular">
-        {tabs.map((item) => {
+        {tabs.filter(item => item.id !== "profile").flatMap((item) => {
           const Icon = item.icon;
-          return <button key={item.id} className={tab === item.id ? "active" : ""} aria-current={tab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); setMobileNav(false); }}><Icon size={19} /><span>{item.label.replace("Mapas de Estudos", "Mapas").replace("Revisão Ativa", "Revisão")}</span></button>;
+          const navigationButton = <button key={item.id} className={activeGlobalTab === item.id ? "active" : ""} aria-current={activeGlobalTab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); setMobileNav(false); }}><Icon size={20} /><span>{item.label}</span></button>;
+          return item.id === "study" ? [navigationButton, <button key="create" className="mobile-create" onClick={() => setQuickActionsOpen(true)} aria-label="Criar ou registrar"><Plus size={24} /><span>Criar</span></button>] : [navigationButton];
         })}
       </nav>
+
+      {quickActionsOpen && <div className="quick-sheet-backdrop" role="presentation" onClick={() => setQuickActionsOpen(false)}><section className="quick-sheet" role="dialog" aria-modal="true" aria-labelledby="quick-sheet-title" onClick={event => event.stopPropagation()}><div className="quick-sheet-handle" /><header><div><span className="eyebrow">AÇÃO RÁPIDA</span><h2 id="quick-sheet-title">O que você quer fazer?</h2></div><button onClick={() => setQuickActionsOpen(false)} aria-label="Fechar"><X /></button></header><div><button onClick={() => { setTab("review"); setQuickActionsOpen(false); }}><Upload /><span><strong>Importar material</strong><small>PDF, documento, imagem, vídeo ou áudio</small></span></button><button onClick={() => { setTab("review"); setQuickActionsOpen(false); }}><Layers3 /><span><strong>Criar trilha</strong><small>Transforme conteúdo em aprendizagem ativa</small></span></button><button onClick={() => { setTab("today"); setQuickActionsOpen(false); }}><Activity /><span><strong>Registrar atividade</strong><small>Estudo, treino, corrida ou leitura</small></span></button><button onClick={() => { setTab("journeys"); setQuickActionsOpen(false); }}><Target /><span><strong>Nova jornada</strong><small>Defina objetivo, rotina e progresso</small></span></button><button onClick={() => { setTab("sessions"); setQuickActionsOpen(false); }}><Video /><span><strong>Nova aula</strong><small>Assista, transcreva e gere flashcards</small></span></button></div></section></div>}
 
       {editingPlanSession && (
         <div className="modal-backdrop" role="presentation">
@@ -2588,7 +2616,7 @@ export function StudyHub({
         </div>
       )}
 
-      <button className="chat-launcher" onClick={() => setChatOpen(true)} aria-label="Abrir tutor"><MessageCircle size={23} /><span>Tutor IA</span></button>
+      {tab !== "mentor" && <button className="chat-launcher" onClick={() => setChatOpen(true)} aria-label="Abrir tutor"><MessageCircle size={23} /><span>Tutor IA</span></button>}
       {chatOpen && (
         <aside className="chat-panel">
           <header><span className="bot-avatar"><Bot size={20} /></span><div><strong>Tutor Nexo</strong><small><i /> Conectado ao seu material</small></div><button onClick={() => setChatOpen(false)} aria-label="Fechar chat"><X /></button></header>
