@@ -1,5 +1,6 @@
+import { mutateAvatar } from "@/lib/avatar-store";
 import { auth } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { failure, success } from "@/lib/api-contract";
 import { isCloudConfigured } from "@/lib/auth-config";
 import { getDatabase } from "@/lib/db";
@@ -78,6 +79,7 @@ export async function PUT(request: Request) {
       ON CONFLICT (user_id)
       DO UPDATE SET state = EXCLUDED.state, schema_version = 6, updated_at = NOW()
     `;
+    after(async () => { try { await mutateAvatar(userId, { action: "sync" }, true); } catch (error) { console.error("avatar_checkpoint_failed", error); } });
     return NextResponse.json(success({ saved: true, updatedAt: new Date().toISOString() }));
   } catch (error) {
     console.error("PUT /api/user-data", error);
