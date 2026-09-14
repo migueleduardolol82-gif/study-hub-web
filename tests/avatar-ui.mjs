@@ -2,7 +2,8 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {mkdirSync} from 'node:fs';
 import assert from 'node:assert/strict';
-const {chromium}=await import(process.env.AVATAR_PLAYWRIGHT_MODULE||'playwright');
+const browserModule=await import(process.env.AVATAR_PLAYWRIGHT_MODULE||'playwright');
+const {chromium}=browserModule.default?.chromium?browserModule.default:browserModule;
 import {newAvatar,purchase,validateAppearance} from '../lib/avatar.ts';
 const root=fileURLToPath(new URL('..',import.meta.url));
 const output=process.env.AVATAR_TEST_ARTIFACTS||'/tmp/nexo-avatar-tests';mkdirSync(output,{recursive:true});
@@ -20,7 +21,7 @@ try{
  for(const width of [320,375,390,430,768,1280]){await page.setViewportSize({width,height:844});await page.waitForTimeout(180);const dimensions=await page.locator('.avatar-workspace').evaluate(e=>({width:e.getBoundingClientRect().width,scroll:e.scrollWidth,body:document.documentElement.scrollWidth,viewport:innerWidth}));assert.ok(dimensions.scroll<=dimensions.width+2,JSON.stringify(dimensions));assert.ok(dimensions.body<=width+2,JSON.stringify(dimensions));console.log('Fits viewport',width);if(width===390||width===1280)await page.screenshot({path:`${output}/avatar-${width}.png`,fullPage:true});}
  await page.setViewportSize({width:390,height:844});
  // Select the internal tab explicitly, avoiding global Evolution navigation.
- await page.locator('.avatar-workspace nav').getByRole('button',{name:'Evolução',exact:true}).click();await page.getByLabel('Descreva sua aparência').fill('homem, 1,80 m, 92 kg, cabelo curto escuro, pouca barba');await page.getByRole('button',{name:'Preencher pela descrição'}).click();await page.getByRole('button',{name:'Salvar novo registro'}).click();await page.getByRole('status').filter({hasText:'Salvo.'}).waitFor();assert.equal(account.appearance.height,180);
+ await page.locator('.avatar-workspace>nav').getByRole('button',{name:'Evolução',exact:true}).click();await page.getByRole('tab',{name:'Prévia'}).click();await page.getByLabel('Descreva sua aparência').fill('homem, 1,80 m, 92 kg, cabelo heroico escuro, cavanhaque');await page.getByRole('button',{name:'Aplicar à prévia'}).click();await page.getByRole('button',{name:'Salvar aparência'}).click();await page.getByRole('status').filter({hasText:'Salvo.'}).waitFor();assert.equal(account.appearance.height,180);assert.equal(account.appearance.hair,'heroico');assert.equal(account.appearance.beardStyle,'cavanhaque');
  await page.locator('.avatar-workspace nav').getByRole('button',{name:'Loja',exact:true}).click();const jacket=page.locator('.avatar-item').filter({hasText:'Jaqueta grafite'});await jacket.getByRole('button',{name:'Experimentar'}).click();page.once('dialog',dialog=>dialog.accept());await jacket.getByRole('button',{name:'Comprar',exact:true}).click();await page.getByRole('status').filter({hasText:'Salvo.'}).waitFor();assert.equal(account.balance,460);
  await page.locator('.avatar-workspace nav').getByRole('button',{name:'Equipar',exact:true}).click();await page.locator('.avatar-item').filter({hasText:'Jaqueta grafite'}).getByRole('button',{name:'Equipar',exact:true}).click();await page.getByRole('status').filter({hasText:'Salvo.'}).waitFor();assert.equal(account.equipped.tronco,'slate');
  await page.locator('.avatar-workspace nav').getByRole('button',{name:'Histórico',exact:true}).click();await page.getByRole('button',{name:/Visualizar/}).click();console.log('UI fixture: description, save, shop preview, purchase, equip and history pass.');assert.deepEqual(errors,[]);console.log('No page errors.');

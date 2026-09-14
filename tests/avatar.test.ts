@@ -11,6 +11,12 @@ test('text parser uses explicit measurements, not guessed body composition',()=>
  const result=parseAvatarDescription('homem, 1,80 m, 92 kg, cabelo curto escuro, pouca barba, corpo forte com gordura moderada',initialAppearance);
  assert.equal(result.appearance.height,180);assert.equal(result.appearance.weight,92);assert.equal(result.appearance.beard,true);assert.equal(result.appearance.fat,initialAppearance.fat);assert.equal(result.appearance.muscle,initialAppearance.muscle);
 });
+test('anime appearance keeps premium hair, beard and eye options compatible',()=>{
+ const parsed=parseAvatarDescription('homem, cabelo heroico escuro e cavanhaque',initialAppearance);
+ assert.equal(parsed.appearance.hair,'heroico');assert.equal(parsed.appearance.beardStyle,'cavanhaque');
+ assert.deepEqual(validateAppearance({...parsed.appearance,eyeColor:'#68a4c8'}),{...parsed.appearance,eyeColor:'#68a4c8'});
+ assert.throws(()=>validateAppearance({...parsed.appearance,hair:'fantasia'}));
+});
 test('opening app and replaying a daily observation cannot farm currency',()=>{
  const a=newAvatar(at);observeDay(a,'2026-09-14',false);assert.equal(a.days.length,0);
  for(let n=1;n<=7;n++)observeDay(a,`2026-09-${String(n+13).padStart(2,'0')}`,true);

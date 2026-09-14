@@ -1,5 +1,20 @@
-export type Appearance = { skin: string; hairColor: string; hair: 'curto'|'longo'|'raspado'; face?:'oval'|'angular'|'arredondado'; beard: boolean; shape: 'masculino'|'feminino'|'neutro'; height: number; weight: number; fat: number; muscle: number };
-export const initialAppearance: Appearance = { skin:'#b8896a', hairColor:'#292323', hair:'curto', beard:false, shape:'neutro', height:175, weight:75, fat:24, muscle:45 };
+export const avatarHairStyles = ['social','moderno','bagunçado','ondulado','heroico','longo','raspado'] as const;
+export const avatarBeardStyles = ['sem barba','barba curta','barba marcada','cavanhaque'] as const;
+export type Appearance = {
+ skin: string;
+ hairColor: string;
+ eyeColor?: string;
+ hair: typeof avatarHairStyles[number] | 'curto';
+ face?: 'oval'|'angular'|'arredondado';
+ beard: boolean;
+ beardStyle?: typeof avatarBeardStyles[number];
+ shape: 'masculino'|'feminino'|'neutro';
+ height: number;
+ weight: number;
+ fat: number;
+ muscle: number;
+};
+export const initialAppearance: Appearance = { skin:'#b8896a', hairColor:'#191b24', eyeColor:'#647d91', hair:'moderno', face:'angular', beard:false, beardStyle:'sem barba', shape:'neutro', height:175, weight:75, fat:24, muscle:45 };
 export type AvatarItem = { id:string; name:string; slot:string; rarity:string; price:number; days:number; color:string };
 export const avatarItems: AvatarItem[] = [
  {id:'base',name:'Traje essencial',slot:'tronco',rarity:'Comum',price:0,days:0,color:'#45505e'},
@@ -21,10 +36,13 @@ export function newAvatar(now:string):AvatarAccount { return {appearance:{...ini
 export function validateAppearance(value:unknown):Appearance {
  if(!value || typeof value!=='object') throw new AvatarInputError('Informe as características do avatar.');
  const a=value as Appearance;
- if(!/^#[0-9a-f]{6}$/i.test(a.skin)||!/^#[0-9a-f]{6}$/i.test(a.hairColor)||!['curto','longo','raspado'].includes(a.hair)||!['masculino','feminino','neutro'].includes(a.shape)||typeof a.beard!=='boolean') throw new AvatarInputError('Aparência inválida.');
+ const validHair = [...avatarHairStyles, 'curto'].includes(a.hair);
+ const validBeardStyle = a.beardStyle === undefined || avatarBeardStyles.includes(a.beardStyle);
+ if(!/^#[0-9a-f]{6}$/i.test(a.skin)||!/^#[0-9a-f]{6}$/i.test(a.hairColor)||!validHair||!validBeardStyle||!['masculino','feminino','neutro'].includes(a.shape)||typeof a.beard!=='boolean') throw new AvatarInputError('Aparência inválida.');
+ if(a.eyeColor !== undefined && !/^#[0-9a-f]{6}$/i.test(a.eyeColor)) throw new AvatarInputError('Cor dos olhos inválida.');
  for(const [key,min,max] of [['height',100,230],['weight',30,300],['fat',3,65],['muscle',0,100]] as const) if(!Number.isFinite(a[key])||a[key]<min||a[key]>max) throw new AvatarInputError(`Valor inválido: ${key}.`);
  if(a.face!==undefined&&!['oval','angular','arredondado'].includes(a.face))throw new AvatarInputError('Formato de rosto inválido.');
- return {...(a.face?{face:a.face}:{}),skin:a.skin,hairColor:a.hairColor,hair:a.hair,beard:a.beard,shape:a.shape,height:a.height,weight:a.weight,fat:a.fat,muscle:a.muscle};
+ return {...(a.face?{face:a.face}:{}),skin:a.skin,hairColor:a.hairColor,...(a.eyeColor?{eyeColor:a.eyeColor}:{}),hair:a.hair,beard:a.beard,...(a.beardStyle?{beardStyle:a.beardStyle}:{}),shape:a.shape,height:a.height,weight:a.weight,fat:a.fat,muscle:a.muscle};
 }
 export function purchase(account:AvatarAccount,id:string,now:string) {
  const item=avatarItems.find(i=>i.id===id); if(!item) throw new AvatarInputError('Item inexistente.');
@@ -59,8 +77,17 @@ export function parseAvatarDescription(text:string,current:Appearance):{appearan
  if(cm)set('height',Number(cm[1]));else if(meters)set('height',Math.round(Number(meters[1].replace(',','.'))*100));
  const fat=s.match(/(\d{1,2}(?:[.,]\d+)?)\s*%\s*(?:de\s*)?gordura/);if(fat)set('fat',Number(fat[1].replace(',','.')));
  if(/\b(homem|masculino)\b/.test(s))set('shape','masculino');else if(/\b(mulher|feminino)\b/.test(s))set('shape','feminino');
- if(/cabelo\s+(?:curto|curtos)/.test(s))set('hair','curto');else if(/cabelo\s+(?:longo|comprido)/.test(s))set('hair','longo');else if(/raspado|careca/.test(s))set('hair','raspado');
- if(/sem barba/.test(s))set('beard',false);else if(/\bbarba\b/.test(s))set('beard',true);
+ if(/cabelo[^,.]*(bagunçado|despojado)/.test(s))set('hair','bagunçado');
+ else if(/cabelo[^,.]*(ondulado|cacheado)/.test(s))set('hair','ondulado');
+ else if(/cabelo[^,.]*(social|elegante)/.test(s))set('hair','social');
+ else if(/cabelo[^,.]*(heroico|espetado)/.test(s))set('hair','heroico');
+ else if(/cabelo\s+(?:curto|curtos|moderno)/.test(s))set('hair','moderno');
+ else if(/cabelo\s+(?:longo|comprido)/.test(s))set('hair','longo');
+ else if(/raspado|careca/.test(s))set('hair','raspado');
+ if(/sem barba/.test(s)){set('beard',false);set('beardStyle','sem barba');}
+ else if(/cavanhaque/.test(s)){set('beard',true);set('beardStyle','cavanhaque');}
+ else if(/barba[^,.]*(marcada|cheia)/.test(s)){set('beard',true);set('beardStyle','barba marcada');}
+ else if(/\bbarba\b/.test(s)){set('beard',true);set('beardStyle','barba curta');}
  if(/cabelo[^,.]*\b(escuro|preto)\b/.test(s))set('hairColor','#292323');else if(/\b(loiro|louro)\b/.test(s))set('hairColor','#bda475');else if(/\bruivo\b/.test(s))set('hairColor','#8d4530');
  return {appearance:validateAppearance(draft),matched};
 }
