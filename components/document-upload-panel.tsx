@@ -15,6 +15,7 @@ export function DocumentUploadPanel({ documents, setDocuments, title = "Criar us
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
 
   async function addFiles(list: FileList | File[]) {
     const files = Array.from(list);
@@ -62,9 +63,23 @@ export function DocumentUploadPanel({ documents, setDocuments, title = "Criar us
 
   async function remove(document: StudyDocument) {
     if (!window.confirm(`Excluir “${document.name}”? Trilhas e planos existentes serão preservados, mas poderão perder o acesso à fonte.`)) return;
-    if (!document.localOnly) await fetch(`/api/documents?id=${encodeURIComponent(document.id)}`, { method: "DELETE" }).catch(() => undefined);
-    await deleteLocalChunks(document.id);
-    setDocuments((current) => current.filter((item) => item.id !== document.id).map((item, priority) => ({ ...item, priority: priority + 1 })));
+    if (deletingId) return;
+    setDeletingId(document.id);
+    try {
+      if (!document.localOnly) {
+        const response = await fetch(`/api/documents?id=${encodeURIComponent(document.id)}`, { method: "DELETE", signal: AbortSignal.timeout(15_000) });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+          throw new Error(payload?.error?.message || "A nuvem não confirmou a exclusão.");
+        }
+      }
+      try { await deleteLocalChunks(document.id); }
+      catch { notify("O material foi excluído, mas a cópia temporária deste navegador não pôde ser limpa."); }
+      setDocuments((current) => current.filter((item) => item.id !== document.id).map((item, priority) => ({ ...item, priority: priority + 1 })));
+      notify(`${document.name} foi excluído.`);
+    } catch (error) {
+      notify(`${error instanceof Error ? error.message : "Não foi possível excluir o material."} O arquivo foi preservado; tente novamente.`);
+    } finally { setDeletingId(""); }
   }
 
   const selected = documents.filter((item) => item.selected && item.status === "ready");
@@ -76,7 +91,7 @@ export function DocumentUploadPanel({ documents, setDocuments, title = "Criar us
     <input ref={inputRef} hidden type="file" multiple accept=".pdf,.docx,.pptx,.txt,.jpg,.jpeg,.png,application/pdf,text/plain,image/jpeg,image/png" onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.currentTarget.value = ""; }} />
     {documents.length > 0 && <div className="document-list">{documents.map((document, index) => <article key={document.id}>
       <label><input type="checkbox" checked={document.selected} disabled={document.status !== "ready"} onChange={(event) => setDocuments((current) => current.map((item) => item.id === document.id ? { ...item, selected: event.target.checked } : item))} /><span className="document-icon">{document.status === "extracting" ? <LoaderCircle className="spin" /> : document.status === "ready" ? <Check /> : <FileText />}</span><span><strong>{document.name}</strong><small>{document.format.toUpperCase()} · {sizeLabel(document.size)} · {document.status === "ready" ? `${document.pageCount} referência(s), ${document.charCount.toLocaleString("pt-BR")} caracteres` : document.error || document.stage}</small></span></label>
-      <div><button type="button" aria-label={`Aumentar prioridade de ${document.name}`} disabled={index === 0} onClick={() => move(document.id, -1)}><ArrowUp /></button><button type="button" aria-label={`Diminuir prioridade de ${document.name}`} disabled={index === documents.length - 1} onClick={() => move(document.id, 1)}><ArrowDown /></button><button type="button" aria-label={`Remover ${document.name}`} onClick={() => void remove(document)}><Trash2 /></button></div>
+      <div><button type="button" aria-label={`Aumentar prioridade de ${document.name}`} disabled={index === 0 || Boolean(deletingId)} onClick={() => move(document.id, -1)}><ArrowUp /></button><button type="button" aria-label={`Diminuir prioridade de ${document.name}`} disabled={index === documents.length - 1 || Boolean(deletingId)} onClick={() => move(document.id, 1)}><ArrowDown /></button><button type="button" aria-label={deletingId === document.id ? `Excluindo ${document.name}` : `Remover ${document.name}`} disabled={Boolean(deletingId)} onClick={() => void remove(document)}>{deletingId === document.id ? <LoaderCircle className="spin" /> : <Trash2 />}</button></div>
     </article>)}</div>}
     {onReady && <button type="button" className="outline-button wide" disabled={!selected.length || documents.some((item) => item.status === "extracting")} onClick={() => onReady(selected)}><Plus /> Usar {selected.length || "estes"} arquivo(s)</button>}
   </section>;

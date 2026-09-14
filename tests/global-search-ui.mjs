@@ -6,7 +6,15 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
   const errors = [];
+  let deleteRequests = 0;
   page.on('pageerror', error => errors.push(error.message));
+  page.on('dialog', dialog => dialog.accept());
+  await page.route('**/api/documents?id=doc-search', async route => {
+    deleteRequests += 1;
+    await route.fulfill(deleteRequests === 1
+      ? { status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Sincronização indisponível.' } }) }
+      : { status: 200, contentType: 'application/json', body: JSON.stringify({ data: { deleted: true } }) });
+  });
   await page.addInitScript(() => {
     const now = '2026-09-14T12:00:00.000Z';
     localStorage.setItem('nexo-dashboard-v6', JSON.stringify({
@@ -45,8 +53,14 @@ try {
   const documentRow = page.locator('.document-list article').filter({ hasText: 'material-cosmos.pdf' });
   await documentRow.waitFor();
   assert.equal(await documentRow.getByRole('checkbox').isChecked(), true);
+  await documentRow.getByRole('button', { name: 'Remover material-cosmos.pdf' }).click();
+  await page.getByText(/O arquivo foi preservado; tente novamente/).waitFor();
+  assert.equal(await documentRow.count(), 1);
+  await documentRow.getByRole('button', { name: 'Remover material-cosmos.pdf' }).click();
+  await documentRow.waitFor({ state: 'detached' });
+  assert.equal(deleteRequests, 2);
   assert.deepEqual(errors, []);
-  console.log('Global search opens the exact journey, plan, learning path and selected document.');
+  console.log('Global search opens exact records; failed cloud deletion preserves the material and retry succeeds.');
 } finally {
   await browser.close();
 }
