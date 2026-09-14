@@ -1,6 +1,26 @@
 export const avatarHairStyles = ['social','moderno','bagunçado','ondulado','heroico','longo','raspado'] as const;
 export const avatarBeardStyles = ['sem barba','barba curta','barba marcada','cavanhaque'] as const;
+// Multipliers relative to the selected face preset. Missing fields keep legacy saves valid.
+export const facialControls = [
+ ['faceWidth','Largura do rosto',0.85,1.15], ['faceHeight','Altura do rosto',0.85,1.15],
+ ['eyeSpacing','Distância dos olhos',0.8,1.2], ['eyeSize','Tamanho dos olhos',0.8,1.2],
+ ['noseWidth','Largura do nariz',0.7,1.3], ['noseLength','Comprimento do nariz',0.8,1.2],
+ ['mouthWidth','Largura da boca',0.75,1.25], ['lipFullness','Volume dos lábios',0.7,1.3],
+ ['chinWidth','Largura do queixo',0.75,1.25], ['jawWidth','Largura da mandíbula',0.85,1.15],
+ ['cheekWidth','Maçãs do rosto',0.9,1.1], ['browThickness','Espessura das sobrancelhas',0.6,1.5],
+] as const;
+export type FacialKey = typeof facialControls[number][0];
+export type FacialParameters = Record<FacialKey, number>;
+export function resolveFacial(appearance: Appearance): FacialParameters {
+ return Object.fromEntries(facialControls.map(([key,,min,max])=>{
+  const value=appearance.facial?.[key];
+  return [key,typeof value==='number'&&Number.isFinite(value)?Math.max(min,Math.min(max,value)):1];
+ })) as FacialParameters;
+}
 export type Appearance = {
+ facial?: Partial<FacialParameters>;
+ hairLength?: number;
+ realism?: number;
  skin: string;
  hairColor: string;
  eyeColor?: string;
@@ -42,7 +62,14 @@ export function validateAppearance(value:unknown):Appearance {
  if(a.eyeColor !== undefined && !/^#[0-9a-f]{6}$/i.test(a.eyeColor)) throw new AvatarInputError('Cor dos olhos inválida.');
  for(const [key,min,max] of [['height',100,230],['weight',30,300],['fat',3,65],['muscle',0,100]] as const) if(!Number.isFinite(a[key])||a[key]<min||a[key]>max) throw new AvatarInputError(`Valor inválido: ${key}.`);
  if(a.face!==undefined&&!['oval','angular','arredondado'].includes(a.face))throw new AvatarInputError('Formato de rosto inválido.');
- return {...(a.face?{face:a.face}:{}),skin:a.skin,hairColor:a.hairColor,...(a.eyeColor?{eyeColor:a.eyeColor}:{}),hair:a.hair,beard:a.beard,...(a.beardStyle?{beardStyle:a.beardStyle}:{}),shape:a.shape,height:a.height,weight:a.weight,fat:a.fat,muscle:a.muscle};
+ const extra: Pick<Appearance,'facial'|'hairLength'|'realism'>={};
+ if(a.facial!==undefined){
+  if(!a.facial||typeof a.facial!=='object'||Array.isArray(a.facial))throw new AvatarInputError('Proporções faciais inválidas.');
+  extra.facial={};
+  for(const [key,,min,max] of facialControls){const n=a.facial[key];if(n===undefined)continue;if(typeof n!=='number'||!Number.isFinite(n)||n<min||n>max)throw new AvatarInputError(`Proporção inválida: ${key}.`);extra.facial[key]=n;}
+ }
+ for(const [key,min,max] of [['hairLength',0.6,1.5],['realism',0,1]] as const){const n=a[key];if(n===undefined)continue;if(typeof n!=='number'||!Number.isFinite(n)||n<min||n>max)throw new AvatarInputError(`Valor inválido: ${key}.`);extra[key]=n;}
+ return {...extra,...(a.face?{face:a.face}:{}),skin:a.skin,hairColor:a.hairColor,...(a.eyeColor?{eyeColor:a.eyeColor}:{}),hair:a.hair,beard:a.beard,...(a.beardStyle?{beardStyle:a.beardStyle}:{}),shape:a.shape,height:a.height,weight:a.weight,fat:a.fat,muscle:a.muscle};
 }
 export function purchase(account:AvatarAccount,id:string,now:string) {
  const item=avatarItems.find(i=>i.id===id); if(!item) throw new AvatarInputError('Item inexistente.');
