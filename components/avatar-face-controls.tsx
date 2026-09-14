@@ -11,7 +11,7 @@ export default function AvatarFaceControls({appearance, onChange, includeStyles 
       <label>Barba<select value={appearance.beardStyle ?? (appearance.beard ? 'barba curta' : 'sem barba')} onChange={e => onChange({...appearance,beardStyle:e.target.value as Appearance['beardStyle'],beard:e.target.value !== 'sem barba'})}>{avatarBeardStyles.map(s => <option key={s}>{s}</option>)}</select></label>
       <label>Comprimento do cabelo<input type="range" min="0.6" max="1.5" step="0.01" value={appearance.hairLength ?? 1} onChange={e => onChange({...appearance,hairLength:Number(e.target.value)})}/></label>
     </div>}
-    <label>Mais anime ↔ Mais realista<input type="range" min="0" max="1" step="0.01" value={appearance.realism ?? 0.3} onChange={e => onChange({...appearance,realism:Number(e.target.value)})}/><small>Muda a estilização dos olhos; mantém o personagem anime.</small></label>
+    <label>Mais anime ↔ Mais realista<input type="range" min="0" max="1" step="0.01" value={appearance.realism ?? 0.75} onChange={e => onChange({...appearance,realism:Number(e.target.value)})}/><small>Ajusta o tamanho dos olhos entre estilizado e mais realista.</small></label>
     <details className="avatar-proportions" open>
       <summary>Proporções faciais</summary>
       {facialControls.map(([key,label,min,max]) => <label key={key}><span>{label} <span>{facial[key].toFixed(2)}×</span></span><input aria-label={label} type="range" min={min} max={max} step="0.01" value={facial[key]} onChange={e => onChange({...appearance,facial:{...appearance.facial,[key]:Number(e.target.value)}})}/></label>)}

@@ -6,8 +6,8 @@ import { avatarItems, type Appearance } from '@/lib/avatar';
 import { createAvatarBody } from '@/lib/avatar-body';
 import { createAvatarHead, disposeAvatarObject } from '@/lib/avatar-head';
 
-type Props = { appearance: Appearance; equipped: Record<string, string>; archetypes?: string[]; focus?: 'corpo' | 'rosto' };
-type Update = (props: Props, low: boolean) => void;
+type Props = { appearance: Appearance; equipped: Record<string, string>; archetypes?: string[]; focus?: 'corpo' | 'rosto'; physicalDays?: number };
+type Update = (props: Props, low: boolean, anatomy: boolean) => void;
 
 export default function AvatarScene(props: Props) {
   const host = useRef<HTMLDivElement>(null);
@@ -16,6 +16,7 @@ export default function AvatarScene(props: Props) {
   const invalidate = useRef(() => {});
   const [error, setError] = useState(false);
   const [quality, setQuality] = useState<'auto' | 'low'>('auto');
+  const [anatomyView, setAnatomyView] = useState(false);
 
   useEffect(() => {
     const container = host.current;
@@ -43,6 +44,7 @@ export default function AvatarScene(props: Props) {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
     const mobile = window.matchMedia('(max-width: 700px)');
     let reduced = preference.matches, low = mobile.matches, visible = false, disposed = false, requestedLow = false;
+    let showAnatomy = false;
     let current: Props | null = null, head: ReturnType<typeof createAvatarHead> | null = null;
     let body: ReturnType<typeof createAvatarBody> | null = null;
     let bodyKey = '', headKey = '', pending: {props: Props; low: boolean} | null = null;
@@ -58,7 +60,7 @@ export default function AvatarScene(props: Props) {
     };
     const setCamera = () => {
       if (!current) return;
-      const scale = current.appearance.height / 175, face = current.focus === 'rosto';
+      const scale = current.appearance.height / 175, face = current.focus === 'rosto' && !showAnatomy;
       const facialHeight = current.appearance.facial?.faceHeight ?? 1;
       const targetY = face ? (1.635 + 0.194 * facialHeight) * scale : 1.05 * scale;
       // Fit both horizontal and vertical bounds at narrow phone widths, then apply user zoom.
@@ -73,11 +75,12 @@ export default function AvatarScene(props: Props) {
       const a = current.appearance;
       const nextLow = pending.low || mobile.matches;
       if (low !== nextLow) {low = nextLow; resize();}
-      const nextBody = JSON.stringify([a.skin, a.shape, a.fat, a.muscle, current.equipped, current.archetypes, low]);
+      const nextBody = JSON.stringify([a.skin, a.shape, a.fat, a.muscle, current.physicalDays, current.equipped, current.archetypes, low]);
       if (nextBody !== bodyKey) {
         if (body) {figure.remove(body.group); disposeAvatarObject(body.group);}
-        body = createAvatarBody(a, current.equipped, current.archetypes, low); figure.add(body.group); bodyKey = nextBody;
+        body = createAvatarBody(a, current.equipped, current.archetypes, low, current.physicalDays); figure.add(body.group); bodyKey = nextBody;
       }
+      if (body) {body.clothing.visible = !showAnatomy; body.coverage.visible = showAnatomy;}
       const headColor = avatarItems.find(item => item.id === current?.equipped['cabeça'])?.color;
       const nextHead = JSON.stringify([a.skin, a.hair, a.hairColor, a.eyeColor, a.face, a.facial, a.hairLength, a.realism, a.beard, a.beardStyle, headColor, low]);
       if (nextHead !== headKey) {
@@ -105,7 +108,7 @@ export default function AvatarScene(props: Props) {
       setCamera(); renderer.render(scene, camera);
       if (!reduced) schedule();
     };
-    update.current = (next, forceLow) => {requestedLow = forceLow; pending = {props: next, low: forceLow}; schedule();};
+    update.current = (next, forceLow, anatomy) => {showAnatomy = anatomy; requestedLow = forceLow; pending = {props: next, low: forceLow}; schedule();};
     invalidate.current = schedule;
     const onPreference = () => {reduced = preference.matches; previousTime = 0; schedule();};
     preference.addEventListener('change', onPreference);
@@ -137,7 +140,7 @@ export default function AvatarScene(props: Props) {
     };
   }, []);
 
-  useEffect(() => {update.current?.(props, quality === 'low');}, [props, quality]);
+  useEffect(() => {update.current?.(props, quality === 'low', anatomyView);}, [props, quality, anatomyView]);
   const changeView = (rotation: number, zoom: number) => {
     controls.current.rotation += rotation;
     controls.current.zoom = THREE.MathUtils.clamp(controls.current.zoom + zoom, 0.82, 1.65);
@@ -154,6 +157,7 @@ export default function AvatarScene(props: Props) {
       <button type="button" onClick={() => changeView(0.4, 0)} aria-label="Girar avatar à direita">→</button>
     </div>
     <div className="avatar-view-options">
+      <button type="button" aria-pressed={anatomyView} onClick={() => setAnatomyView(v => !v)}>{anatomyView ? 'Ver roupas' : 'Ver anatomia'}</button>
       <button type="button" onClick={() => {controls.current = {rotation: 0, zoom: 1}; invalidate.current();}}>Centralizar</button>
       <button type="button" aria-pressed={quality === 'low'} onClick={() => setQuality(q => q === 'low' ? 'auto' : 'low')}>Qualidade reduzida</button>
     </div>
