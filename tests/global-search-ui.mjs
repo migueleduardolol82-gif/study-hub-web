@@ -59,8 +59,18 @@ try {
   await documentRow.getByRole('button', { name: 'Remover material-cosmos.pdf' }).click();
   await documentRow.waitFor({ state: 'detached' });
   assert.equal(deleteRequests, 2);
+
+  await page.getByRole('button', { name: 'Fechar criação' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Abrir busca' }).click();
+  const mobileSearch = page.getByLabel('Pesquisar na plataforma pelo celular');
+  await mobileSearch.fill('Maratona Aurora');
+  await page.getByRole('option', { name: /Maratona Aurora/ }).click();
+  await page.getByRole('heading', { name: 'Maratona Aurora' }).waitFor();
+  assert.equal(await page.getByLabel('Pesquisar jornadas').inputValue(), 'Maratona Aurora');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), true);
   assert.deepEqual(errors, []);
-  console.log('Global search opens exact records; failed cloud deletion preserves the material and retry succeeds.');
+  console.log('Global search opens exact records on desktop and mobile; failed cloud deletion preserves the material and retry succeeds.');
 } finally {
   await browser.close();
 }

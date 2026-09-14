@@ -580,6 +580,20 @@ button:active:not(:disabled) { transform: scale(.985); }
 .search-results strong, .search-results small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-results small, .search-results p { color: var(--text-secondary); }
 .search-results p { padding: 8px 11px; }
+.mobile-search-button { display: none; place-items: center; width: 43px; height: 43px; padding: 0; color: var(--text); background: var(--surface-1); border: 1px solid var(--line); border-radius: 50%; }
+.mobile-search-backdrop { position: fixed; z-index: 120; inset: 0; display: grid; align-items: start; padding: max(18px, env(safe-area-inset-top)) 14px 14px; background: rgba(2,3,4,.76); backdrop-filter: blur(14px); }
+.mobile-search-sheet { width: min(620px, 100%); margin: 0 auto; overflow: hidden; background: color-mix(in srgb, var(--surface-1) 95%, black); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 30px 90px rgba(0,0,0,.62); }
+.mobile-search-sheet > header { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--line); }
+.mobile-search-sheet .search-box { display: flex; flex: 1; width: auto; margin: 0; }
+.mobile-search-sheet > header > button { display: grid; place-items: center; width: 42px; height: 42px; padding: 0; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 50%; }
+.mobile-search-results { max-height: min(66vh, 580px); padding: 8px; overflow: auto; }
+.mobile-search-results > button { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; min-height: 64px; padding: 11px 13px; color: var(--text); text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--line); }
+.mobile-search-results > button:last-of-type { border-bottom: 0; }
+.mobile-search-results > button span { display: grid; gap: 4px; min-width: 0; }
+.mobile-search-results strong, .mobile-search-results small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-search-results small, .mobile-search-results p { color: var(--muted); }
+.mobile-search-results p { margin: 0; padding: 20px 13px; }
+@media (max-width: 820px) { .mobile-search-button { display: grid; } }
 .nav-backdrop { display: none; }
 .notice { color: #e7ebef; background: #171b20; border-color: #3d4930; box-shadow: 0 14px 40px rgba(0,0,0,.34); }
 .notice button { color: #aeb5be; }

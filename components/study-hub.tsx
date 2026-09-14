@@ -414,6 +414,7 @@ export function StudyHub({
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [searchTarget, setSearchTarget] = useState<{ kind: "path" | "document" | "journey" | "plan"; id: string; tab: Tab; nonce: number } | null>(null);
   const previousTab = useRef<Tab>(tab);
   const [customizingHome, setCustomizingHome] = useState(false);
@@ -920,6 +921,7 @@ export function StudyHub({
     setTab(result.tab);
     setGlobalSearch("");
     setSearchOpen(false);
+    setMobileSearchOpen(false);
   }
 
   const context = useMemo(
@@ -1987,9 +1989,12 @@ export function StudyHub({
           <div className="top-actions">
             <span className={`cloud-status ${cloudStatus}`}>{cloudStatus === "saved" ? "Salvo na nuvem" : cloudStatus === "saving" ? "Salvando…" : cloudStatus === "error" ? "Falha ao sincronizar" : cloudStatus === "loading" ? "Sincronizando…" : "Modo local"}</span>
             <div className="global-search"><label className="search-box"><Search size={17} /><input aria-label="Pesquisar em toda a plataforma" placeholder="Buscar em tudo" value={globalSearch} onFocus={() => setSearchOpen(true)} onChange={(event) => { setGlobalSearch(event.target.value); setSearchOpen(true); }} /></label>{searchOpen && normalizedSearch && <div className="search-results" role="listbox" aria-label="Resultados da busca">{searchResults.length ? searchResults.map(result => <button role="option" aria-selected="false" key={`${result.detail}:${result.id}`} onClick={() => openSearchResult(result)}><span><strong>{result.title}</strong><small>{result.detail}</small></span><ArrowRight size={16} /></button>) : <p>Nenhum resultado encontrado.</p>}</div>}</div>
+            <button className="mobile-search-button" aria-label="Abrir busca" onClick={() => setMobileSearchOpen(true)}><Search size={19} /></button>
             <button className="outline-button" onClick={() => setTab("mentor")}><Sparkles size={17} /> Abrir Mentor</button>
           </div>
         </header>
+
+        {mobileSearchOpen && <div className="mobile-search-backdrop" role="presentation" onClick={() => { setMobileSearchOpen(false); setGlobalSearch(""); }}><section className="mobile-search-sheet" role="dialog" aria-modal="true" aria-label="Busca na plataforma" onClick={event => event.stopPropagation()}><header><label className="search-box"><Search size={18} /><input autoFocus aria-label="Pesquisar na plataforma pelo celular" placeholder="Buscar trilhas, planos, jornadas..." value={globalSearch} onChange={event => setGlobalSearch(event.target.value)} /></label><button aria-label="Fechar busca" onClick={() => { setMobileSearchOpen(false); setGlobalSearch(""); }}><X size={20} /></button></header><div className="mobile-search-results" role="listbox" aria-label="Resultados da busca no celular">{normalizedSearch ? searchResults.length ? searchResults.map(result => <button role="option" aria-selected="false" key={`${result.detail}:${result.id}`} onClick={() => openSearchResult(result)}><span><strong>{result.title}</strong><small>{result.detail}</small></span><ArrowRight size={17} /></button>) : <p>Nenhum resultado encontrado.</p> : <p>Digite para encontrar qualquer conteúdo salvo.</p>}</div></section></div>}
 
         {(localReadFailed || localWriteFailed) && <section className="storage-recovery" role="alert"><HardDrive size={22} /><div><strong>{localReadFailed ? 'Dados locais precisam de recuperação' : 'Não foi possível salvar neste navegador'}</strong><p>{localReadFailed ? 'O salvamento automático local foi pausado para preservar os registros originais. Baixe uma cópia das alterações desta sessão antes de sair.' : 'Baixe uma cópia do painel antes de sair para preservar suas alterações.'}</p><button className="outline-button" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(dashboardState, null, 2)], {type:'application/json'})); const link = document.createElement('a'); link.href=url; link.download='nexo-painel-backup.json'; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Baixar cópia desta sessão</button></div></section>}
         {notice && (
