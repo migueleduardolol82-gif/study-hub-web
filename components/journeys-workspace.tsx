@@ -8,7 +8,8 @@ import { localDate } from '@/lib/routine';
 const today = () => localDate();
 const blank = { name: "", category: "", icon: "✦", color: "#c6ff4a", objective: "", startDate: today(), deadline: "", metricName: "Progresso", metricUnit: "%", target: 100, current: 0 };
 
-export function JourneysWorkspace({ journeys, setJourneys, openLegacy }: { journeys: JourneyRecord[]; setJourneys: React.Dispatch<React.SetStateAction<JourneyRecord[]>>; openLegacy: (view: "mapping" | "themes") => void }) {
+export function JourneysWorkspace({ journeys, setJourneys, openLegacy, requestedJourneyId }: { journeys: JourneyRecord[]; setJourneys: React.Dispatch<React.SetStateAction<JourneyRecord[]>>; openLegacy: (view: "mapping" | "themes") => void; requestedJourneyId?: string }) {
+  const requestedJourney = journeys.find((item) => item.id === requestedJourneyId);
   const [draft, setDraft] = useState(blank);
   const [editing, setEditing] = useState("");
   const [menu, setMenu] = useState("");
@@ -16,8 +17,8 @@ export function JourneysWorkspace({ journeys, setJourneys, openLegacy }: { journ
   const [activityTitle, setActivityTitle] = useState("");
   const [activityDate, setActivityDate] = useState(today());
   const [activityMinutes, setActivityMinutes] = useState(30);
-  const [query, setQuery] = useState("");
-  const [showArchived, setShowArchived] = useState(false);
+  const [query, setQuery] = useState(requestedJourney?.name || "");
+  const [showArchived, setShowArchived] = useState(requestedJourney?.status === "archived");
   const visible = useMemo(() => journeys.filter((item) => (showArchived ? item.status === "archived" : item.status !== "archived") && `${item.name} ${item.category} ${item.objective}`.toLowerCase().includes(query.toLowerCase())), [journeys, query, showArchived]);
 
   function save(event: FormEvent) {

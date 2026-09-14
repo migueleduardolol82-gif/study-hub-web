@@ -13,7 +13,7 @@ import type { StudyDocument } from "@/lib/study-documents";
 import { ReviewSession } from "@/components/review-session";
 import { bank, modeLabels, newReviewSession, reviewModes, conceptKey, mergeQuestionBank, syncKnowledgeBase, type ReviewMode } from "@/lib/review-engine";
 
-export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPath, themes, maps, materialContext, documents, setDocuments, notify }: {
+export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPath, themes, maps, materialContext, documents, setDocuments, notify, requestedPathId, requestedDocumentId }: {
   paths: LearningPath[];
   setPaths: React.Dispatch<React.SetStateAction<LearningPath[]>>;
   progressByPath: Record<string, PathProgress>;
@@ -24,8 +24,10 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   documents: StudyDocument[];
   setDocuments: React.Dispatch<React.SetStateAction<StudyDocument[]>>;
   notify: (message: string) => void;
+  requestedPathId?: string;
+  requestedDocumentId?: string;
 }) {
-  const [activePathId, setActivePathId] = useState(paths[0]?.id || "");
+  const [activePathId, setActivePathId] = useState(() => paths.some(path => path.id === requestedPathId) ? requestedPathId || "" : paths[0]?.id || "");
   const [themeId, setThemeId] = useState("");
   const [mapId, setMapId] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -43,7 +45,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   const [scope, setScope] = useState("all");
   const [background, setBackground] = useState(false);
   const [speedDuration, setSpeedDuration] = useState(60);
-  const [creatorOpen, setCreatorOpen] = useState(paths.length === 0);
+  const [creatorOpen, setCreatorOpen] = useState(paths.length === 0 || Boolean(requestedDocumentId));
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [todayClock] = useState(() => Date.now());
   const [retryLesson, setRetryLesson] = useState<{ path: LearningPath; lesson: LearningLesson } | null>(null);

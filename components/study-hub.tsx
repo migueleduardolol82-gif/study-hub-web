@@ -414,6 +414,8 @@ export function StudyHub({
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTarget, setSearchTarget] = useState<{ kind: "path" | "document" | "journey" | "plan"; id: string; tab: Tab; nonce: number } | null>(null);
+  const previousTab = useRef<Tab>(tab);
   const [customizingHome, setCustomizingHome] = useState(false);
   const [platformPreferences, setPlatformPreferences] = useState<PlatformPreferences>(defaultPlatformPreferences);
   const [timerSnapshot, setTimerSnapshot] = useState<TimerSnapshot>(() => initialTimer());
@@ -888,11 +890,11 @@ export function StudyHub({
   const overallLevel = Math.round(averageSkill);
   const normalizedSearch = globalSearch.trim().toLocaleLowerCase("pt-BR");
   const searchResults = normalizedSearch ? [
-    ...learningPaths.filter(path => path.title.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(path => ({ id: path.id, title: path.title, detail: "Trilha", tab: "review" as Tab })),
-    ...learningPaths.flatMap(path => path.units.filter(unit => `${unit.title} ${unit.description}`.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(unit => ({ id: unit.id, title: unit.title, detail: `Unidade · ${path.title}`, tab: "review" as Tab }))),
-    ...journeys.filter(journey => `${journey.name} ${journey.objective}`.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(journey => ({ id: journey.id, title: journey.name, detail: "Jornada", tab: "journeys" as Tab })),
-    ...documents.filter(document => document.name.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(document => ({ id: document.id, title: document.name, detail: "Material", tab: "review" as Tab })),
-    ...studyPlans.filter(plan => plan.name.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(plan => ({ id: plan.id, title: plan.name, detail: "Plano", tab: "plans" as Tab })),
+    ...learningPaths.filter(path => path.title.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(path => ({ id: path.id, title: path.title, detail: "Trilha", kind: "path" as const, tab: "review" as Tab })),
+    ...learningPaths.flatMap(path => path.units.filter(unit => `${unit.title} ${unit.description}`.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(unit => ({ id: path.id, title: unit.title, detail: `Unidade · ${path.title}`, kind: "path" as const, tab: "review" as Tab }))),
+    ...journeys.filter(journey => `${journey.name} ${journey.objective}`.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(journey => ({ id: journey.id, title: journey.name, detail: "Jornada", kind: "journey" as const, tab: "journeys" as Tab })),
+    ...documents.filter(document => document.name.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(document => ({ id: document.id, title: document.name, detail: "Material", kind: "document" as const, tab: "review" as Tab })),
+    ...studyPlans.filter(plan => plan.name.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(plan => ({ id: plan.id, title: plan.name, detail: "Plano", kind: "plan" as const, tab: "plans" as Tab })),
   ].slice(0, 12) : [];
   const activeGlobalTab: Tab = ["study", "today", "journeys", "mapping", "themes", "review", "sessions", "plans"].includes(tab) ? "study" : tab;
   const selectedPalette = platformPalettes.find(item => item.id === platformPreferences.palette) || platformPalettes[0];
@@ -905,6 +907,20 @@ export function StudyHub({
   } as CSSProperties;
   const hasWidget = (id: HomeWidgetId) => platformPreferences.widgets.includes(id);
   const widgetOrder = (id: HomeWidgetId) => platformPreferences.widgets.indexOf(id) + 1;
+
+  useEffect(() => {
+    if (previousTab.current !== tab && searchTarget && tab !== searchTarget.tab) setSearchTarget(null);
+    previousTab.current = tab;
+  }, [searchTarget, tab]);
+
+  function openSearchResult(result: (typeof searchResults)[number]) {
+    if (result.kind === "plan") { setActivePlanId(result.id); setPlanWeekView(0); }
+    if (result.kind === "document") setDocuments(current => current.map(document => ({ ...document, selected: document.id === result.id })));
+    setSearchTarget({ kind: result.kind, id: result.id, tab: result.tab, nonce: Date.now() });
+    setTab(result.tab);
+    setGlobalSearch("");
+    setSearchOpen(false);
+  }
 
   const context = useMemo(
     () => `TRILHA: ${courseName || "Não definida"}\nOBJETIVO: ${studyGoal || "Não definido"}\n\nTRANSCRIÇÃO:\n${transcript}\n\nAPOSTILA:\n${syllabus}\n\nMAPEAMENTO:\n${JSON.stringify(mapping)}`,
@@ -1970,7 +1986,7 @@ export function StudyHub({
           </div>
           <div className="top-actions">
             <span className={`cloud-status ${cloudStatus}`}>{cloudStatus === "saved" ? "Salvo na nuvem" : cloudStatus === "saving" ? "Salvando…" : cloudStatus === "error" ? "Falha ao sincronizar" : cloudStatus === "loading" ? "Sincronizando…" : "Modo local"}</span>
-            <div className="global-search"><label className="search-box"><Search size={17} /><input aria-label="Pesquisar em toda a plataforma" placeholder="Buscar em tudo" value={globalSearch} onFocus={() => setSearchOpen(true)} onChange={(event) => { setGlobalSearch(event.target.value); setSearchOpen(true); }} /></label>{searchOpen && normalizedSearch && <div className="search-results" role="listbox" aria-label="Resultados da busca">{searchResults.length ? searchResults.map(result => <button role="option" aria-selected="false" key={`${result.detail}:${result.id}`} onClick={() => { setTab(result.tab); setGlobalSearch(""); setSearchOpen(false); }}><span><strong>{result.title}</strong><small>{result.detail}</small></span><ArrowRight size={16} /></button>) : <p>Nenhum resultado encontrado.</p>}</div>}</div>
+            <div className="global-search"><label className="search-box"><Search size={17} /><input aria-label="Pesquisar em toda a plataforma" placeholder="Buscar em tudo" value={globalSearch} onFocus={() => setSearchOpen(true)} onChange={(event) => { setGlobalSearch(event.target.value); setSearchOpen(true); }} /></label>{searchOpen && normalizedSearch && <div className="search-results" role="listbox" aria-label="Resultados da busca">{searchResults.length ? searchResults.map(result => <button role="option" aria-selected="false" key={`${result.detail}:${result.id}`} onClick={() => openSearchResult(result)}><span><strong>{result.title}</strong><small>{result.detail}</small></span><ArrowRight size={16} /></button>) : <p>Nenhum resultado encontrado.</p>}</div>}</div>
             <button className="outline-button" onClick={() => setTab("mentor")}><Sparkles size={17} /> Abrir Mentor</button>
           </div>
         </header>
@@ -2024,7 +2040,7 @@ export function StudyHub({
 
         {tab === "today" && <RoutineWorkspace state={routine} onChange={setRoutine} tracks={skillTracks} archetypes={availableArchetypes} skills={<AscensionIndex tracks={skillTracks} onChange={setSkillTracks} journeys={journeys} xp={totalXp} />} legacy={<TodayWorkspace journeys={journeys} setJourneys={setJourneys} />} />}
 
-        {tab === "journeys" && <JourneysWorkspace journeys={journeys} setJourneys={setJourneys} openLegacy={(view) => setTab(view)} />}
+        {tab === "journeys" && <JourneysWorkspace key={`journeys:${searchTarget?.kind === "journey" ? `${searchTarget.id}:${searchTarget.nonce}` : "default"}`} journeys={journeys} setJourneys={setJourneys} openLegacy={(view) => setTab(view)} requestedJourneyId={searchTarget?.kind === "journey" ? searchTarget.id : undefined} />}
 
         {tab === "evolution" && (
           <div className="evolution-page">
@@ -2627,6 +2643,7 @@ export function StudyHub({
 
         {tab === "review" && (
           <ActiveReview
+            key={`review:${searchTarget && (searchTarget.kind === "path" || searchTarget.kind === "document") ? `${searchTarget.kind}:${searchTarget.id}:${searchTarget.nonce}` : "default"}`}
             paths={learningPaths}
             setPaths={setLearningPaths}
             progressByPath={learningProgress}
@@ -2637,6 +2654,8 @@ export function StudyHub({
             documents={documents}
             setDocuments={setDocuments}
             notify={setNotice}
+            requestedPathId={searchTarget?.kind === "path" ? searchTarget.id : undefined}
+            requestedDocumentId={searchTarget?.kind === "document" ? searchTarget.id : undefined}
           />
         )}
 
