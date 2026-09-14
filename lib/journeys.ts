@@ -63,3 +63,8 @@ export function migrateStudyOrganizationToJourneys(themes: ThemeRecord[], maps: 
   }));
   return [...existing, ...migratedMaps, ...migratedThemes];
 }
+
+/** Only active journeys contribute to today's actions; use the caller's local date. */
+export function journeyActionsForDay(journeys: JourneyRecord[], date: string, completed = false) {
+  return journeys.filter(journey => journey.status === 'active').flatMap(journey => journey.activities.filter(activity => activity.done === completed && activity.date <= date).map(activity => ({journey,activity}))).sort((a,b) => a.activity.date.localeCompare(b.activity.date));
+}

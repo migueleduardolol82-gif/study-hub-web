@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatLiveTime, liveClassFlashcards, liveClassTranscript, type LiveClassSession } from "../lib/live-class.ts";
+import { recoverLiveClasses, formatLiveTime, liveClassFlashcards, liveClassTranscript, type LiveClassSession } from "../lib/live-class.ts";
 
 const session: LiveClassSession = {
   id: "aula-1", title: "Renda fixa", source: "tab", status: "completed",
@@ -29,3 +29,5 @@ test("flashcards preservam as referências do trecho", () => {
   assert.equal(cards.length, 2);
   assert.deepEqual(cards.map(card => card.sourceStart).sort((a, b) => a - b), [0, 30]);
 });
+
+test("reload recovers interrupted analysis without losing transcript or completed cards",()=>{const original={...session,status:'processing' as const,segments:[...session.segments,{id:'pending',start:60,end:90,transcript:'Texto já salvo',title:'Processando',explanation:'',keyPoints:[],flashcards:[],status:'analyzing' as const}]};const before=JSON.stringify(original);const restored=recoverLiveClasses([original])[0];assert.equal(restored.status,'completed');assert.equal(restored.segments[2].status,'error');assert.equal(restored.segments[2].transcript,'Texto já salvo');assert.deepEqual(restored.segments.slice(0,2),session.segments);assert.equal(JSON.stringify(original),before);});

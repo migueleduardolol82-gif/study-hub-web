@@ -1,7 +1,7 @@
 "use client";
 
 import { UserButton, useUser } from "@clerk/nextjs";
-import { Cloud, HardDrive } from "lucide-react";
+import { Cloud, HardDrive, UserRound } from "lucide-react";
 
 function SignedInAccount({ compact = false }: { compact?: boolean }) {
   const { user } = useUser();
@@ -18,7 +18,7 @@ export function AccountControl({ enabled, compact = false }: { enabled: boolean;
   if (enabled) return <SignedInAccount compact={compact} />;
   return (
     <div className={compact ? "account-control local compact" : "account-control local"}>
-      <span className="local-avatar">ME</span>
+      <span className="local-avatar"><UserRound size={18} aria-hidden="true" /></span>
       <div><strong>Modo local</strong><small><HardDrive size={12} /> neste navegador</small></div>
     </div>
   );

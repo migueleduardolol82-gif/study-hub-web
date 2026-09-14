@@ -29,8 +29,11 @@ try {
   const home = await waitUntilReady();
   const html = await home.text();
   assert.match(html, /NEXO/);
-  assert.match(html, /Jornadas|Mapas de Estudos/);
-  assert.match(html, /Revisão Ativa/);
+  // Internal areas are mounted after navigation; the initial HTML is the home hub.
+  // journeys-ui and platform-ui cover the client navigation into those areas.
+  assert.match(html, /Navegação principal/);
+  assert.match(html, /Estudar/);
+  assert.match(html, /Crie sua primeira trilha/);
 
   const signIn = await fetch(`http://127.0.0.1:${port}/sign-in`);
   assert.equal(signIn.status, 200);

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { BookOpen, Check, ChevronDown, ChevronUp, FileVideo, LoaderCircle, Mic, MonitorUp, Play, RotateCcw, Square, Trash2, Video } from "lucide-react";
+import { requestAI } from "@/lib/ai-client";
 import { readApiResponse } from "@/lib/api-contract";
 import { formatLiveTime, liveClassFlashcards, liveClassTranscript, type LiveClassSession, type LiveClassSegment } from "@/lib/live-class";
 
@@ -19,6 +20,7 @@ export function LiveClassStudio({ sessions, setSessions, onCreateReview }: Props
   const [activeId, setActiveId] = useState("");
   const [expandedId, setExpandedId] = useState("");
   const [error, setError] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const recorder = useRef<MediaRecorder | null>(null);
   const capturedStream = useRef<MediaStream | null>(null);
@@ -32,8 +34,8 @@ export function LiveClassStudio({ sessions, setSessions, onCreateReview }: Props
 
   useEffect(() => () => {
     capturedStream.current?.getTracks().forEach(track => track.stop());
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
-  }, [videoUrl]);
+  }, []);
+  useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl); }, [videoUrl]);
 
   function updateSegment(sessionId: string, segmentId: string, update: Partial<LiveClassSegment>) {
     setSessions(current => current.map(session => session.id !== sessionId ? session : {
@@ -42,22 +44,25 @@ export function LiveClassStudio({ sessions, setSessions, onCreateReview }: Props
     }));
   }
 
-  async function processChunk(sessionId: string, segmentId: string, blob: Blob) {
+  async function processChunk(sessionId: string, segmentId: string, blob?: Blob, savedTranscript = "") {
     try {
+      let transcript = savedTranscript;
+      if (!transcript) {
+      if (!blob) throw new Error("O áudio temporário não está disponível. Abra o arquivo original para transcrever novamente.");
       const form = new FormData();
       form.append("audio", new File([blob], `trecho.${blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm"}`, { type: blob.type || "audio/webm" }));
-      const transcribed = await readApiResponse<{ transcript: string }>(await fetch("/api/live-class/transcribe", { method: "POST", body: form }));
-      updateSegment(sessionId, segmentId, { transcript: transcribed.transcript, error: undefined });
-      if (!transcribed.transcript) {
+      const transcribed = await readApiResponse<{ transcript: string }>(await fetch("/api/live-class/transcribe", { method: "POST", body: form, signal: AbortSignal.timeout(125000) }));
+      transcript = transcribed.transcript;
+      }
+      updateSegment(sessionId, segmentId, { transcript: transcript, error: undefined });
+      if (!transcript) {
         updateSegment(sessionId, segmentId, { status: "ready", title: "Sem fala identificada", explanation: "Este trecho não continha fala suficiente para gerar material de estudo.", keyPoints: [], flashcards: [] });
         chunkCache.current.delete(segmentId);
         return;
       }
       const previousContext = transcriptContext.current.get(sessionId) || "";
-      const analyzed = await readApiResponse<{ title: string; explanation: string; keyPoints: string[]; flashcards: { front: string; back: string; topic: string }[] }>(await fetch("/api/live-class/analyze", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ transcript: transcribed.transcript, context: previousContext.slice(-6_000) }),
-      }));
-      transcriptContext.current.set(sessionId, `${previousContext}\n${transcribed.transcript}`.slice(-8_000));
+      const analyzed = await requestAI<{ title: string; explanation: string; keyPoints: string[]; flashcards: { front: string; back: string; topic: string }[] }>("/api/live-class/analyze", {transcript, context: previousContext.slice(-6_000)});
+      transcriptContext.current.set(sessionId, `${previousContext}\n${transcript}`.slice(-8_000));
       setSessions(current => current.map(session => session.id !== sessionId ? session : {
         ...session, updatedAt: new Date().toISOString(),
         segments: session.segments.map(segment => segment.id !== segmentId ? segment : {
@@ -135,9 +140,17 @@ export function LiveClassStudio({ sessions, setSessions, onCreateReview }: Props
 
   function retrySegment(sessionId: string, segmentId: string) {
     const blob = chunkCache.current.get(segmentId);
-    if (!blob) { setError("O áudio temporário deste trecho não está mais disponível. A transcrição já salva foi mantida."); return; }
+    const segment = sessions.find(session => session.id === sessionId)?.segments.find(item => item.id === segmentId);
+    if (!segment || segment.status === "analyzing") return;
+    if (!blob && !segment.transcript.trim()) { setError("O áudio temporário não está disponível. Abra o arquivo original para transcrever novamente."); return; }
     updateSegment(sessionId, segmentId, { status: "analyzing", error: undefined });
-    queue.current = queue.current.then(() => processChunk(sessionId, segmentId, blob));
+    queue.current = queue.current.then(() => processChunk(sessionId, segmentId, blob, segment.transcript));
+  }
+
+  async function copyTranscript(session: LiveClassSession) {
+    setCopyStatus("");
+    try { await navigator.clipboard.writeText(liveClassTranscript(session)); setCopyStatus("Transcrição copiada."); }
+    catch { setError("Não foi possível copiar. Abra a transcrição do trecho para selecionar e copiar o texto manualmente."); }
   }
 
   function chooseVideo(file?: File) {
@@ -162,6 +175,7 @@ export function LiveClassStudio({ sessions, setSessions, onCreateReview }: Props
       {videoUrl ? <video className="live-video" controls playsInline src={videoUrl}/> : null}
       {!recording ? <button type="button" className="primary-button live-start" onClick={startRecording}><Play size={18}/> Iniciar Aula ao Vivo</button> : <div className="live-recording"><i/><span>Capturando áudio</span><small>Você pode continuar assistindo. Não feche esta página.</small></div>}
       {error ? <div className="inline-error" role="alert">{error}<button type="button" onClick={() => setError("")}>Fechar</button></div> : null}
+      {copyStatus && <p role="status">{copyStatus}</p>}
       <p className="live-privacy">A captura só começa após sua autorização. Não grave pessoas ou conteúdos sem permissão.</p>
     </div>
 
@@ -187,7 +201,7 @@ export function LiveClassStudio({ sessions, setSessions, onCreateReview }: Props
             </article>) : <p className="live-empty">O primeiro trecho aparecerá em até 30 segundos.</p>}
             <div className="live-session-actions">
               <button type="button" className="primary-button" disabled={!cards.length || session.status !== "completed"} onClick={() => onCreateReview(session)}><BookOpen size={17}/> Levar para Revisão Ativa</button>
-              <button type="button" className="outline-button" disabled={!liveClassTranscript(session)} onClick={() => navigator.clipboard.writeText(liveClassTranscript(session))}>Copiar transcrição</button>
+              <button type="button" className="outline-button" disabled={!liveClassTranscript(session)} onClick={() => void copyTranscript(session)}>Copiar transcrição</button>
               <button type="button" className="text-button danger" disabled={session.id === activeId} onClick={() => { if (window.confirm(`Excluir a aula “${session.title}” e seus ${cards.length} flashcards?`)) setSessions(current => current.filter(item => item.id !== session.id)); }}><Trash2 size={15}/> Excluir</button>
             </div>
           </div> : null}

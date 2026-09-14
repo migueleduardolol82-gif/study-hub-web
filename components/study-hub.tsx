@@ -1,4 +1,6 @@
 "use client";
+/* State hydration and migrations below deliberately synchronize React with local/cloud storage. */
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import {
   Activity,
@@ -46,7 +48,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import dynamic from "next/dynamic";
 import { AccountControl } from "@/components/account-control";
 import { StudyTimer, useStudyTimer } from "@/components/study-timer";
@@ -64,10 +66,12 @@ import type { GeneratedArchetype } from "@/lib/archetypes";
 import { emptyPathProgress, type ContentMapping, type LearningPath, type LearningTopic, type PathProgress, type StudyMapRecord, type ThemeRecord, type TopicPriority as LearningTopicPriority, type TopicStatus as LearningTopicStatus } from "@/lib/learning";
 import type { StudyDocument } from "@/lib/study-documents";
 import { DocumentUploadPanel } from "@/components/document-upload-panel";
+import { PlatformCustomizer } from "@/components/platform-customizer";
+import { defaultPlatformPreferences, normalizePlatformPreferences, platformPalettes, type HomeWidgetId, type PlatformPreferences } from "@/lib/platform-preferences";
 import { analyzeStudyDocuments } from "@/lib/document-analysis-client";
 import type { SkillTrack } from "@/lib/ascension-index";
 import { migrateStudyOrganizationToJourneys, journeyProgress, type JourneyRecord } from "@/lib/journeys";
-import { formatLiveTime, liveClassFlashcards, liveClassTranscript, type LiveClassSession } from "@/lib/live-class";
+import { recoverLiveClasses, formatLiveTime, liveClassFlashcards, liveClassTranscript, type LiveClassSession } from "@/lib/live-class";
 
 type Tab = "avatar" | "dashboard" | "study" | "mentor" | "profile" | "today" | "journeys" | "mapping" | "themes" | "review" | "evolution" | "sessions" | "plans";
 
@@ -189,6 +193,7 @@ type DashboardState = {
   journeys: JourneyRecord[];
   skillTracks: SkillTrack[];
   liveClasses: LiveClassSession[];
+  platformPreferences?: PlatformPreferences;
 };
 
 const initialMapping: Mapping = {
@@ -409,6 +414,8 @@ export function StudyHub({
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [customizingHome, setCustomizingHome] = useState(false);
+  const [platformPreferences, setPlatformPreferences] = useState<PlatformPreferences>(defaultPlatformPreferences);
   const [timerSnapshot, setTimerSnapshot] = useState<TimerSnapshot>(() => initialTimer());
   const sessionMode = timerSnapshot.phase === "focus" ? "focus" : "break";
   const [goals, setGoals] = useState<Goal[]>(initialGoals);
@@ -477,10 +484,16 @@ export function StudyHub({
   const [notice, setNotice] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const chatRequest = useRef(false);
+  const [chatFailure, setChatFailure] = useState<{message:string; context:string; error:string} | null>(null);
   const [chatMessages, setChatMessages] = useState([
     { role: "assistant", text: "Olá. Posso explicar um trecho, criar exemplos ou montar uma revisão com base na sua aula." },
   ]);
   const [storageReady, setStorageReady] = useState(false);
+  const [localReadFailed, setLocalReadFailed] = useState(false);
+  const [localWriteFailed, setLocalWriteFailed] = useState(false);
+  const [cloudRetry, setCloudRetry] = useState(0);
   const [cloudLoaded, setCloudLoaded] = useState(!cloudEnabled);
   const [cloudStatus, setCloudStatus] = useState<"local" | "loading" | "saving" | "saved" | "error">(cloudEnabled ? "loading" : "local");
   const [legacyImportAvailable, setLegacyImportAvailable] = useState(false);
@@ -537,7 +550,8 @@ export function StudyHub({
         if (Array.isArray(state.documents)) setDocuments(state.documents);
         if (Array.isArray(state.journeys)) setJourneys(state.journeys);
         if (Array.isArray(state.skillTracks)) setSkillTracks(state.skillTracks);
-        if (Array.isArray(state.liveClasses)) setLiveClasses(state.liveClasses);
+        if (Array.isArray(state.liveClasses)) setLiveClasses(recoverLiveClasses(state.liveClasses));
+        setPlatformPreferences(normalizePlatformPreferences(state.platformPreferences));
       } else if (!authEnabled) {
         const stored = window.localStorage.getItem("nexo-goals-v1");
         if (stored) setGoals(JSON.parse(stored));
@@ -575,6 +589,7 @@ export function StudyHub({
         setLegacyImportAvailable(hasLegacy);
       }
     } catch {
+      setLocalReadFailed(true);
       setNotice("Alguns dados locais antigos não puderam ser lidos. Nenhum arquivo foi apagado.");
     } finally {
       setStorageReady(true);
@@ -617,16 +632,19 @@ export function StudyHub({
     journeys,
     skillTracks,
     liveClasses,
-  }), [routine, tertiaryArchetype, goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks, liveClasses]);
+    platformPreferences,
+  }), [routine, tertiaryArchetype, goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks, liveClasses, platformPreferences]);
 
   useEffect(() => {
-    if (!storageReady || (cloudEnabled && !cloudLoaded)) return;
+    if (!storageReady || localReadFailed || (cloudEnabled && !cloudLoaded)) return;
     try {
       window.localStorage.setItem(dashboardStorageKey, JSON.stringify(dashboardState));
+      setLocalWriteFailed(false);
     } catch {
+      setLocalWriteFailed(true);
       setNotice("O armazenamento deste navegador está cheio ou indisponível. Não feche a página antes de confirmar o salvamento na nuvem.");
     }
-  }, [dashboardState, dashboardStorageKey, storageReady, cloudEnabled, cloudLoaded]);
+  }, [dashboardState, dashboardStorageKey, storageReady, cloudEnabled, cloudLoaded, localReadFailed]);
 
   useEffect(() => {
     if (!cloudEnabled || !storageReady) return;
@@ -634,7 +652,7 @@ export function StudyHub({
     async function loadCloudState() {
       setCloudStatus("loading");
       try {
-        const response = await fetch("/api/user-data", { cache: "no-store" });
+        const response = await fetch("/api/user-data", { cache: "no-store", signal: AbortSignal.timeout(15000) });
         const payload = await readApiResponse<{ state?: Partial<DashboardState> | null }>(response);
         if (cancelled) return;
         const state = payload.state;
@@ -672,7 +690,8 @@ export function StudyHub({
           if (Array.isArray(state.documents)) setDocuments(state.documents);
           if (Array.isArray(state.journeys)) setJourneys(state.journeys);
           setSkillTracks(Array.isArray(state.skillTracks) ? state.skillTracks : []);
-          setLiveClasses(Array.isArray(state.liveClasses) ? state.liveClasses : []);
+          setLiveClasses(recoverLiveClasses(Array.isArray(state.liveClasses) ? state.liveClasses : []));
+          setPlatformPreferences(normalizePlatformPreferences(state.platformPreferences));
         }
         setCloudStatus(state ? "saved" : "saving");
         if (!cancelled) setCloudLoaded(true);
@@ -685,7 +704,7 @@ export function StudyHub({
     }
     loadCloudState();
     return () => { cancelled = true; };
-  }, [cloudEnabled, storageReady]);
+  }, [cloudEnabled, storageReady, cloudRetry]);
 
   useEffect(() => {
     if (!storageReady || (cloudEnabled && !cloudLoaded) || (!themes.length && !studyMaps.length)) return;
@@ -876,6 +895,16 @@ export function StudyHub({
     ...studyPlans.filter(plan => plan.name.toLocaleLowerCase("pt-BR").includes(normalizedSearch)).map(plan => ({ id: plan.id, title: plan.name, detail: "Plano", tab: "plans" as Tab })),
   ].slice(0, 12) : [];
   const activeGlobalTab: Tab = ["study", "today", "journeys", "mapping", "themes", "review", "sessions", "plans"].includes(tab) ? "study" : tab;
+  const selectedPalette = platformPalettes.find(item => item.id === platformPreferences.palette) || platformPalettes[0];
+  const accent = platformPreferences.customAccent || selectedPalette.accent;
+  const platformStyle = {
+    "--accent": accent, "--lime": accent, "--lime-dark": accent,
+    "--accent-2": selectedPalette.accent2, "--purple": selectedPalette.accent2,
+    "--surface-base": selectedPalette.base, "--paper": selectedPalette.base,
+    "--surface-1": selectedPalette.surface, "--card": selectedPalette.surface,
+  } as CSSProperties;
+  const hasWidget = (id: HomeWidgetId) => platformPreferences.widgets.includes(id);
+  const widgetOrder = (id: HomeWidgetId) => platformPreferences.widgets.indexOf(id) + 1;
 
   const context = useMemo(
     () => `TRILHA: ${courseName || "Não definida"}\nOBJETIVO: ${studyGoal || "Não definido"}\n\nTRANSCRIÇÃO:\n${transcript}\n\nAPOSTILA:\n${syllabus}\n\nMAPEAMENTO:\n${JSON.stringify(mapping)}`,
@@ -1854,43 +1883,45 @@ export function StudyHub({
     setNotice("A aula foi transformada em uma unidade da Revisão Ativa.");
   }
 
-  async function sendChat(event: FormEvent) {
-    event.preventDefault();
-    const message = chatText.trim();
-    if (!message || busy === "chat") return;
-    setChatMessages((current) => [...current, { role: "user", text: message }]);
-    setChatText("");
-    setBusy("chat");
+  async function requestChat(message: string, messageContext: string, retry = false) {
+    if (!message || chatRequest.current) return;
+    chatRequest.current = true;
+    setChatBusy(true);
+    setChatFailure(null);
+    if (!retry) {
+      setChatMessages(current => [...current, {role: "user", text: message}]);
+      setChatText("");
+    }
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, context }),
-      });
-      const payload = await readApiResponse<{ answer: string }>(response);
-      setChatMessages((current) => [...current, { role: "assistant", text: payload.answer }]);
+      const payload = await requestAI<{answer:string}>("/api/chat", {message, context:messageContext});
+      if (typeof payload.answer !== "string" || !payload.answer.trim()) throw new Error("O mentor não retornou uma resposta. Tente novamente.");
+      setChatMessages(current => [...current, {role:"assistant",text:payload.answer}]);
     } catch (error) {
-      setChatMessages((current) => [
-        ...current,
-        { role: "assistant", text: error instanceof Error ? error.message : "Não consegui responder agora." },
-      ]);
+      setChatFailure({message,context:messageContext,error:error instanceof Error ? error.message : "Não foi possível conectar ao mentor."});
     } finally {
-      setBusy(null);
+      chatRequest.current = false;
+      setChatBusy(false);
     }
   }
+
+  function sendChat(event: FormEvent) {
+    event.preventDefault();
+    void requestChat(chatText.trim(),context);
+  }
+
+  const chatError = chatFailure && <div className="mentor-error" role="alert"><strong>Mensagem não respondida</strong><p>{chatFailure.error}</p><button type="button" className="outline-button" disabled={chatBusy} onClick={() => void requestChat(chatFailure.message,chatFailure.context,true)}><RotateCcw size={16} />Tentar novamente</button></div>;
 
   if (cloudEnabled && !cloudLoaded) {
     return (
       <main className="cloud-loading">
         <span className="brand"><span className="brand-mark"><Zap size={18} fill="currentColor" /></span><span>NEXO</span></span>
-        <div className="app-skeleton" aria-label="Carregando seu painel"><span /><span /><div><i /><i /><i /></div><span /></div>
-        <p>Organizando seu painel…</p>
+        {cloudStatus === "error" ? <section className="cloud-recovery" role="alert"><HardDrive size={32} /><h1>Não foi possível abrir seu painel</h1><p>A conexão com seus dados falhou. Seus registros não foram substituídos.</p><button className="primary-button" onClick={() => { setCloudStatus("loading"); setCloudRetry(value => value + 1); }}><RotateCcw size={18} />Tentar novamente</button><small>Se a conexão continuar indisponível, tente novamente mais tarde.</small></section> : <><div className="app-skeleton" role="status" aria-label="Carregando seu painel"><span /><span /><div><i /><i /><i /></div><span /></div><p>Organizando seu painel…</p></>}
       </main>
     );
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell palette-${platformPreferences.palette}`} style={platformStyle}>
       {mobileNav && <button className="nav-backdrop" onClick={() => setMobileNav(false)} aria-label="Fechar navegação" />}
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
         <div className="brand">
@@ -1938,12 +1969,13 @@ export function StudyHub({
             <h1>{viewLabels[tab]}</h1>
           </div>
           <div className="top-actions">
-            <span className={`cloud-status ${cloudStatus}`}>{cloudStatus === "saved" ? "Salvo na nuvem" : cloudStatus === "saving" ? "Salvando…" : cloudStatus === "error" ? "Cópia local" : cloudStatus === "loading" ? "Sincronizando…" : "Modo local"}</span>
+            <span className={`cloud-status ${cloudStatus}`}>{cloudStatus === "saved" ? "Salvo na nuvem" : cloudStatus === "saving" ? "Salvando…" : cloudStatus === "error" ? "Falha ao sincronizar" : cloudStatus === "loading" ? "Sincronizando…" : "Modo local"}</span>
             <div className="global-search"><label className="search-box"><Search size={17} /><input aria-label="Pesquisar em toda a plataforma" placeholder="Buscar em tudo" value={globalSearch} onFocus={() => setSearchOpen(true)} onChange={(event) => { setGlobalSearch(event.target.value); setSearchOpen(true); }} /></label>{searchOpen && normalizedSearch && <div className="search-results" role="listbox" aria-label="Resultados da busca">{searchResults.length ? searchResults.map(result => <button role="option" aria-selected="false" key={`${result.detail}:${result.id}`} onClick={() => { setTab(result.tab); setGlobalSearch(""); setSearchOpen(false); }}><span><strong>{result.title}</strong><small>{result.detail}</small></span><ArrowRight size={16} /></button>) : <p>Nenhum resultado encontrado.</p>}</div>}</div>
             <button className="outline-button" onClick={() => setTab("mentor")}><Sparkles size={17} /> Abrir Mentor</button>
           </div>
         </header>
 
+        {(localReadFailed || localWriteFailed) && <section className="storage-recovery" role="alert"><HardDrive size={22} /><div><strong>{localReadFailed ? 'Dados locais precisam de recuperação' : 'Não foi possível salvar neste navegador'}</strong><p>{localReadFailed ? 'O salvamento automático local foi pausado para preservar os registros originais. Baixe uma cópia das alterações desta sessão antes de sair.' : 'Baixe uma cópia do painel antes de sair para preservar suas alterações.'}</p><button className="outline-button" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(dashboardState, null, 2)], {type:'application/json'})); const link = document.createElement('a'); link.href=url; link.download='nexo-painel-backup.json'; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Baixar cópia desta sessão</button></div></section>}
         {notice && (
           <div className="notice" role="status"><span>{notice}</span><button onClick={() => setNotice(null)} aria-label="Fechar aviso"><X size={16} /></button></div>
         )}
@@ -1957,14 +1989,16 @@ export function StudyHub({
 
         {tab === "dashboard" && (
           <div className="home-app">
-            <section className="home-greeting"><span className="eyebrow lime">SEU DIA</span><h2>Olá, Miguel.</h2><p>O que vamos evoluir hoje?</p></section>
+            <section className="home-greeting"><div><span className="eyebrow lime">SEU DIA</span><h2>Olá. Vamos evoluir?</h2><p>O que vamos evoluir hoje?</p></div><button className="home-customize-button" aria-expanded={customizingHome} onClick={() => setCustomizingHome(value => !value)}><SlidersHorizontal size={17} /> Personalizar</button></section>
 
-            <section className="home-continue panel">
+            {customizingHome && <PlatformCustomizer value={platformPreferences} onChange={setPlatformPreferences} onClose={() => setCustomizingHome(false)} />}
+
+            {hasWidget("continue") && <section className="home-continue home-widget panel" style={{order:widgetOrder("continue")}}>
               <div className="home-section-title"><span>CONTINUAR</span><small>{currentPathProgress.reviewSession ? `Questão ${currentPathProgress.reviewSession.index + 1}` : "Seu último progresso"}</small></div>
               {currentPath ? <button onClick={() => setTab("review")}><span className="home-continue-icon"><BrainCircuit /></span><span><small>TRILHA</small><strong>{currentPath.title}</strong><em>{currentPathCompletion}% concluído · {currentPathMastery}% de domínio</em><i><b style={{ width: `${currentPathCompletion}%` }} /></i></span><ArrowRight /></button> : <button onClick={() => setTab("review")}><span className="home-continue-icon"><Plus /></span><span><small>PRIMEIRO PASSO</small><strong>Crie sua primeira trilha</strong><em>Transforme qualquer material em estudo ativo.</em></span><ArrowRight /></button>}
-            </section>
+            </section>}
 
-            <section className="home-today panel">
+            {hasWidget("today") && <section className="home-today home-widget panel" style={{order:widgetOrder("today")}}>
               <div className="home-section-title"><span>HOJE</span><button onClick={() => setTab("today")}>Ver agenda</button></div>
               <div className="home-action-list">
                 {routineToday.length > 0 && <button onClick={() => setTab("today")}><span className="home-action-icon green"><CheckCircle2 /></span><span><strong>{routinePending ? `${routinePending} hábitos pendentes` : "Rotina de hoje concluída"}</strong><small>{routineToday.length-routinePending} de {routineToday.length} atividades</small></span><ArrowRight /></button>}
@@ -1973,15 +2007,16 @@ export function StudyHub({
                 {todayJourneyActions.filter(item => !item.done).slice(0, 2).map(item => <button key={item.id} onClick={() => setTab("today")}><span className="home-action-icon amber"><Target /></span><span><strong>{item.title}</strong><small>{item.minutes} min · atividade de hoje</small></span><ArrowRight /></button>)}
                 {!dueReviews && !nextPlanSession && !todayJourneyActions.some(item => !item.done) && <button onClick={() => setQuickActionsOpen(true)}><span className="home-action-icon green"><Plus /></span><span><strong>Planeje sua próxima ação</strong><small>Adicione estudo, treino, leitura ou uma meta.</small></span><ArrowRight /></button>}
               </div><details className="home-goals"><summary>Metas da semana <span>{completedGoals}/{goals.length}</span></summary><div className="goal-bar"><i style={{ width: `${goalProgress}%` }} /></div><div className="goal-list">{goals.slice(0, 4).map(goal => <button key={goal.id} onClick={() => setGoals(current => current.map(item => item.id === goal.id ? { ...item, done: !item.done } : item))}>{goal.done ? <CheckCircle2 className="checked" size={20} /> : <Circle size={20} />}<span className={goal.done ? "done" : ""}>{goal.title}</span></button>)}</div><form className="add-goal" onSubmit={addGoal}><input value={goalText} onChange={event => setGoalText(event.target.value)} placeholder="Nova meta..." aria-label="Nova meta" /><button aria-label="Adicionar meta"><Plus size={17} /></button></form></details>
-            </section>
+            </section>}
 
-            <section className="home-evolution panel">
+            {hasWidget("evolution") && <section className="home-evolution home-widget panel" style={{order:widgetOrder("evolution")}}>
               <div className="home-section-title"><span>EVOLUÇÃO</span><button onClick={() => setTab("evolution")}>Ver detalhes</button></div>
               <div className="home-evolution-grid"><div><strong>{overallLevel || "—"}</strong><small>Nível geral</small></div><div><strong>{evolutionRank}</strong><small>Ranking</small></div><div><strong>{totalXp.toLocaleString("pt-BR")}</strong><small>XP</small></div><div><strong>{currentStreak}</strong><small>Sequência</small></div></div>
               <p><TrendingUp size={17} /> Esta semana: {Math.round(weeklyByType("study") / 60 * 10) / 10}h estudadas, {Math.round((weeklyByType("run") + weeklyByType("strength")) / 60 * 10) / 10}h de treino e {journeyAverage}% de progresso médio nas jornadas.</p>
-            </section>
+            </section>}
 
-            <section className="home-shortcuts"><div className="home-section-title"><span>ACESSOS RÁPIDOS</span></div><div><button onClick={() => setTab("sessions")}><Video /><span>Estudar</span></button><button onClick={() => setTab("review")}><BrainCircuit /><span>Revisão</span></button><button onClick={() => setTab("plans")}><CalendarDays /><span>Planos</span></button><button onClick={() => setTab("evolution")}><Shield /><span>Evolução</span></button><button onClick={() => setTab("mentor")}><Bot /><span>Mentor</span></button><button onClick={() => setTab("profile")}><UserRound /><span>Perfil</span></button></div></section>
+            {hasWidget("focus") && <section className="home-focus home-widget" style={{order:widgetOrder("focus")}}>{timerPanel}</section>}
+            {hasWidget("shortcuts") && <section className="home-shortcuts home-widget" style={{order:widgetOrder("shortcuts")}}><div className="home-section-title"><span>ACESSOS RÁPIDOS</span></div><div><button onClick={() => setTab("sessions")}><Video /><span>Aulas</span></button><button onClick={() => setTab("review")}><BrainCircuit /><span>Revisão</span></button><button onClick={() => setTab("plans")}><CalendarDays /><span>Planos</span></button><button onClick={() => setTab("evolution")}><Shield /><span>Evolução</span></button><button onClick={() => setTab("mentor")}><Bot /><span>Mentor</span></button><button onClick={() => setTab("profile")}><UserRound /><span>Perfil</span></button></div></section>}
           </div>
         )}
 
@@ -2605,10 +2640,10 @@ export function StudyHub({
           />
         )}
 
-        {tab === "mentor" && <div className="mentor-page"><section className="mentor-page-head"><span className="bot-avatar"><Bot /></span><div><span className="eyebrow lime">MENTOR NEXO</span><h2>Converse, decida e aprenda.</h2><p>O mentor considera sua trilha, seu material e seu contexto atual.</p></div></section><section className="mentor-workspace panel"><div className="mentor-prompts"><button onClick={() => setChatText("Analise esta situação comigo")}>Analisar situação</button><button onClick={() => setChatText("Ajude-me a tomar uma decisão")}>Decidir</button><button onClick={() => setChatText("Explique minha maior lacuna de forma simples")}>Aprender</button><button onClick={() => setChatText("Questione minhas premissas e me contradiga se necessário")}>Me contradiga</button></div><div className="mentor-messages" aria-live="polite">{chatMessages.map((message, index) => <div key={index} className={`chat-message ${message.role}`}>{message.text}</div>)}{busy === "chat" && <div className="chat-message assistant typing"><i /><i /><i /></div>}</div><form className="mentor-composer" onSubmit={sendChat}><label><span className="sr-only">Mensagem para o mentor</span><textarea value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Converse com seu mentor..." /></label><button aria-label="Enviar mensagem" disabled={!chatText.trim() || busy === "chat"}><Send /></button></form></section></div>}
+        {tab === "mentor" && <div className="mentor-page"><section className="mentor-page-head"><span className="bot-avatar"><Bot /></span><div><span className="eyebrow lime">MENTOR NEXO</span><h2>Converse, decida e aprenda.</h2><p>O mentor considera sua trilha, seu material e seu contexto atual.</p></div></section><section className="mentor-workspace panel"><div className="mentor-prompts"><button onClick={() => setChatText("Analise esta situação comigo")}>Analisar situação</button><button onClick={() => setChatText("Ajude-me a tomar uma decisão")}>Decidir</button><button onClick={() => setChatText("Explique minha maior lacuna de forma simples")}>Aprender</button><button onClick={() => setChatText("Questione minhas premissas e me contradiga se necessário")}>Me contradiga</button></div><div className="mentor-messages" aria-live="polite">{chatMessages.map((message, index) => <div key={index} className={`chat-message ${message.role}`}>{message.text}</div>)}{chatBusy && <div className="chat-message assistant typing" role="status" aria-label="Mentor preparando resposta"><i /><i /><i /></div>}{chatError}</div><form className="mentor-composer" onSubmit={sendChat}><label><span className="sr-only">Mensagem para o mentor</span><textarea value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Converse com seu mentor..." /></label><button aria-label="Enviar mensagem" disabled={!chatText.trim() || chatBusy}><Send /></button></form></section></div>}
 
         {tab === "avatar" && <AvatarWorkspace />}
-        {tab === "profile" && <div className="profile-page"><section className="profile-hero panel"><span className="profile-avatar">ME</span><div><span className="eyebrow lime">SEU PERFIL</span><h2>Miguel</h2><p>{cloudEnabled ? "Conta conectada e dados sincronizados." : "Dados preservados neste dispositivo."}</p></div></section><section className="profile-settings panel"><div className="home-section-title"><span>CONTA E DADOS</span></div><div className="profile-setting-row"><span><strong>Sincronização</strong><small>Trilhas, atividades, planos e progresso</small></span><em className={cloudStatus}>{cloudStatus === "saved" ? "Tudo salvo" : cloudStatus === "saving" ? "Salvando" : cloudStatus === "error" ? "Cópia local" : cloudEnabled ? "Sincronizando" : "Modo local"}</em></div><div className="profile-setting-row"><span><strong>Conteúdo preservado</strong><small>{learningPaths.length} trilhas · {studyPlans.length} planos · {journeys.length} jornadas</small></span><CheckCircle2 /></div><div className="profile-account"><AccountControl enabled={authEnabled} /></div></section><section className="profile-settings panel"><div className="home-section-title"><span>PREFERÊNCIAS</span></div><button className="profile-link" onClick={() => setTab("avatar")}><span><strong>Avatar evolutivo</strong><small>Aparência, equipamentos e Essência</small></span><ArrowRight /></button><button className="profile-link" onClick={() => setTab("evolution")}><span><strong>Evolução e atributos</strong><small>Níveis, ranking e histórico</small></span><ArrowRight /></button><button className="profile-link" onClick={() => setTab("journeys")}><span><strong>Jornadas pessoais</strong><small>Estudos, treino, leitura e metas</small></span><ArrowRight /></button></section></div>}
+        {tab === "profile" && <div className="profile-page"><section className="profile-hero panel"><span className="profile-avatar"><UserRound aria-hidden="true" /></span><div><span className="eyebrow lime">SEU PERFIL</span><h2>Seu espaço de evolução</h2><p>{cloudStatus === "saved" ? "Dados sincronizados com sua conta." : localReadFailed || localWriteFailed ? "O salvamento local precisa de atenção." : cloudStatus === "error" ? "A sincronização precisa de atenção." : cloudEnabled ? "Sincronização em andamento." : "Seus dados ficam neste dispositivo."}</p></div></section><PlatformCustomizer value={platformPreferences} onChange={setPlatformPreferences} /><section className="profile-settings panel"><div className="home-section-title"><span>CONTA E DADOS</span></div><div className="profile-setting-row"><span><strong>Sincronização</strong><small>Trilhas, atividades, planos e progresso</small></span><em className={cloudStatus}>{cloudStatus === "saved" ? "Tudo salvo" : cloudStatus === "saving" ? "Salvando" : cloudStatus === "error" ? "Cópia local" : cloudEnabled ? "Sincronizando" : "Modo local"}</em></div><div className="profile-setting-row"><span><strong>Conteúdo preservado</strong><small>{learningPaths.length} trilhas · {studyPlans.length} planos · {journeys.length} jornadas</small></span><CheckCircle2 /></div><div className="profile-account"><AccountControl enabled={authEnabled} /></div></section><section className="profile-settings panel"><div className="home-section-title"><span>PREFERÊNCIAS</span></div><button className="profile-link" onClick={() => setTab("avatar")}><span><strong>Avatar evolutivo</strong><small>Aparência, equipamentos e Essência</small></span><ArrowRight /></button><button className="profile-link" onClick={() => setTab("evolution")}><span><strong>Evolução e atributos</strong><small>Níveis, ranking e histórico</small></span><ArrowRight /></button><button className="profile-link" onClick={() => setTab("journeys")}><span><strong>Jornadas pessoais</strong><small>Estudos, treino, leitura e metas</small></span><ArrowRight /></button></section></div>}
       </main>
 
       <nav className="mobile-bottom-nav" aria-label="Navegação principal no celular">
@@ -2649,10 +2684,10 @@ export function StudyHub({
           <header><span className="bot-avatar"><Bot size={20} /></span><div><strong>Tutor Nexo</strong><small><i /> Conectado ao seu material</small></div><button onClick={() => setChatOpen(false)} aria-label="Fechar chat"><X /></button></header>
           <div className="chat-messages">
             {chatMessages.map((message, index) => <div key={index} className={`chat-message ${message.role}`}>{message.text}</div>)}
-            {busy === "chat" && <div className="chat-message assistant typing"><i /><i /><i /></div>}
+            {chatBusy && <div className="chat-message assistant typing"><i /><i /><i /></div>}
           </div>
           <div className="quick-prompts"><button onClick={() => setChatText("Explique minha maior lacuna com um exemplo simples")}>Explique minha maior lacuna</button><button onClick={() => setChatText("Crie uma questão difícil sobre esta aula")}>Crie uma questão difícil</button></div>
-          <form onSubmit={sendChat}><textarea value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Pergunte sobre sua aula..." /><button aria-label="Enviar" disabled={!chatText.trim() || busy === "chat"}><Send size={18} /></button></form>
+          {chatError}<form onSubmit={sendChat}><textarea aria-label="Pergunta sobre sua aula" value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Pergunte sobre sua aula..." /><button aria-label="Enviar" disabled={!chatText.trim() || chatBusy}><Send size={18} /></button></form>
         </aside>
       )}
     </div>

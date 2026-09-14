@@ -46,3 +46,8 @@ export function liveClassTranscript(session: LiveClassSession) {
 export function liveClassFlashcards(session: LiveClassSession) {
   return session.segments.flatMap((segment) => segment.flashcards);
 }
+
+/** Restored sessions have no live recorder or in-flight work after a page reload. */
+export function recoverLiveClasses(sessions: LiveClassSession[]): LiveClassSession[] {
+  return sessions.map(session => ({...session,status:'completed',segments:session.segments.map(segment => segment.status === 'analyzing' ? {...segment,status:'error',error:segment.transcript.trim() ? 'A análise foi interrompida. A transcrição foi preservada; tente novamente.' : 'A captura foi interrompida antes de salvar a transcrição. O áudio temporário não está disponível.'} : segment)}));
+}
