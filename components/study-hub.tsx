@@ -1939,7 +1939,7 @@ export function StudyHub({
   }
 
   return (
-    <div className={`app-shell palette-${platformPreferences.palette}`} style={platformStyle}>
+    <div className={`app-shell palette-${platformPreferences.palette} density-${platformPreferences.density} radius-${platformPreferences.radius} effects-${platformPreferences.effects}`} style={platformStyle}>
       {mobileNav && <button className="nav-backdrop" onClick={() => setMobileNav(false)} aria-label="Fechar navegação" />}
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
         <div className="brand">

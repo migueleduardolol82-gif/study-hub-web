@@ -8,7 +8,9 @@ try {
   const page=await browser.newPage({viewport:{width:390,height:900},reducedMotion:'reduce'}),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto(url);await page.getByRole('button',{name:'Personalizar'}).click();
-  await page.getByRole('button',{name:/Energia/}).click();
+ await page.getByRole('button',{name:/Energia/}).click();
+  await page.getByRole('button',{name:'Compacta',exact:true}).click();
+  await page.getByRole('button',{name:'Suaves',exact:true}).click();
   await page.getByRole('button',{name:'Adicionar',exact:true}).filter({has:page.locator('xpath=..').filter({hasText:'Sessão de foco'})}).click().catch(async()=>{
     await page.locator('.widget-editor article').filter({hasText:'Sessão de foco'}).getByRole('button',{name:'Adicionar'}).click();
   });
@@ -17,11 +19,13 @@ try {
   await page.getByRole('button',{name:'Fechar personalização'}).click();
   await page.waitForTimeout(1400);
   assert.equal(await page.locator('.home-focus').count(),1);assert.equal(await page.locator('.home-shortcuts').count(),0);
-  assert.equal((await page.locator('.app-shell').getAttribute('style')).includes('#2f7df6'),true);
-  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('nexo-dashboard-v6')).platformPreferences?.widgets?.includes('focus'));
+ assert.equal((await page.locator('.app-shell').getAttribute('style')).includes('#2f7df6'),true);
+  assert.equal(await page.locator('.app-shell').evaluate(element=>element.classList.contains('density-compact')&&element.classList.contains('radius-soft')),true);
+  await page.waitForFunction(()=>{const preferences=JSON.parse(localStorage.getItem('nexo-dashboard-v6')).platformPreferences;return preferences?.widgets?.includes('focus')&&preferences.density==='compact'&&preferences.radius==='soft';});
   await page.screenshot({path:output+'/custom-home-mobile.png',fullPage:true});
   await page.reload();await page.locator('.home-focus').waitFor();assert.equal(await page.locator('.home-shortcuts').count(),0);
-  assert.equal((await page.locator('.app-shell').getAttribute('style')).includes('#2f7df6'),true);
+ assert.equal((await page.locator('.app-shell').getAttribute('style')).includes('#2f7df6'),true);
+  assert.equal(await page.locator('.app-shell').evaluate(element=>element.classList.contains('density-compact')&&element.classList.contains('radius-soft')),true);
   await page.setViewportSize({width:1280,height:900});await page.locator('.main-nav').getByRole('button',{name:'Perfil',exact:true}).click();
   await page.screenshot({path:output+'/custom-profile-desktop.png',fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),true);assert.deepEqual(errors,[]);

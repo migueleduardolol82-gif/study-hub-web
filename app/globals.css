@@ -1798,3 +1798,107 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 @media (max-width: 700px) {
   .mentor-composer { position: static; }
 }
+
+/* Global studio system: every workspace follows the same editable visual language. */
+.app-shell {
+  --ui-radius: 24px;
+  --ui-control-radius: 14px;
+  --ui-gap: 18px;
+  --ui-pad: 24px;
+  --ui-shadow: 0 24px 70px rgba(0,0,0,.24);
+  color: var(--text-primary);
+  font-feature-settings: "ss01" 1, "cv02" 1;
+}
+.radius-soft { --ui-radius: 15px; --ui-control-radius: 10px; }
+.radius-sharp { --ui-radius: 3px; --ui-control-radius: 2px; }
+.density-compact { --ui-gap: 12px; --ui-pad: 17px; }
+.app-shell .panel { border-radius: var(--ui-radius); box-shadow: var(--ui-shadow); }
+.app-shell input, .app-shell select, .app-shell textarea, .app-shell button, .app-shell .search-box { border-radius: var(--ui-control-radius); }
+.app-shell input, .app-shell select, .app-shell textarea { transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease; }
+.app-shell input:focus, .app-shell select:focus, .app-shell textarea:focus { border-color: color-mix(in srgb,var(--accent) 62%,#4a5059); box-shadow: 0 0 0 3px color-mix(in srgb,var(--accent) 13%,transparent); }
+.app-shell main h1, .app-shell main h2, .app-shell main h3 { text-wrap: balance; }
+.app-shell main h2 { letter-spacing: -.055em; }
+.app-shell .eyebrow { color: color-mix(in srgb,var(--accent) 80%,var(--text-secondary)); letter-spacing: .16em; }
+
+.app-shell .sidebar { background: color-mix(in srgb,var(--surface-base) 84%,transparent); border-right-color: color-mix(in srgb,var(--accent) 12%,#25282e); box-shadow: 20px 0 80px rgba(0,0,0,.2); backdrop-filter: blur(28px) saturate(135%); }
+.app-shell .brand { min-height: 45px; letter-spacing: .18em; }
+.app-shell .brand-mark { border-radius: 50%; box-shadow: 0 0 32px color-mix(in srgb,var(--accent) 34%,transparent); }
+.app-shell .course-card { background: linear-gradient(145deg,color-mix(in srgb,var(--accent-2) 12%,var(--surface-1)),color-mix(in srgb,var(--surface-1) 80%,transparent)); border-color: color-mix(in srgb,var(--accent-2) 25%,var(--line)); border-radius: var(--ui-radius); }
+.app-shell .main-nav { gap: 7px; }
+.app-shell .main-nav button { border-radius: var(--ui-control-radius); transition: color .18s ease, background .18s ease, transform .18s ease; }
+.app-shell .main-nav button:hover { transform: translateX(3px); }
+.app-shell .main-nav button.active { background: linear-gradient(120deg,var(--accent),color-mix(in srgb,var(--accent) 72%,white)); box-shadow: 0 10px 28px color-mix(in srgb,var(--accent) 18%,transparent); }
+.app-shell .profile { background: color-mix(in srgb,var(--surface-2) 72%,transparent); border: 1px solid var(--line); }
+
+.app-shell .topbar { position: sticky; z-index: 18; top: 0; background: color-mix(in srgb,var(--surface-base) 78%,transparent); border-bottom-color: color-mix(in srgb,var(--accent) 10%,var(--line)); backdrop-filter: blur(22px) saturate(140%); }
+.app-shell .topbar h1 { font-weight: 760; letter-spacing: -.035em; }
+.app-shell .cloud-status { border: 1px solid color-mix(in srgb,var(--accent) 18%,var(--line)); border-radius: 999px; }
+.app-shell .search-box { color: var(--text-secondary); background: color-mix(in srgb,var(--surface-2) 88%,transparent); border: 1px solid color-mix(in srgb,var(--accent) 12%,var(--line)); }
+.app-shell .search-results { background: color-mix(in srgb,var(--surface-2) 94%,black); border-radius: var(--ui-radius); backdrop-filter: blur(24px); }
+
+.app-shell .home-app, .app-shell .study-hub-page, .app-shell .mentor-page, .app-shell .profile-page, .app-shell .plans-page, .app-shell .journeys-page, .app-shell .today-page { gap: var(--ui-gap); }
+.app-shell .home-greeting { min-height: 190px; padding: 38px 4px 24px; }
+.app-shell .home-greeting h2 { font-weight: 790; letter-spacing: -.075em; }
+.app-shell .home-greeting p { max-width: 520px; margin-top: 14px; font-size: 1.04rem; line-height: 1.55; }
+.app-shell .home-continue { position: relative; isolation: isolate; overflow: hidden; padding: 8px; background: linear-gradient(125deg,color-mix(in srgb,var(--accent) 16%,var(--surface-1)),color-mix(in srgb,var(--accent-2) 12%,var(--surface-1))); }
+.app-shell .home-continue::after { content:""; position:absolute; z-index:-1; width:240px; height:240px; right:-75px; top:-100px; border:52px solid color-mix(in srgb,var(--accent) 42%,transparent); border-radius:50%; filter:blur(1px); }
+.app-shell .home-continue > button { min-height: 145px; background: color-mix(in srgb,var(--surface-base) 74%,transparent); border-radius: calc(var(--ui-radius) - 7px); }
+.app-shell .home-continue strong { font-size: clamp(1.28rem,2.5vw,1.85rem); letter-spacing: -.035em; }
+.app-shell .home-continue-icon { width: 62px; height: 62px; border-radius: 50%; box-shadow: 0 0 40px color-mix(in srgb,var(--accent) 24%,transparent); }
+.app-shell .home-today, .app-shell .home-evolution, .app-shell .timer-panel { padding: var(--ui-pad); }
+.app-shell .home-evolution-grid > div { padding: 18px 13px; background: color-mix(in srgb,var(--surface-base) 70%,transparent); border: 1px solid color-mix(in srgb,var(--accent) 8%,var(--line)); border-radius: calc(var(--ui-radius) - 9px); }
+.app-shell .home-evolution-grid strong { font-size: 1.55rem; letter-spacing: -.04em; }
+.app-shell .home-shortcuts > div:last-child button, .app-shell .study-area-grid > button { min-height: 102px; background: linear-gradient(145deg,color-mix(in srgb,var(--surface-2) 72%,transparent),var(--surface-1)); border-radius: var(--ui-radius); }
+.app-shell .home-shortcuts > div:last-child button:hover, .app-shell .study-area-grid > button:hover { transform: translateY(-4px); box-shadow: 0 18px 42px rgba(0,0,0,.2); }
+
+.app-shell .study-hub-hero, .app-shell .mentor-page-head, .app-shell .plans-header, .app-shell .journey-hero, .app-shell .today-hero { min-height: 180px; align-items: end; padding-block: 32px 26px; }
+.app-shell .study-hub-hero h2, .app-shell .mentor-page-head h2, .app-shell .profile-hero h2, .app-shell .plans-header h2, .app-shell .journey-hero h2, .app-shell .today-hero h2 { font-size: clamp(2.35rem,5vw,4.9rem); line-height: .96; }
+.app-shell .study-hub-primary > button { min-height: 160px; background: radial-gradient(circle at 88% 10%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 38%),linear-gradient(120deg,var(--surface-1),color-mix(in srgb,var(--accent-2) 10%,var(--surface-1))); }
+
+.app-shell .entity-card, .app-shell .journey-card, .app-shell .plan-session-list > article, .app-shell .review-mode-grid > button, .app-shell .routine-card, .app-shell .skill-card { transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.app-shell .entity-card:hover, .app-shell .journey-card:hover, .app-shell .review-mode-grid > button:hover, .app-shell .routine-card:hover, .app-shell .skill-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb,var(--accent) 35%,var(--line)); box-shadow: 0 18px 46px rgba(0,0,0,.22); }
+.app-shell .journey-card, .app-shell .entity-card, .app-shell .plan-builder, .app-shell .plan-preview, .app-shell .review-track-hero, .app-shell .review-today, .app-shell .mentor-workspace, .app-shell .profile-settings { padding: var(--ui-pad); }
+.app-shell .plan-session-list > article { border-radius: var(--ui-control-radius); }
+.app-shell .mentor-workspace { background: linear-gradient(155deg,color-mix(in srgb,var(--accent-2) 7%,var(--surface-1)),var(--surface-1)); }
+.app-shell .chat-message { border-radius: calc(var(--ui-radius) - 8px); }
+.app-shell .mentor-composer { background: color-mix(in srgb,var(--surface-base) 76%,transparent); backdrop-filter: blur(20px); }
+.app-shell .profile-hero { overflow:hidden; background: radial-gradient(circle at 92% 20%,color-mix(in srgb,var(--accent-2) 28%,transparent),transparent 36%),linear-gradient(135deg,color-mix(in srgb,var(--accent) 9%,var(--surface-1)),var(--surface-1)); }
+.app-shell .profile-avatar { border-radius: 50%; box-shadow: 0 0 50px color-mix(in srgb,var(--accent) 28%,transparent); }
+
+.appearance-editor { display:grid; grid-template-columns:minmax(220px,1.2fr) repeat(3,minmax(150px,.8fr)); gap:10px; }
+.design-preview { display:flex; align-items:center; gap:14px; min-height:112px; padding:16px; overflow:hidden; background:radial-gradient(circle at 90% 0,color-mix(in srgb,var(--accent-2) 42%,transparent),transparent 45%),linear-gradient(135deg,color-mix(in srgb,var(--accent) 18%,var(--surface-base)),var(--surface-base)); border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line)); border-radius:var(--ui-radius); }
+.design-preview > span { display:grid; place-items:center; width:48px; height:48px; flex:0 0 auto; color:#080a05; background:var(--accent); border-radius:50%; }
+.design-preview div { display:grid; gap:5px; min-width:0; }
+.design-preview small { color:var(--accent); font-weight:850; letter-spacing:.14em; }
+.design-preview strong { font-size:1rem; }
+.design-preview i { width:72%; height:5px; background:linear-gradient(90deg,var(--accent),var(--accent-2)); border-radius:99px; }
+.appearance-editor fieldset { min-width:0; margin:0; padding:12px; border:1px solid var(--line); border-radius:var(--ui-radius); }
+.appearance-editor legend { padding:0 5px; color:var(--text-secondary); font-size:.72rem; font-weight:800; letter-spacing:.08em; }
+.appearance-editor fieldset > div { display:grid; gap:6px; }
+.appearance-editor button { min-height:34px; padding:0 9px; color:var(--text-secondary); background:color-mix(in srgb,var(--surface-base) 65%,transparent); border:1px solid var(--line); }
+.appearance-editor button[aria-pressed="true"] { color:#080a05; background:var(--accent); border-color:var(--accent); font-weight:800; }
+.customizer-reset { justify-self:start; display:inline-flex; align-items:center; gap:8px; padding:10px 13px; color:var(--text-secondary); background:transparent; border:1px solid var(--line); }
+
+.density-compact .topbar { min-height:70px; }
+.density-compact .home-app, .density-compact .study-hub-page, .density-compact .mentor-page, .density-compact .profile-page, .density-compact .plans-page { padding-top:18px; }
+.density-compact .home-greeting, .density-compact .study-hub-hero, .density-compact .mentor-page-head, .density-compact .plans-header, .density-compact .journey-hero, .density-compact .today-hero { min-height:125px; padding-block:18px; }
+.density-compact .main-nav button { min-height:40px; }
+.density-compact .home-action-list > button { min-height:58px; }
+.effects-minimal { --ui-shadow:none; }
+.effects-minimal .workspace::before, .effects-minimal .home-continue::after, .effects-minimal .palette-violet .home-app::before { display:none; }
+.effects-minimal .sidebar, .effects-minimal .topbar, .effects-minimal .mentor-composer { backdrop-filter:none; }
+.effects-minimal .panel, .effects-minimal .study-area-grid > button, .effects-minimal .home-shortcuts > div:last-child button { background:var(--surface-1); }
+
+.palette-sand .appearance-editor button[aria-pressed="true"] { color:#11100d; }
+.palette-sand .design-preview { color:#f6f3eb; background:linear-gradient(135deg,#11110f,#2a241f); }
+.palette-sand .app-shell input, .palette-sand .app-shell select, .palette-sand .app-shell textarea { color:#12100d; background:#eee9df; }
+
+@media (max-width:1100px) { .appearance-editor { grid-template-columns:repeat(3,1fr); } .design-preview { grid-column:1/-1; } }
+@media (max-width:700px) {
+  .app-shell { --ui-radius:20px; --ui-pad:18px; }
+  .appearance-editor { grid-template-columns:1fr; }
+  .design-preview { grid-column:auto; }
+  .app-shell .home-greeting, .app-shell .study-hub-hero, .app-shell .mentor-page-head, .app-shell .plans-header, .app-shell .journey-hero, .app-shell .today-hero { min-height:140px; padding-block:22px 18px; }
+  .app-shell .study-hub-hero h2, .app-shell .mentor-page-head h2, .app-shell .profile-hero h2, .app-shell .plans-header h2, .app-shell .journey-hero h2, .app-shell .today-hero h2 { font-size:clamp(2.25rem,12vw,3.75rem); }
+  .app-shell .home-continue > button { min-height:125px; }
+}
