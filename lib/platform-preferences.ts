@@ -18,8 +18,9 @@ export type PlatformPaletteId = typeof platformPalettes[number]['id'];
 export type PlatformDensity = 'comfortable'|'compact';
 export type PlatformRadius = 'rounded'|'soft'|'sharp';
 export type PlatformEffects = 'ambient'|'minimal';
-export type PlatformPreferences = {palette:PlatformPaletteId; customAccent:string; widgets:HomeWidgetId[]; density:PlatformDensity; radius:PlatformRadius; effects:PlatformEffects};
-export const defaultPlatformPreferences: PlatformPreferences = {palette:'neon',customAccent:'',widgets:['continue','today','evolution','shortcuts'],density:'comfortable',radius:'rounded',effects:'ambient'};
+export type PlatformMode = 'dark'|'light';
+export type PlatformPreferences = {palette:PlatformPaletteId; customAccent:string; widgets:HomeWidgetId[]; density:PlatformDensity; radius:PlatformRadius; effects:PlatformEffects; mode:PlatformMode};
+export const defaultPlatformPreferences: PlatformPreferences = {palette:'neon',customAccent:'',widgets:['continue','today','evolution','shortcuts'],density:'comfortable',radius:'rounded',effects:'ambient',mode:'dark'};
 
 const hex=/^#[0-9a-f]{6}$/i;
 export function normalizePlatformPreferences(value: unknown): PlatformPreferences {
@@ -31,7 +32,8 @@ export function normalizePlatformPreferences(value: unknown): PlatformPreference
   const density:PlatformDensity=raw.density==='compact'?'compact':'comfortable';
   const radius:PlatformRadius=raw.radius==='sharp'||raw.radius==='soft'?raw.radius:'rounded';
   const effects:PlatformEffects=raw.effects==='minimal'?'minimal':'ambient';
-  return {palette,customAccent:typeof raw.customAccent==='string'&&hex.test(raw.customAccent)?raw.customAccent:'',widgets:[...widgets],density,radius,effects};
+  const mode:PlatformMode=raw.mode==='light'?'light':'dark';
+  return {palette,customAccent:typeof raw.customAccent==='string'&&hex.test(raw.customAccent)?raw.customAccent:'',widgets:[...widgets],density,radius,effects,mode};
 }
 
 export function moveWidget(widgets: HomeWidgetId[], id: HomeWidgetId, direction: -1|1) {

@@ -900,11 +900,20 @@ export function StudyHub({
   const activeGlobalTab: Tab = ["study", "today", "journeys", "mapping", "themes", "review", "sessions", "plans"].includes(tab) ? "study" : tab;
   const selectedPalette = platformPalettes.find(item => item.id === platformPreferences.palette) || platformPalettes[0];
   const accent = platformPreferences.customAccent || selectedPalette.accent;
+  const lightMode = platformPreferences.mode === "light";
+  const surfaceBase = lightMode ? "#f1efe9" : selectedPalette.base;
+  const surface = lightMode ? "#fbfaf7" : selectedPalette.surface;
   const platformStyle = {
     "--accent": accent, "--lime": accent, "--lime-dark": accent,
     "--accent-2": selectedPalette.accent2, "--purple": selectedPalette.accent2,
-    "--surface-base": selectedPalette.base, "--paper": selectedPalette.base,
-    "--surface-1": selectedPalette.surface, "--card": selectedPalette.surface,
+    "--accent-readable": lightMode ? `color-mix(in srgb, ${accent} 48%, #111111)` : accent,
+    "--surface-base": surfaceBase, "--paper": surfaceBase,
+    "--surface-1": surface, "--card": surface,
+    "--surface-2": lightMode ? "#ece9e2" : "#171a1f",
+    "--surface-3": lightMode ? "#e3dfd6" : "#1d2026",
+    "--text-primary": lightMode ? "#141310" : "#f4f6f7", "--text": lightMode ? "#141310" : "#f4f6f7",
+    "--text-secondary": lightMode ? "#68645d" : "#949ba6", "--muted": lightMode ? "#68645d" : "#969aa4",
+    "--line": lightMode ? "#d4cfc4" : "#292c31", "--border": lightMode ? "#d4cfc4" : "#292c31",
   } as CSSProperties;
   const hasWidget = (id: HomeWidgetId) => platformPreferences.widgets.includes(id);
   const widgetOrder = (id: HomeWidgetId) => platformPreferences.widgets.indexOf(id) + 1;
@@ -1939,7 +1948,7 @@ export function StudyHub({
   }
 
   return (
-    <div className={`app-shell palette-${platformPreferences.palette} density-${platformPreferences.density} radius-${platformPreferences.radius} effects-${platformPreferences.effects}`} style={platformStyle}>
+    <div className={`app-shell mode-${platformPreferences.mode} palette-${platformPreferences.palette} density-${platformPreferences.density} radius-${platformPreferences.radius} effects-${platformPreferences.effects}`} style={platformStyle}>
       {mobileNav && <button className="nav-backdrop" onClick={() => setMobileNav(false)} aria-label="Fechar navegação" />}
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
         <div className="brand">

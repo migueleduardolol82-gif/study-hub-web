@@ -9,8 +9,9 @@ try {
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto(url);await page.getByRole('button',{name:'Personalizar'}).click();
  await page.getByRole('button',{name:/Energia/}).click();
-  await page.getByRole('button',{name:'Compacta',exact:true}).click();
-  await page.getByRole('button',{name:'Suaves',exact:true}).click();
+ await page.getByRole('button',{name:'Compacta',exact:true}).click();
+ await page.getByRole('button',{name:'Suaves',exact:true}).click();
+  await page.getByRole('button',{name:'Claro',exact:true}).click();
   await page.getByRole('button',{name:'Adicionar',exact:true}).filter({has:page.locator('xpath=..').filter({hasText:'Sessão de foco'})}).click().catch(async()=>{
     await page.locator('.widget-editor article').filter({hasText:'Sessão de foco'}).getByRole('button',{name:'Adicionar'}).click();
   });
@@ -20,14 +21,17 @@ try {
   await page.waitForTimeout(1400);
   assert.equal(await page.locator('.home-focus').count(),1);assert.equal(await page.locator('.home-shortcuts').count(),0);
  assert.equal((await page.locator('.app-shell').getAttribute('style')).includes('#2f7df6'),true);
-  assert.equal(await page.locator('.app-shell').evaluate(element=>element.classList.contains('density-compact')&&element.classList.contains('radius-soft')),true);
-  await page.waitForFunction(()=>{const preferences=JSON.parse(localStorage.getItem('nexo-dashboard-v6')).platformPreferences;return preferences?.widgets?.includes('focus')&&preferences.density==='compact'&&preferences.radius==='soft';});
+  assert.equal(await page.locator('.app-shell').evaluate(element=>element.classList.contains('density-compact')&&element.classList.contains('radius-soft')&&element.classList.contains('mode-light')),true);
+  await page.waitForFunction(()=>{const preferences=JSON.parse(localStorage.getItem('nexo-dashboard-v6')).platformPreferences;return preferences?.widgets?.includes('focus')&&preferences.density==='compact'&&preferences.radius==='soft'&&preferences.mode==='light';});
   await page.screenshot({path:output+'/custom-home-mobile.png',fullPage:true});
   await page.reload();await page.locator('.home-focus').waitFor();assert.equal(await page.locator('.home-shortcuts').count(),0);
  assert.equal((await page.locator('.app-shell').getAttribute('style')).includes('#2f7df6'),true);
-  assert.equal(await page.locator('.app-shell').evaluate(element=>element.classList.contains('density-compact')&&element.classList.contains('radius-soft')),true);
+  assert.equal(await page.locator('.app-shell').evaluate(element=>element.classList.contains('density-compact')&&element.classList.contains('radius-soft')&&element.classList.contains('mode-light')),true);
   await page.setViewportSize({width:1280,height:900});await page.locator('.main-nav').getByRole('button',{name:'Perfil',exact:true}).click();
   await page.screenshot({path:output+'/custom-profile-desktop.png',fullPage:true});
+  await page.getByRole('button',{name:'Escuro',exact:true}).click();
+  await page.locator('.app-shell.mode-dark').waitFor();
+  await page.screenshot({path:output+'/custom-profile-dark-desktop.png',fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),true);assert.deepEqual(errors,[]);
   console.log('Theme, custom accent and widget selection persist after reload at mobile and desktop widths.');
 } finally {await browser.close();}

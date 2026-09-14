@@ -1,6 +1,6 @@
 "use client";
 
-import {ArrowDown,ArrowUp,Check,LayoutGrid,Palette,Plus,RotateCcw,Sparkles,X} from 'lucide-react';
+import {ArrowDown,ArrowUp,Check,LayoutGrid,Moon,Palette,Plus,RotateCcw,Sparkles,Sun,X} from 'lucide-react';
 import {defaultPlatformPreferences,moveWidget,platformPalettes,widgetCatalog,type HomeWidgetId,type PlatformPreferences} from '@/lib/platform-preferences';
 
 export function PlatformCustomizer({value,onChange,onClose}: {value:PlatformPreferences;onChange:(next:PlatformPreferences)=>void;onClose?:()=>void}) {
@@ -11,6 +11,7 @@ export function PlatformCustomizer({value,onChange,onClose}: {value:PlatformPref
     <div className="palette-list" role="group" aria-label="Paletas da plataforma">{platformPalettes.map(palette=><button key={palette.id} aria-pressed={value.palette===palette.id&&!value.customAccent} onClick={()=>onChange({...value,palette:palette.id,customAccent:''})}><i style={{background:`linear-gradient(135deg,${palette.accent},${palette.accent2})`}}/>{palette.label}{value.palette===palette.id&&!value.customAccent&&<Check size={15}/>}</button>)}<label className={value.customAccent?'active':''}><input aria-label="Cor personalizada" type="color" value={value.customAccent||platformPalettes.find(item=>item.id===value.palette)?.accent} onChange={event=>onChange({...value,customAccent:event.target.value})}/><span>Personalizada</span></label></div>
     <div className="appearance-editor">
       <div className="design-preview" aria-hidden="true"><span><Sparkles/></span><div><small>SEU ESTILO</small><strong>Interface viva e modular</strong><i/></div></div>
+      <fieldset><legend>Tema</legend><div><button aria-pressed={value.mode==='dark'} onClick={()=>onChange({...value,mode:'dark'})}><Moon/>Escuro</button><button aria-pressed={value.mode==='light'} onClick={()=>onChange({...value,mode:'light'})}><Sun/>Claro</button></div></fieldset>
       <fieldset><legend>Densidade</legend><div>{([['comfortable','Confortável'],['compact','Compacta']] as const).map(([id,label])=><button key={id} aria-pressed={value.density===id} onClick={()=>onChange({...value,density:id})}>{label}</button>)}</div></fieldset>
       <fieldset><legend>Cantos</legend><div>{([['rounded','Redondos'],['soft','Suaves'],['sharp','Retos']] as const).map(([id,label])=><button key={id} aria-pressed={value.radius===id} onClick={()=>onChange({...value,radius:id})}>{label}</button>)}</div></fieldset>
       <fieldset><legend>Efeitos</legend><div>{([['ambient','Atmosfera'],['minimal','Minimalista']] as const).map(([id,label])=><button key={id} aria-pressed={value.effects===id} onClick={()=>onChange({...value,effects:id})}>{label}</button>)}</div></fieldset>
