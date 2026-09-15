@@ -48,6 +48,12 @@ try {
   const tab=async name=>page.locator('.avatar-workspace>nav').getByRole('button',{name,exact:true}).click();
   const range=async(label,value,scope=page.locator('.avatar-editor'))=>{const slider=scope.getByRole('slider',{name:new RegExp(label)});await slider.evaluate((element,next)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(element,String(next));element.dispatchEvent(new Event('input',{bubbles:true}));element.dispatchEvent(new Event('change',{bubbles:true}));},value);};
   await openAvatar();await page.emulateMedia({reducedMotion:'reduce'});await page.waitForTimeout(200);
+  await page.getByRole('button',{name:'Humano',exact:true}).click();await page.waitForTimeout(180);
+  assert.ok((await page.locator('.avatar-canvas').getAttribute('class')).includes('avatar-mode-human'));
+  await page.locator('.avatar-stage').screenshot({path:`${output}/human-mode.png`});
+  await page.getByRole('button',{name:'RPG',exact:true}).click();await page.waitForTimeout(180);
+  assert.ok((await page.locator('.avatar-canvas').getAttribute('class')).includes('avatar-mode-rpg'));
+  await page.locator('.avatar-stage').screenshot({path:`${output}/rpg-mode.png`});
   for(const width of [320,375,390,430,768,1280]){
     await page.setViewportSize({width,height:900});await page.waitForTimeout(120);
     const d=await page.locator('.avatar-workspace').evaluate(e=>({width:e.clientWidth,scroll:e.scrollWidth,body:document.documentElement.scrollWidth}));
@@ -73,7 +79,7 @@ try {
   await page.locator('.avatar-stage').screenshot({path:`${output}/face-rotation.png`});
   await page.getByRole('button',{name:'Centralizar',exact:true}).click();
   await page.emulateMedia({reducedMotion:'reduce'});await page.waitForTimeout(200);const stopped=await page.evaluate(()=>window.avatarTestStats.draws);await page.waitForTimeout(180);assert.equal(await page.evaluate(()=>window.avatarTestStats.draws),stopped);
-  await page.emulateMedia({reducedMotion:'no-preference'});await page.waitForTimeout(300);assert.ok(await page.evaluate(()=>window.avatarTestStats.draws)>stopped);
+  await page.locator('.avatar-stage').scrollIntoViewIfNeeded();await page.emulateMedia({reducedMotion:'no-preference'});await page.waitForTimeout(450);assert.ok(await page.evaluate(()=>window.avatarTestStats.draws)>stopped);
   await page.locator('.avatar-stage').evaluate(e=>{e.style.display='none';});await page.waitForTimeout(120);const hidden=await page.evaluate(()=>window.avatarTestStats.draws);await page.waitForTimeout(150);assert.equal(await page.evaluate(()=>window.avatarTestStats.draws),hidden);await page.locator('.avatar-stage').evaluate(e=>{e.style.display='';});await page.emulateMedia({reducedMotion:'reduce'});
   console.log('Rotation, zoom, pointer drag, reduced motion and invisible render pause pass.');
   await tab('Criar por Foto');
@@ -98,7 +104,9 @@ try {
   await openAvatar();await tab('Evolução');assert.equal(await page.locator('.avatar-editor').getByRole('slider',{name:/Largura do nariz/}).inputValue(),'1.25');
   console.log('Photo mock → preview → manual adjustments → confirmation → reload; validation errors pass.');
   await tab('Loja');const jacket=page.locator('.avatar-item').filter({hasText:'Jaqueta grafite'});await jacket.getByRole('button',{name:'Experimentar'}).click();page.once('dialog',d=>d.accept());await jacket.getByRole('button',{name:'Comprar',exact:true}).click();await page.waitForTimeout(150);assert.equal(account.balance,460);
-  await tab('Equipar');await page.locator('.avatar-item').filter({hasText:'Jaqueta grafite'}).getByRole('button',{name:'Equipar',exact:true}).click();await page.waitForTimeout(150);assert.equal(account.equipped.tronco,'slate');assert.equal(account.equipped['cabeça'],'head');
+  await tab('Equipar');await page.locator('.avatar-item').filter({hasText:'Couraça de Ardósia'}).getByRole('button',{name:'Equipar',exact:true}).click();await page.waitForTimeout(150);assert.equal(account.equipped.tronco,'slate');assert.equal(account.equipped['cabeça'],'head');
+  await page.getByRole('button',{name:'Humano',exact:true}).click();await page.waitForTimeout(180);const realJacket=page.locator('.avatar-item').filter({hasText:'Jaqueta grafite'});assert.ok((await realJacket.innerText()).includes('Couraça de Ardósia'));assert.ok((await page.locator('.equipment-slots').innerText()).includes('Jaqueta grafite'));
+  await page.locator('.avatar-workspace').screenshot({path:`${output}/shared-inventory-human.png`});
   await tab('Histórico');await page.getByRole('button',{name:/Visualizar/}).first().click();
   console.log('Existing inventory, shop preview, purchase, equip and history pass.');
   assert.deepEqual(errors,[]);console.log('No page, shader or WebGL errors.');

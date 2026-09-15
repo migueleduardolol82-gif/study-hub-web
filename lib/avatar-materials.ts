@@ -26,5 +26,15 @@ export function createSkinMaterial(color: string) {
 
 export function createFabricMaterial(color: string) {
   const detail = microTexture(true);
-  return new THREE.MeshStandardMaterial({color,roughness:1,roughnessMap:detail,bumpMap:detail,bumpScale:0.0003});
+  return new THREE.MeshPhysicalMaterial({color,roughness:0.92,roughnessMap:detail,bumpMap:detail,bumpScale:0.00035,sheen:0.28,sheenColor:new THREE.Color(color).lerp(new THREE.Color('#ffffff'),0.18),sheenRoughness:0.82});
+}
+
+export function createLeatherMaterial(color: string) {
+  const detail = microTexture(false);
+  return new THREE.MeshPhysicalMaterial({color,roughness:0.52,roughnessMap:detail,bumpMap:detail,bumpScale:0.00055,clearcoat:0.12,clearcoatRoughness:0.74,specularIntensity:0.48});
+}
+
+export function createMetalMaterial(color: string) {
+  const detail = microTexture(false);
+  return new THREE.MeshStandardMaterial({color,roughness:0.32,metalness:0.78,roughnessMap:detail});
 }

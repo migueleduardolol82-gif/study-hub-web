@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { avatarItems, type Appearance } from '@/lib/avatar';
+import { avatarItems, type Appearance, type AvatarStyleMode } from '@/lib/avatar';
 import { createAvatarBody } from '@/lib/avatar-body';
 import { createAvatarHead, disposeAvatarObject } from '@/lib/avatar-head';
 
-type Props = { appearance: Appearance; equipped: Record<string, string>; archetypes?: string[]; focus?: 'corpo' | 'rosto'; physicalDays?: number };
+type Props = { appearance: Appearance; equipped: Record<string, string>; archetypes?: string[]; focus?: 'corpo' | 'rosto'; physicalDays?: number; styleMode?: AvatarStyleMode };
 type Update = (props: Props, low: boolean, anatomy: boolean) => void;
 
 export default function AvatarScene(props: Props) {
@@ -30,17 +30,19 @@ export default function AvatarScene(props: Props) {
     }
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1;
-    // Soft studio lighting avoids expensive dynamic shadow passes on mobile.
+    renderer.toneMappingExposure = 1.04;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(27, 1, 0.01, 50);
     const figure = new THREE.Group(); scene.add(figure);
     scene.add(new THREE.HemisphereLight('#e6ecff', '#777080', 1.9));
     scene.add(new THREE.AmbientLight('#fff3ed', 0.6));
-    const key = new THREE.DirectionalLight('#fff2e7', 2.8); key.position.set(2.2, 3.8, 4); scene.add(key);
+    const key = new THREE.DirectionalLight('#fff2e7', 2.8); key.position.set(2.2, 3.8, 4);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.camera.left=-1.4;key.shadow.camera.right=1.4;key.shadow.camera.top=2.5;key.shadow.camera.bottom=-.2;key.shadow.bias=-.0004;scene.add(key);
     const fill = new THREE.DirectionalLight('#c4d8ff', 1.4); fill.position.set(-3, 2, 3); scene.add(fill);
     const rim = new THREE.DirectionalLight('#b39cef', 2.5); rim.position.set(-1.8, 3, -2); scene.add(rim);
+    const ground=new THREE.Mesh(new THREE.CircleGeometry(.78,64),new THREE.ShadowMaterial({color:'#050508',opacity:.38}));ground.rotation.x=-Math.PI/2;ground.position.y=-.051;ground.receiveShadow=true;scene.add(ground);
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
     const mobile = window.matchMedia('(max-width: 700px)');
     let reduced = preference.matches, low = mobile.matches, visible = false, disposed = false, requestedLow = false;
@@ -75,10 +77,10 @@ export default function AvatarScene(props: Props) {
       const a = current.appearance;
       const nextLow = pending.low || mobile.matches;
       if (low !== nextLow) {low = nextLow; resize();}
-      const nextBody = JSON.stringify([a.skin, a.shape, a.fat, a.muscle, current.physicalDays, current.equipped, current.archetypes, low]);
+      const nextBody = JSON.stringify([a.skin, a.shape, a.fat, a.muscle, current.physicalDays, current.equipped, current.archetypes, current.styleMode, low]);
       if (nextBody !== bodyKey) {
         if (body) {figure.remove(body.group); disposeAvatarObject(body.group);}
-        body = createAvatarBody(a, current.equipped, current.archetypes, low, current.physicalDays); figure.add(body.group); bodyKey = nextBody;
+        body = createAvatarBody(a, current.equipped, current.archetypes, low, current.physicalDays, current.styleMode); figure.add(body.group); bodyKey = nextBody;
       }
       if (body) {body.clothing.visible = !showAnatomy; body.coverage.visible = showAnatomy;}
       const headColor = avatarItems.find(item => item.id === current?.equipped['cabeça'])?.color;
@@ -147,7 +149,7 @@ export default function AvatarScene(props: Props) {
     invalidate.current();
   };
   return <div className="avatar-viewer">
-    <div ref={host} className={`avatar-canvas ${props.equipped.moldura ? 'avatar-frame' : ''}`} role="img" aria-label="Avatar 3D anime personalizado, girável e conectado à sua evolução" />
+    <div ref={host} className={`avatar-canvas avatar-mode-${props.styleMode ?? 'rpg'} ${props.equipped.moldura ? 'avatar-frame' : ''}`} role="img" aria-label={`Avatar 3D ${props.styleMode==='human'?'humano':'RPG'} personalizado, girável e conectado à sua evolução`} />
     {error && <p role="alert">O 3D ficou indisponível neste dispositivo. Recarregue a página para tentar novamente. Seus dados continuam salvos.</p>}
     <div className="avatar-rotation" aria-label="Controles da prévia 3D">
       <button type="button" onClick={() => changeView(-0.4, 0)} aria-label="Girar avatar à esquerda">←</button>

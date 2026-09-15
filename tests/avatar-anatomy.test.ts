@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {initialAppearance} from '../lib/avatar.ts';
+import {avatarItemEquivalent,avatarItemName,avatarItems,initialAppearance} from '../lib/avatar.ts';
 import {resolvePhysique} from '../lib/avatar-physique.ts';
 import {createAvatarBody} from '../lib/avatar-body.ts';
 import {limbPoint,torsoPoint} from '../lib/avatar-anatomy.ts';
@@ -28,6 +28,31 @@ test('anatomy view can hide clothing without changing equipment; textures dispos
  assert.ok(body.anatomy.visible);assert.ok(body.anatomy.getObjectByName('torso-skin'));assert.ok(body.coverage.children.length===3);assert.equal(JSON.stringify(equipment),saved);
  const textures=new Set<THREE.Texture>();body.group.traverse(o=>{if(o instanceof THREE.Mesh)for(const value of Object.values(o.material))if(value instanceof THREE.Texture)textures.add(value);});
  let disposed=0;for(const texture of textures)texture.addEventListener('dispose',()=>disposed++);disposeAvatarObject(body.group);assert.ok(textures.size>0);assert.equal(disposed,textures.size);
+});
+test('one inventory item exposes paired RPG and human identities',()=>{
+ for(const item of avatarItems){
+  assert.ok(avatarItemName(item,'rpg').length>2);
+  assert.ok(avatarItemName(item,'human').length>2);
+  assert.equal(avatarItemEquivalent(item,'rpg'),avatarItemName(item,'human'));
+  assert.equal(avatarItemEquivalent(item,'human'),avatarItemName(item,'rpg'));
+ }
+ const command=avatarItems.find(item=>item.id==='command');
+ assert.equal(command?.rpgName,'Capa do Comandante');
+ assert.match(command?.humanName||'',/alfaiataria/i);
+});
+test('RPG cape and human suit are separate geometry with soft-shadow support',()=>{
+ const equipment={tronco:'command'};
+ const rpg=createAvatarBody(initialAppearance,equipment,[],false,60,'rpg');
+ const human=createAvatarBody(initialAppearance,equipment,[],false,60,'human');
+ assert.ok(rpg.clothing.getObjectByName('rpg-command-cape'));
+ assert.ok(rpg.clothing.getObjectByName('rpg-pauldron--1'));
+ assert.ok(rpg.clothing.getObjectByName('rpg-pauldron-1'));
+ assert.equal(human.clothing.getObjectByName('rpg-command-cape'),undefined);
+ assert.ok(human.clothing.getObjectByName('human-lapel-left'));
+ assert.ok(human.clothing.getObjectByName('human-lapel-right'));
+ assert.ok(human.clothing.getObjectByName('human-tie'));
+ for(const model of [rpg,human])model.clothing.traverse(object=>{if(object instanceof THREE.Mesh){assert.equal(object.castShadow,true);assert.equal(object.receiveShadow,true);}});
+ disposeAvatarObject(rpg.group);disposeAvatarObject(human.group);
 });
 test('eyes follow face surface instead of protruding spheres',()=>{
  const a=initialAppearance,surface=createFaceSurface(a),head=createAvatarHead(a);

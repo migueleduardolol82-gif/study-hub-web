@@ -35,22 +35,25 @@ export type Appearance = {
  muscle: number;
 };
 export const initialAppearance: Appearance = { skin:'#b8896a', hairColor:'#191b24', eyeColor:'#647d91', hair:'moderno', face:'angular', beard:false, beardStyle:'sem barba', shape:'neutro', height:175, weight:75, fat:24, muscle:45 };
-export type AvatarItem = { id:string; name:string; slot:string; rarity:string; price:number; days:number; color:string };
+export type AvatarStyleMode = 'rpg'|'human';
+export type AvatarItem = { id:string; name:string; slot:string; rarity:string; price:number; days:number; color:string; rpgName:string; humanName:string; rpgStyle?:'tunic'|'leather'|'scholar'|'armor'|'cape'; humanStyle?:'casual'|'jacket'|'blazer'|'sport'|'suit' };
 export const avatarItems: AvatarItem[] = [
- {id:'base',name:'Traje essencial',slot:'tronco',rarity:'Comum',price:0,days:0,color:'#45505e'},
- {id:'shoes',name:'Passo firme',slot:'calçados',rarity:'Comum',price:40,days:7,color:'#849294'},
- {id:'wrist',name:'Relógio de campo',slot:'mão',rarity:'Incomum',price:100,days:21,color:'#9fa9b6'},
- {id:'head',name:'Faixa do atleta',slot:'cabeça',rarity:'Raro',price:250,days:60,color:'#799eaf'},
- {id:'frame',name:'Moldura de conquista',slot:'moldura',rarity:'Épico',price:600,days:100,color:'#a18cbe'},
- {id:'title',name:'Discípulo da Disciplina',slot:'título',rarity:'Raro',price:250,days:100,color:'#bdd087'},
- {id:'slate',name:'Jaqueta grafite',slot:'tronco',rarity:'Comum',price:40,days:7,color:'#293344'},
- {id:'sage',name:'Traje do estudioso',slot:'tronco',rarity:'Incomum',price:100,days:30,color:'#475d58'},
- {id:'athlete',name:'Atleta ascendente',slot:'tronco',rarity:'Raro',price:250,days:60,color:'#264c6b'},
- {id:'command',name:'Manto de comando',slot:'tronco',rarity:'Épico',price:600,days:100,color:'#534969'},
- {id:'gold',name:'Selo da constância',slot:'insígnia',rarity:'Lendário',price:1500,days:180,color:'#d1ad62'},
- {id:'aura',name:'Presença mítica',slot:'aura',rarity:'Mítico',price:3000,days:365,color:'#9388e8'},
- {id:'apex',name:'Horizonte transcendente',slot:'aura',rarity:'Transcendente',price:5000,days:730,color:'#bce7ee'},
+ {id:'base',name:'Traje essencial',slot:'tronco',rarity:'Comum',price:0,days:0,color:'#45505e',rpgName:'Túnica do Iniciado',humanName:'Look casual essencial',rpgStyle:'tunic',humanStyle:'casual'},
+ {id:'shoes',name:'Passo firme',slot:'calçados',rarity:'Comum',price:40,days:7,color:'#849294',rpgName:'Botas do Viajante',humanName:'Tênis premium urbano'},
+ {id:'wrist',name:'Relógio de campo',slot:'mão',rarity:'Incomum',price:100,days:21,color:'#9fa9b6',rpgName:'Bracelete do Tempo',humanName:'Relógio de campo'},
+ {id:'head',name:'Faixa do atleta',slot:'cabeça',rarity:'Raro',price:250,days:60,color:'#799eaf',rpgName:'Tiara da Vontade',humanName:'Faixa esportiva técnica'},
+ {id:'frame',name:'Moldura de conquista',slot:'moldura',rarity:'Épico',price:600,days:100,color:'#a18cbe',rpgName:'Portal de Conquista',humanName:'Moldura de prestígio'},
+ {id:'title',name:'Discípulo da Disciplina',slot:'título',rarity:'Raro',price:250,days:100,color:'#bdd087',rpgName:'Discípulo da Disciplina',humanName:'Disciplina reconhecida'},
+ {id:'slate',name:'Jaqueta grafite',slot:'tronco',rarity:'Comum',price:40,days:7,color:'#293344',rpgName:'Couraça de Ardósia',humanName:'Jaqueta grafite',rpgStyle:'leather',humanStyle:'jacket'},
+ {id:'sage',name:'Traje do estudioso',slot:'tronco',rarity:'Incomum',price:100,days:30,color:'#475d58',rpgName:'Manto do Sábio',humanName:'Blazer de lã do estudioso',rpgStyle:'scholar',humanStyle:'blazer'},
+ {id:'athlete',name:'Atleta ascendente',slot:'tronco',rarity:'Raro',price:250,days:60,color:'#264c6b',rpgName:'Armadura Leve do Ascendente',humanName:'Conjunto esportivo premium',rpgStyle:'armor',humanStyle:'sport'},
+ {id:'command',name:'Manto de comando',slot:'tronco',rarity:'Épico',price:600,days:100,color:'#534969',rpgName:'Capa do Comandante',humanName:'Terno de alfaiataria estilo Armani',rpgStyle:'cape',humanStyle:'suit'},
+ {id:'gold',name:'Selo da constância',slot:'insígnia',rarity:'Lendário',price:1500,days:180,color:'#d1ad62',rpgName:'Selo Dourado da Constância',humanName:'Broche dourado de mérito'},
+ {id:'aura',name:'Presença mítica',slot:'aura',rarity:'Mítico',price:3000,days:365,color:'#9388e8',rpgName:'Aura Mítica',humanName:'Presença executiva mítica'},
+ {id:'apex',name:'Horizonte transcendente',slot:'aura',rarity:'Transcendente',price:5000,days:730,color:'#bce7ee',rpgName:'Horizonte Transcendente',humanName:'Assinatura de legado'},
 ];
+export function avatarItemName(item:AvatarItem,mode:AvatarStyleMode){return mode==='rpg'?item.rpgName:item.humanName;}
+export function avatarItemEquivalent(item:AvatarItem,mode:AvatarStyleMode){return mode==='rpg'?item.humanName:item.rpgName;}
 export type AvatarAccount = { evidence?:AvatarEvidence; appearance:Appearance; balance:number; inventory:string[]; equipped:Record<string,string>; days:string[]; claimed:number[]; created:string; history:{at:string; appearance:Appearance}[]; transactions:{id:string; at:string; amount:number; label:string}[] };
 export function newAvatar(now:string):AvatarAccount { return {appearance:{...initialAppearance},balance:0,inventory:['base'],equipped:{tronco:'base'},days:[],claimed:[],created:now,history:[],transactions:[]}; }
 export function validateAppearance(value:unknown):Appearance {
