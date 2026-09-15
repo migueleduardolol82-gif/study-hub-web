@@ -6,6 +6,7 @@ import { avatarItems, type Appearance, type AvatarStyleMode } from '@/lib/avatar
 import { createAvatarBody } from '@/lib/avatar-body';
 import { createEquipmentDetail } from '@/lib/avatar-equipment-model';
 import { createAvatarHead, disposeAvatarObject } from '@/lib/avatar-head';
+import { createRogerMaleAvatar, type RogerMaleAvatar } from '@/lib/avatar-male-model';
 
 type Props = { appearance: Appearance; equipped: Record<string, string>; itemColors?:Record<string,string>; archetypes?: string[]; focus?: 'corpo' | 'rosto'; physicalDays?: number; styleMode?: AvatarStyleMode };
 type Update = (props: Props, low: boolean, anatomy: boolean) => void;
@@ -48,10 +49,10 @@ export default function AvatarScene(props: Props) {
     const mobile = window.matchMedia('(max-width: 700px)');
     let reduced = preference.matches, low = mobile.matches, visible = false, disposed = false, requestedLow = false;
     let showAnatomy = false;
-    let current: Props | null = null, head: ReturnType<typeof createAvatarHead> | null = null;
+    let current: Props | null = null, head: ReturnType<typeof createAvatarHead> | null = null, male: RogerMaleAvatar | null = null;
     let body: ReturnType<typeof createAvatarBody> | null = null;
     let detailVersion=0;
-    let bodyKey = '', headKey = '', pending: {props: Props; low: boolean} | null = null;
+    let bodyKey = '', headKey = '', maleKey = '', maleVersion = 0, pending: {props: Props; low: boolean} | null = null;
     let frame = 0, lastFrame = 0, width = 1, height = 1, dragging = false, lastX = 0;
     let animationSeconds = 0, previousTime = 0;
 
@@ -95,12 +96,31 @@ export default function AvatarScene(props: Props) {
         body = createAvatarBody(a, current.equipped, current.archetypes, low, current.physicalDays, current.styleMode,current.itemColors); figure.add(body.group); bodyKey = nextBody;
         const torsoItem=avatarItems.find(item=>item.id===current?.equipped.tronco);loadDetail(body,current,torsoItem,detailVersion);
       }
-      if (body) {body.clothing.visible = !showAnatomy; body.coverage.visible = showAnatomy;}
+      const usesRoger=a.shape==='masculino';
+      if (body) {
+        body.anatomy.visible=!usesRoger;
+        body.clothing.visible=!showAnatomy&&!(usesRoger&&current.focus==='rosto');
+        body.coverage.visible=showAnatomy&&!usesRoger;
+      }
+      male?.underwear.forEach(item=>{item.visible=true;});
+      const nextMale=usesRoger?JSON.stringify([a.skin,a.hairColor,a.eyeColor,a.hair,a.hairLength,a.beard,a.beardStyle,a.muscle,a.fat,current.physicalDays]):'';
+      if(nextMale!==maleKey){
+        const version=++maleVersion;
+        if(male){figure.remove(male.group);disposeAvatarObject(male.group);male=null;}
+        container.dataset.avatarModel=usesRoger?'roger-loading':'procedural';
+        maleKey=nextMale;
+        if(usesRoger)void createRogerMaleAvatar(a,current.physicalDays).then(result=>{
+          if(disposed||version!==maleVersion){disposeAvatarObject(result.group);return;}
+          male=result;male.underwear.forEach(item=>{item.visible=true;});figure.add(result.group);
+          container.dataset.avatarModel='roger';schedule();
+        }).catch(()=>{if(version===maleVersion)container.dataset.avatarModel='procedural-fallback';});
+      }
       const headItem = avatarItems.find(item => item.id === current?.equipped['cabeça']),headColor=headItem?(current.itemColors?.[headItem.id]??headItem.color):undefined;
-      const nextHead = JSON.stringify([a.skin, a.hair, a.hairColor, a.eyeColor, a.face, a.facial, a.hairLength, a.realism, a.beard, a.beardStyle, headColor,headItem?.equipmentStyle,low]);
+      const nextHead = usesRoger?'':JSON.stringify([a.skin, a.hair, a.hairColor, a.eyeColor, a.face, a.facial, a.hairLength, a.realism, a.beard, a.beardStyle, headColor,headItem?.equipmentStyle,low]);
       if (nextHead !== headKey) {
         if (head) {figure.remove(head.group); disposeAvatarObject(head.group);}
-        head = createAvatarHead(a, headColor, low,headItem?.equipmentStyle==='crown'?'crown':'band'); figure.add(head.group); headKey = nextHead;
+        head = usesRoger?null:createAvatarHead(a, headColor, low,headItem?.equipmentStyle==='crown'?'crown':'band');
+        if(head)figure.add(head.group);headKey = nextHead;
       }
       pending = null;
     };
@@ -145,7 +165,7 @@ export default function AvatarScene(props: Props) {
     renderer.domElement.addEventListener('pointerup', end); renderer.domElement.addEventListener('pointercancel', end);
     renderer.domElement.addEventListener('webglcontextlost', lost);
     return () => {
-      disposed = true;detailVersion++;cancelAnimationFrame(frame); update.current = null; invalidate.current = () => {};
+      disposed = true;detailVersion++;maleVersion++;cancelAnimationFrame(frame); update.current = null; invalidate.current = () => {};
       observer.disconnect(); resizeObserver.disconnect(); preference.removeEventListener('change', onPreference); mobile.removeEventListener('change', onMobile);
       document.removeEventListener('visibilitychange', onVisibility);
       renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointermove', move);
@@ -178,3 +198,4 @@ export default function AvatarScene(props: Props) {
     </div>
   </div>;
 }
+

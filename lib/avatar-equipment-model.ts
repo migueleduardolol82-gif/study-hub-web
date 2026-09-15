@@ -1,6 +1,13 @@
 import * as THREE from 'three';
 import type { AvatarStyleMode } from './avatar.ts';
 
+function cloneTextureInputs(material:THREE.Material){
+  const record=material as unknown as Record<string,unknown>;
+  for(const key of ['map','normalMap','alphaMap','aoMap','roughnessMap','metalnessMap','emissiveMap']){
+    const texture=record[key];if(texture instanceof THREE.Texture)record[key]=texture.clone();
+  }
+}
+
 let library: Promise<THREE.Group> | undefined;
 
 function loadLibrary() {
@@ -20,6 +27,7 @@ export async function createEquipmentDetail(mode:AvatarStyleMode,style:string,co
     object.geometry=object.geometry.clone();
     const materials=(Array.isArray(object.material)?object.material:[object.material]).map(material=>{
       const next=material.clone();
+      cloneTextureInputs(next);
       if(next.name.startsWith('Tint_')&&'color' in next){const tinted=next as THREE.MeshStandardMaterial;tinted.color.set(color);tinted.map=null;tinted.needsUpdate=true;}
       return next;
     });
@@ -28,3 +36,4 @@ export async function createEquipmentDetail(mode:AvatarStyleMode,style:string,co
   });
   return clone;
 }
+
