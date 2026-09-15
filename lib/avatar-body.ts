@@ -12,7 +12,7 @@ function mixedAccent(archetypes: string[]) {
   return colors.reduce((color,id,i)=>color.add(new THREE.Color(archetypeColors[id] ?? '#9e7cff').multiplyScalar(weights[i]/total)),new THREE.Color(0));
 }
 
-export function createAvatarBody(appearance: Appearance, equipped: Record<string,string>, archetypes: string[] = [], low = false, physicalDays = 0, styleMode: AvatarStyleMode = 'rpg') {
+export function createAvatarBody(appearance: Appearance, equipped: Record<string,string>, archetypes: string[] = [], low = false, physicalDays = 0, styleMode: AvatarStyleMode = 'rpg', itemColors:Record<string,string> = {}) {
   const group = new THREE.Group(); group.name = 'avatar-body';
   const anatomy = new THREE.Group(); anatomy.name = 'anatomy';
   const clothing = new THREE.Group(); clothing.name = 'clothing';
@@ -23,11 +23,13 @@ export function createAvatarBody(appearance: Appearance, equipped: Record<string
   const garmentStyle = styleMode==='rpg' ? item?.rpgStyle ?? 'tunic' : item?.humanStyle ?? 'casual';
   const premium = ['Épico','Lendário','Mítico','Transcendente'].includes(item?.rarity ?? 'Comum');
   const skin = createSkinMaterial(appearance.skin);
-  const fabric = garmentStyle==='leather'||garmentStyle==='jacket'||garmentStyle==='armor' ? createLeatherMaterial(item?.color ?? '#45505e') : createFabricMaterial(item?.color ?? '#45505e');
-  const pantsColor = styleMode==='human'&&garmentStyle==='suit' ? new THREE.Color(item?.color ?? '#24242b').multiplyScalar(.58) : new THREE.Color('#202633');
+  const itemColor=itemColors[item?.id??'']??item?.color??'#45505e';
+  const fabric = garmentStyle==='leather'||garmentStyle==='jacket'||garmentStyle==='armor' ? createLeatherMaterial(itemColor) : createFabricMaterial(itemColor);
+  const pantsColor = styleMode==='human'&&garmentStyle==='suit' ? new THREE.Color(itemColor).multiplyScalar(.58) : new THREE.Color('#202633');
   const pants = createFabricMaterial(`#${pantsColor.getHexString()}`);
   const trim = createMetalMaterial(premium ? `#${accent.getHexString()}` : styleMode==='human' ? '#aab0ba' : `#${accent.getHexString()}`);
-  const shoes = new THREE.MeshStandardMaterial({color:avatarItems.find(i=>i.id===equipped['calçados'])?.color ?? '#171c27',roughness:0.7});
+  const shoeItem=avatarItems.find(i=>i.id===equipped['calçados']),shoeColor=itemColors[shoeItem?.id??'']??shoeItem?.color??'#171c27';
+  const shoes = garmentStyle==='leather'?createLeatherMaterial(shoeColor):new THREE.MeshPhysicalMaterial({color:shoeColor,roughness:0.62,clearcoat:shoeItem?.equipmentStyle==='sneakers' ? .16 : 0});
   const shorts = new THREE.MeshStandardMaterial({color:'#303a4b',roughness:0.96});
   const sphereGeometry = new THREE.SphereGeometry(1,low ? 16 : 24,low ? 12 : 18);
   const add = (geometry: THREE.BufferGeometry, material: THREE.Material, parent: THREE.Group, name: string) => {
@@ -58,8 +60,10 @@ export function createAvatarBody(appearance: Appearance, equipped: Record<string
     }
     const thumb=sphere(anatomy,`thumb-${side}`,[wrist.x-side*0.029,0.824,0.06],[0.012,0.03,0.013],skin);thumb.rotation.z=side*-0.42;
     sphere(anatomy,`foot-${side}`,[side*0.126,0.067,0.054],[0.054,0.052,0.121],skin);
-    sphere(clothing,`shoe-${side}`,[side*0.126,0.067,0.063],[0.066,0.063,0.138],shoes);
+    sphere(clothing,`shoe-${side}`,[side*0.126,0.067,0.063],[shoeItem?.equipmentStyle==='boots'?.071:.066,shoeItem?.equipmentStyle==='boots'?.076:.063,shoeItem?.equipmentStyle==='boots'?.132:.138],shoes);
     sphere(clothing,`sole-${side}`,[side*0.126,0.031,0.063],[0.068,0.023,0.137],pants);
+    if(shoeItem?.equipmentStyle==='boots')sphere(clothing,`boot-shaft-${side}`,[side*.126,.18,.005],[.071,.15,.073],shoes);
+    if(shoeItem?.equipmentStyle==='sneakers')for(let lace=0;lace<3;lace++)stroke(clothing,`sneaker-lace-${side}-${lace}`,[new THREE.Vector3(side*.105,.09+lace*.022,.145),new THREE.Vector3(side*.147,.09+lace*.022,.145)],.003,trim);
     const hem=[];for(let i=0;i<=32;i++){const pt=limbPoint(p,'arm',side,0.5,i/32*Math.PI*2,true);hem.push(new THREE.Vector3(pt.x,pt.y,pt.z));}
     stroke(clothing,`sleeve-hem-${side}`,hem,0.003,trim);
   }
@@ -69,7 +73,7 @@ export function createAvatarBody(appearance: Appearance, equipped: Record<string
   if (styleMode==='human' && ['jacket','blazer','suit'].includes(garmentStyle)) {
     const shirt=createFabricMaterial(garmentStyle==='suit'?'#f0eee8':'#1a1d22');
     flatPanel('human-shirt-front',[[-.075,1.48],[.075,1.48],[.09,1.02],[-.09,1.02]],shirt,.118);
-    const lapel=createFabricMaterial(item?.color ?? '#353944');
+    const lapel=createFabricMaterial(itemColor);
     flatPanel('human-lapel-left',[[-.082,1.49],[-.015,1.31],[-.105,1.12],[-.145,1.42]],lapel,.126);
     flatPanel('human-lapel-right',[[.082,1.49],[.015,1.31],[.105,1.12],[.145,1.42]],lapel,.126);
     if(garmentStyle==='suit'){const tie=createFabricMaterial('#17191e');flatPanel('human-tie',[[-.018,1.45],[.018,1.45],[.029,1.18],[0,1.08],[-.029,1.18]],tie,.133);}
@@ -84,13 +88,16 @@ export function createAvatarBody(appearance: Appearance, equipped: Record<string
     const beltMesh=add(new THREE.TorusGeometry(.15,.014,8,44),belt,clothing,'rpg-belt');beltMesh.rotation.x=Math.PI/2;beltMesh.scale.y=.72;beltMesh.position.y=1.0;
     const buckle=add(new THREE.BoxGeometry(.045,.052,.016),trim,clothing,'rpg-buckle');buckle.position.set(0,1.0,.132);
     if(['armor','cape'].includes(garmentStyle)){for(const side of [-1,1]){const pauldron=sphere(clothing,`rpg-pauldron-${side}`,[side*.205,1.485,.015],[.105,.055,.115],trim);pauldron.rotation.z=side*.18;}}
-    if(garmentStyle==='armor'){const plate=createMetalMaterial(item?.color ?? '#355a70');flatPanel('rpg-chest-plate',[[-.14,1.46],[.14,1.46],[.12,1.08],[0,1.0],[-.12,1.08]],plate,.13);}
+    if(garmentStyle==='armor'){const plate=createMetalMaterial(itemColor);flatPanel('rpg-chest-plate',[[-.14,1.46],[.14,1.46],[.12,1.08],[0,1.0],[-.12,1.08]],plate,.13);}
     if(garmentStyle==='scholar'){const sash=createFabricMaterial(`#${accent.getHexString()}`);flatPanel('rpg-scholar-sash',[[-.13,1.47],[-.08,1.5],[.13,1.04],[.08,1.0]],sash,.129);}
-    if(garmentStyle==='cape'){const capeMaterial=createFabricMaterial(item?.color ?? '#534969');capeMaterial.side=THREE.DoubleSide;const cape=flatPanel('rpg-command-cape',[[-.25,1.52],[.25,1.52],[.36,.58],[0,.48],[-.36,.58]],capeMaterial,-.13);cape.rotation.x=-.04;}
+    if(garmentStyle==='cape'){const capeMaterial=createFabricMaterial(itemColor);capeMaterial.side=THREE.DoubleSide;const cape=flatPanel('rpg-command-cape',[[-.25,1.52],[.25,1.52],[.36,.58],[0,.48],[-.36,.58]],capeMaterial,-.13);cape.rotation.x=-.04;}
   }
   if (equipped['mão']) {
+    const handItem=avatarItems.find(i=>i.id===equipped['mão']),handColor=itemColors[handItem?.id??'']??handItem?.color??'#9098a4';
+    const handMaterial=handItem?.equipmentStyle==='bracer'?createLeatherMaterial(handColor):createMetalMaterial(handColor);
     const wrist=limbPoint(p,'arm',-1,0.04,0);
-    const watch=sphere(group,'watch',[wrist.x,wrist.y,0.074],[0.025,0.023,0.013],trim);watch.rotation.z=-0.08;
+    const watch=sphere(group,handItem?.equipmentStyle==='bracer'?'bracer':'watch',[wrist.x,wrist.y,0.074],handItem?.equipmentStyle==='bracer'?[.035,.052,.022]:[.025,.023,.013],handMaterial);watch.rotation.z=-0.08;
+    if(handItem?.equipmentStyle==='watch')sphere(group,'watch-face',[wrist.x,wrist.y,.091],[.017,.017,.006],new THREE.MeshPhysicalMaterial({color:'#0a1118',roughness:.18,clearcoat:.8}));
   }
   if (equipped['insígnia']) {
     const point=torsoPoint(p,1.418,0.45,true);

@@ -36,12 +36,15 @@ export type Appearance = {
 };
 export const initialAppearance: Appearance = { skin:'#b8896a', hairColor:'#191b24', eyeColor:'#647d91', hair:'moderno', face:'angular', beard:false, beardStyle:'sem barba', shape:'neutro', height:175, weight:75, fat:24, muscle:45 };
 export type AvatarStyleMode = 'rpg'|'human';
-export type AvatarItem = { id:string; name:string; slot:string; rarity:string; price:number; days:number; color:string; rpgName:string; humanName:string; rpgStyle?:'tunic'|'leather'|'scholar'|'armor'|'cape'; humanStyle?:'casual'|'jacket'|'blazer'|'sport'|'suit' };
+export type AvatarItem = { id:string; name:string; slot:string; rarity:string; price:number; days:number; color:string; palette?:string[]; equipmentStyle?:'boots'|'sneakers'|'bracer'|'watch'|'band'|'crown'; rpgName:string; humanName:string; rpgStyle?:'tunic'|'leather'|'scholar'|'armor'|'cape'; humanStyle?:'casual'|'jacket'|'blazer'|'sport'|'suit' };
 export const avatarItems: AvatarItem[] = [
- {id:'base',name:'Traje essencial',slot:'tronco',rarity:'Comum',price:0,days:0,color:'#45505e',rpgName:'Túnica do Iniciado',humanName:'Look casual essencial',rpgStyle:'tunic',humanStyle:'casual'},
- {id:'shoes',name:'Passo firme',slot:'calçados',rarity:'Comum',price:40,days:7,color:'#849294',rpgName:'Botas do Viajante',humanName:'Tênis premium urbano'},
- {id:'wrist',name:'Relógio de campo',slot:'mão',rarity:'Incomum',price:100,days:21,color:'#9fa9b6',rpgName:'Bracelete do Tempo',humanName:'Relógio de campo'},
- {id:'head',name:'Faixa do atleta',slot:'cabeça',rarity:'Raro',price:250,days:60,color:'#799eaf',rpgName:'Tiara da Vontade',humanName:'Faixa esportiva técnica'},
+ {id:'base',name:'Traje essencial',slot:'tronco',rarity:'Comum',price:0,days:0,color:'#45505e',palette:['#45505e','#58664d','#5b465f','#315a70'],rpgName:'Túnica do Iniciado',humanName:'Look casual essencial',rpgStyle:'tunic',humanStyle:'casual'},
+ {id:'starter-boots',name:'Calçados iniciais',slot:'calçados',rarity:'Comum',price:0,days:0,color:'#303845',palette:['#303845','#654835','#efefea','#263f55'],equipmentStyle:'boots',rpgName:'Botas Simples de Couro',humanName:'Tênis casual básico'},
+ {id:'starter-bracer',name:'Acessório inicial',slot:'mão',rarity:'Comum',price:0,days:0,color:'#68513f',palette:['#68513f','#1d2630','#777c82','#70423e'],equipmentStyle:'bracer',rpgName:'Braçadeira do Aprendiz',humanName:'Pulseira casual'},
+ {id:'starter-band',name:'Adorno inicial',slot:'cabeça',rarity:'Comum',price:0,days:0,color:'#586878',palette:['#586878','#57446b','#2d4f46','#8a6a3b'],equipmentStyle:'band',rpgName:'Faixa do Aprendiz',humanName:'Boné urbano essencial'},
+ {id:'shoes',name:'Passo firme',slot:'calçados',rarity:'Comum',price:40,days:7,color:'#849294',palette:['#849294','#d8d8d3','#20252e','#8b5a45'],equipmentStyle:'sneakers',rpgName:'Botas do Viajante',humanName:'Tênis premium urbano'},
+ {id:'wrist',name:'Relógio de campo',slot:'mão',rarity:'Incomum',price:100,days:21,color:'#9fa9b6',palette:['#9fa9b6','#c2a25e','#242a31','#6b8b83'],equipmentStyle:'watch',rpgName:'Bracelete do Tempo',humanName:'Relógio de campo'},
+ {id:'head',name:'Faixa do atleta',slot:'cabeça',rarity:'Raro',price:250,days:60,color:'#799eaf',palette:['#799eaf','#8e73b1','#b5944e','#40505d'],equipmentStyle:'crown',rpgName:'Tiara da Vontade',humanName:'Faixa esportiva técnica'},
  {id:'frame',name:'Moldura de conquista',slot:'moldura',rarity:'Épico',price:600,days:100,color:'#a18cbe',rpgName:'Portal de Conquista',humanName:'Moldura de prestígio'},
  {id:'title',name:'Discípulo da Disciplina',slot:'título',rarity:'Raro',price:250,days:100,color:'#bdd087',rpgName:'Discípulo da Disciplina',humanName:'Disciplina reconhecida'},
  {id:'slate',name:'Jaqueta grafite',slot:'tronco',rarity:'Comum',price:40,days:7,color:'#293344',rpgName:'Couraça de Ardósia',humanName:'Jaqueta grafite',rpgStyle:'leather',humanStyle:'jacket'},
@@ -54,8 +57,11 @@ export const avatarItems: AvatarItem[] = [
 ];
 export function avatarItemName(item:AvatarItem,mode:AvatarStyleMode){return mode==='rpg'?item.rpgName:item.humanName;}
 export function avatarItemEquivalent(item:AvatarItem,mode:AvatarStyleMode){return mode==='rpg'?item.humanName:item.rpgName;}
-export type AvatarAccount = { evidence?:AvatarEvidence; appearance:Appearance; balance:number; inventory:string[]; equipped:Record<string,string>; days:string[]; claimed:number[]; created:string; history:{at:string; appearance:Appearance}[]; transactions:{id:string; at:string; amount:number; label:string}[] };
-export function newAvatar(now:string):AvatarAccount { return {appearance:{...initialAppearance},balance:0,inventory:['base'],equipped:{tronco:'base'},days:[],claimed:[],created:now,history:[],transactions:[]}; }
+export const starterAvatarItems=['base','starter-boots','starter-bracer','starter-band'] as const;
+export type AvatarAccount = { evidence?:AvatarEvidence; appearance:Appearance; balance:number; inventory:string[]; equipped:Record<string,string>; itemColors?:Record<string,string>; days:string[]; claimed:number[]; created:string; history:{at:string; appearance:Appearance}[]; transactions:{id:string; at:string; amount:number; label:string}[] };
+export function newAvatar(now:string):AvatarAccount { return {appearance:{...initialAppearance},balance:0,inventory:[...starterAvatarItems],equipped:{tronco:'base',calçados:'starter-boots',mão:'starter-bracer',cabeça:'starter-band'},itemColors:{},days:[],claimed:[],created:now,history:[],transactions:[]}; }
+export function ensureAvatarDefaults(account:AvatarAccount){account.inventory=[...new Set([...starterAvatarItems,...account.inventory])];account.itemColors??={};for(const [slot,id] of Object.entries({tronco:'base',calçados:'starter-boots',mão:'starter-bracer',cabeça:'starter-band'}))if(!account.equipped[slot])account.equipped[slot]=id;return account;}
+export function setAvatarItemColor(account:AvatarAccount,id:string,color:string){const item=avatarItems.find(candidate=>candidate.id===id);if(!item||!account.inventory.includes(id))throw new AvatarInputError('Item não disponível no inventário.');if(!/^#[0-9a-f]{6}$/i.test(color))throw new AvatarInputError('Cor inválida.');account.itemColors??={};account.itemColors[id]=color.toLowerCase();}
 export function validateAppearance(value:unknown):Appearance {
  if(!value || typeof value!=='object') throw new AvatarInputError('Informe as características do avatar.');
  const a=value as Appearance;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newAvatar, observeDay, purchase, validateAppearance, initialAppearance, parseAvatarDescription, avatarDay } from '../lib/avatar.ts';
+import { newAvatar, observeDay, purchase, setAvatarItemColor, validateAppearance, initialAppearance, parseAvatarDescription, avatarDay } from '../lib/avatar.ts';
 import { syncAvatarEvidence } from '../lib/avatar-evidence.ts';
 const at='2026-09-14T15:00:00.000Z';
 test('appearance rejects nonfinite values, invalid colors and retains only permitted fields',()=>{
@@ -28,7 +28,12 @@ test('purchases reject insufficient balance, unmet gates and repeated purchase w
  a.balance=0;assert.throws(()=>purchase(a,'sage',at));assert.equal(a.balance,0);
 });
 test('unknown item cannot be bought and legendary needs domain evidence',()=>{
- const a=newAvatar(at);a.balance=10000;a.days=Array.from({length:730},(_,i)=>String(i));assert.throws(()=>purchase(a,'unknown',at));assert.throws(()=>purchase(a,'gold',at));assert.equal(a.inventory.length,1);
+ const a=newAvatar(at);a.balance=10000;a.days=Array.from({length:730},(_,i)=>String(i));assert.throws(()=>purchase(a,'unknown',at));assert.throws(()=>purchase(a,'gold',at));assert.equal(a.inventory.length,4);
+});
+test('common equipment starts owned and only owned items accept safe color overrides',()=>{
+ const a=newAvatar(at);assert.deepEqual(a.inventory,['base','starter-boots','starter-bracer','starter-band']);assert.equal(a.equipped.calçados,'starter-boots');
+ setAvatarItemColor(a,'base','#58664D');assert.equal(a.itemColors?.base,'#58664d');
+ assert.throws(()=>setAvatarItemColor(a,'slate','#ffffff'));assert.throws(()=>setAvatarItemColor(a,'base','url(x)'));
 });
 test('only answered questions count; domain evidence requires 10 distinct questions and 80% correct',()=>{
  const a=newAvatar(at);const make=(i:number,correct=true)=>({id:String(i),exerciseId:String(i),answeredAt:at,mode:'dominio',selected:'conceito',grade:{correct}});

@@ -3,7 +3,7 @@ import {fileURLToPath} from 'node:url';
 import {mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import assert from 'node:assert/strict';
-import {newAvatar, purchase, validateAppearance, avatarItems, resolveFacial} from '../lib/avatar.ts';
+import {newAvatar, purchase, setAvatarItemColor, validateAppearance, avatarItems, resolveFacial} from '../lib/avatar.ts';
 const {chromium} = await import(process.env.AVATAR_PLAYWRIGHT_MODULE || 'playwright');
 const root = fileURLToPath(new URL('..',import.meta.url));
 const output = resolve(process.env.AVATAR_TEST_ARTIFACTS || 'test-results/avatar'); mkdirSync(output,{recursive:true});
@@ -16,6 +16,7 @@ try {
   browser = await chromium.launch({executablePath:process.env.AVATAR_CHROMIUM_PATH,headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const page = await browser.newPage({viewport:{width:390,height:844}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const equipmentLibrary=page.waitForResponse(response=>response.url().endsWith('/avatar/equipment-library.glb')&&response.ok());
   page.on('console',m=>{if(m.type()==='error' && /THREE|WebGL|shader|hydration/i.test(m.text()))errors.push(m.text());});
   await page.addInitScript(()=>{
     window.avatarTestStats={draws:0,contexts:0,triangles:0};
@@ -36,6 +37,7 @@ try {
       if(body.action==='appearance'){account.appearance=validateAppearance(body.appearance);account.history.push({at:new Date().toISOString(),appearance:structuredClone(account.appearance)});savedCalls++;}
       if(body.action==='buy')purchase(account,body.id,new Date().toISOString());
       if(body.action==='equip'){const item=avatarItems.find(i=>i.id===body.id);account.equipped[item.slot]=item.id;}
+      if(body.action==='item-color')setAvatarItemColor(account,body.id,body.color);
     }
     await route.fulfill({json:{success:true,data:account}});
   }catch(e){await route.fulfill({status:400,json:{success:false,error:{message:e.message}}});}});
@@ -47,7 +49,7 @@ try {
   const openAvatar=async()=>{await page.goto(url);await page.getByRole('button',{name:'Evolução',exact:true}).last().click();await page.getByRole('button',{name:'Avatar',exact:true}).click();await page.locator('.avatar-canvas canvas').waitFor();await page.locator('.avatar-canvas').scrollIntoViewIfNeeded();};
   const tab=async name=>page.locator('.avatar-workspace>nav').getByRole('button',{name,exact:true}).click();
   const range=async(label,value,scope=page.locator('.avatar-editor'))=>{const slider=scope.getByRole('slider',{name:new RegExp(label)});await slider.evaluate((element,next)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(element,String(next));element.dispatchEvent(new Event('input',{bubbles:true}));element.dispatchEvent(new Event('change',{bubbles:true}));},value);};
-  await openAvatar();await page.emulateMedia({reducedMotion:'reduce'});await page.waitForTimeout(200);
+  await openAvatar();await equipmentLibrary;await page.emulateMedia({reducedMotion:'reduce'});await page.waitForTimeout(350);
   await page.getByRole('button',{name:'Humano',exact:true}).click();await page.waitForTimeout(180);
   assert.ok((await page.locator('.avatar-canvas').getAttribute('class')).includes('avatar-mode-human'));
   await page.locator('.avatar-stage').screenshot({path:`${output}/human-mode.png`});
@@ -106,6 +108,7 @@ try {
   await tab('Loja');const jacket=page.locator('.avatar-item').filter({hasText:'Jaqueta grafite'});await jacket.getByRole('button',{name:'Experimentar'}).click();page.once('dialog',d=>d.accept());await jacket.getByRole('button',{name:'Comprar',exact:true}).click();await page.waitForTimeout(150);assert.equal(account.balance,460);
   await tab('Equipar');await page.locator('.avatar-item').filter({hasText:'Couraça de Ardósia'}).getByRole('button',{name:'Equipar',exact:true}).click();await page.waitForTimeout(150);assert.equal(account.equipped.tronco,'slate');assert.equal(account.equipped['cabeça'],'head');
   await page.getByRole('button',{name:'Humano',exact:true}).click();await page.waitForTimeout(180);const realJacket=page.locator('.avatar-item').filter({hasText:'Jaqueta grafite'});assert.ok((await realJacket.innerText()).includes('Couraça de Ardósia'));assert.ok((await page.locator('.equipment-slots').innerText()).includes('Jaqueta grafite'));
+  const baseCard=page.locator('.avatar-item').filter({hasText:'Look casual essencial'});await baseCard.getByRole('button',{name:/Usar cor #58664d/i}).click();await page.waitForTimeout(180);assert.equal(account.itemColors.base,'#58664d');
   await page.locator('.avatar-workspace').screenshot({path:`${output}/shared-inventory-human.png`});
   await tab('Histórico');await page.getByRole('button',{name:/Visualizar/}).first().click();
   console.log('Existing inventory, shop preview, purchase, equip and history pass.');

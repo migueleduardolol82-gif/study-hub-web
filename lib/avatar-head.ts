@@ -19,7 +19,7 @@ export function disposeAvatarObject(root: THREE.Object3D) {
   geometries.forEach(g => g.dispose()); materials.forEach(m => {Object.values(m).forEach(value => {if(value instanceof THREE.Texture)textures.add(value);});m.dispose();}); textures.forEach(t=>t.dispose());
 }
 
-export function createAvatarHead(a: Appearance, headColor?: string, low = false) {
+export function createAvatarHead(a: Appearance, headColor?: string, low = false, headStyle:'band'|'crown'='band') {
   const f = resolveFacial(a), realism = a.realism ?? 0.75;
   const group = new THREE.Group();
   group.name = 'avatar-head'; group.position.y = 1.635;
@@ -62,7 +62,7 @@ export function createAvatarHead(a: Appearance, headColor?: string, low = false)
   hair.customProgramCacheKey = () => 'avatar-fibers-v1';
   const browMaterial = new THREE.MeshStandardMaterial({color: a.hairColor, roughness: 0.82});
   const add = (geometry: THREE.BufferGeometry, material: THREE.Material) => {
-    const mesh = new THREE.Mesh(geometry, material); group.add(mesh); return mesh;
+    const mesh = new THREE.Mesh(geometry, material);mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh); return mesh;
   };
   const ellipsoid = (p: THREE.Vector3, scale: THREE.Vector3, material: THREE.Material) => {
     const mesh = add(new THREE.SphereGeometry(1, low ? 16 : 24, 16), material);
@@ -139,6 +139,11 @@ export function createAvatarHead(a: Appearance, headColor?: string, low = false)
   if (headColor) {
     const band = add(new THREE.TorusGeometry(faceWidth * 1.04, 0.009, 8, 48), new THREE.MeshStandardMaterial({color: headColor, metalness: 0.35, roughness: 0.46}));
     band.rotation.x = Math.PI / 2; band.position.y = 0.317; band.scale.y = 0.85;
+    if(headStyle==='crown'){
+      const metal=new THREE.MeshPhysicalMaterial({color:headColor,metalness:.72,roughness:.22,clearcoat:.3});
+      for(const side of [-1,0,1]){const point=add(new THREE.ConeGeometry(.015,.055,5),metal);point.position.set(side*.052,.345,.01);}
+      const gem=add(new THREE.OctahedronGeometry(.018),new THREE.MeshPhysicalMaterial({color:'#bff5ff',metalness:.1,roughness:.12,transmission:.2}));gem.position.set(0,.335,.13);
+    }
   }
   // All facial details, hair and head equipment inherit the same pivot transform.
   const update = (seconds: number, reduced: boolean) => {

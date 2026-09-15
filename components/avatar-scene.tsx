@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { avatarItems, type Appearance, type AvatarStyleMode } from '@/lib/avatar';
 import { createAvatarBody } from '@/lib/avatar-body';
+import { createEquipmentDetail } from '@/lib/avatar-equipment-model';
 import { createAvatarHead, disposeAvatarObject } from '@/lib/avatar-head';
 
-type Props = { appearance: Appearance; equipped: Record<string, string>; archetypes?: string[]; focus?: 'corpo' | 'rosto'; physicalDays?: number; styleMode?: AvatarStyleMode };
+type Props = { appearance: Appearance; equipped: Record<string, string>; itemColors?:Record<string,string>; archetypes?: string[]; focus?: 'corpo' | 'rosto'; physicalDays?: number; styleMode?: AvatarStyleMode };
 type Update = (props: Props, low: boolean, anatomy: boolean) => void;
 
 export default function AvatarScene(props: Props) {
@@ -49,6 +50,7 @@ export default function AvatarScene(props: Props) {
     let showAnatomy = false;
     let current: Props | null = null, head: ReturnType<typeof createAvatarHead> | null = null;
     let body: ReturnType<typeof createAvatarBody> | null = null;
+    let detailVersion=0;
     let bodyKey = '', headKey = '', pending: {props: Props; low: boolean} | null = null;
     let frame = 0, lastFrame = 0, width = 1, height = 1, dragging = false, lastX = 0;
     let animationSeconds = 0, previousTime = 0;
@@ -71,23 +73,34 @@ export default function AvatarScene(props: Props) {
       camera.position.set(0, targetY + (face ? 0 : 0.08 * scale), distance);
       camera.lookAt(0, targetY, 0);
     };
+    const loadDetail = (target:ReturnType<typeof createAvatarBody>,props:Props,item:typeof avatarItems[number]|undefined,version:number) => {
+      const mode=props.styleMode??'rpg',style=mode==='rpg'?item?.rpgStyle:item?.humanStyle;
+      if(!style||!item)return;
+      void createEquipmentDetail(mode,style,props.itemColors?.[item.id]??item.color).then(detail=>{
+        if(!detail)return;
+        if(disposed||version!==detailVersion||body!==target){disposeAvatarObject(detail);return;}
+        target.clothing.add(detail);schedule();
+      }).catch(()=>{/* Procedural clothing remains available if the optional detail library cannot load. */});
+    };
     const applyPending = () => {
       if (!pending) return;
       current = pending.props;
       const a = current.appearance;
       const nextLow = pending.low || mobile.matches;
       if (low !== nextLow) {low = nextLow; resize();}
-      const nextBody = JSON.stringify([a.skin, a.shape, a.fat, a.muscle, current.physicalDays, current.equipped, current.archetypes, current.styleMode, low]);
+      const nextBody = JSON.stringify([a.skin, a.shape, a.fat, a.muscle, current.physicalDays, current.equipped, current.itemColors, current.archetypes, current.styleMode, low]);
       if (nextBody !== bodyKey) {
+        detailVersion++;
         if (body) {figure.remove(body.group); disposeAvatarObject(body.group);}
-        body = createAvatarBody(a, current.equipped, current.archetypes, low, current.physicalDays, current.styleMode); figure.add(body.group); bodyKey = nextBody;
+        body = createAvatarBody(a, current.equipped, current.archetypes, low, current.physicalDays, current.styleMode,current.itemColors); figure.add(body.group); bodyKey = nextBody;
+        const torsoItem=avatarItems.find(item=>item.id===current?.equipped.tronco);loadDetail(body,current,torsoItem,detailVersion);
       }
       if (body) {body.clothing.visible = !showAnatomy; body.coverage.visible = showAnatomy;}
-      const headColor = avatarItems.find(item => item.id === current?.equipped['cabeça'])?.color;
-      const nextHead = JSON.stringify([a.skin, a.hair, a.hairColor, a.eyeColor, a.face, a.facial, a.hairLength, a.realism, a.beard, a.beardStyle, headColor, low]);
+      const headItem = avatarItems.find(item => item.id === current?.equipped['cabeça']),headColor=headItem?(current.itemColors?.[headItem.id]??headItem.color):undefined;
+      const nextHead = JSON.stringify([a.skin, a.hair, a.hairColor, a.eyeColor, a.face, a.facial, a.hairLength, a.realism, a.beard, a.beardStyle, headColor,headItem?.equipmentStyle,low]);
       if (nextHead !== headKey) {
         if (head) {figure.remove(head.group); disposeAvatarObject(head.group);}
-        head = createAvatarHead(a, headColor, low); figure.add(head.group); headKey = nextHead;
+        head = createAvatarHead(a, headColor, low,headItem?.equipmentStyle==='crown'?'crown':'band'); figure.add(head.group); headKey = nextHead;
       }
       pending = null;
     };
@@ -132,7 +145,7 @@ export default function AvatarScene(props: Props) {
     renderer.domElement.addEventListener('pointerup', end); renderer.domElement.addEventListener('pointercancel', end);
     renderer.domElement.addEventListener('webglcontextlost', lost);
     return () => {
-      disposed = true; cancelAnimationFrame(frame); update.current = null; invalidate.current = () => {};
+      disposed = true;detailVersion++;cancelAnimationFrame(frame); update.current = null; invalidate.current = () => {};
       observer.disconnect(); resizeObserver.disconnect(); preference.removeEventListener('change', onPreference); mobile.removeEventListener('change', onMobile);
       document.removeEventListener('visibilitychange', onVisibility);
       renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointermove', move);
