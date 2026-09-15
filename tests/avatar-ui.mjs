@@ -81,7 +81,7 @@ try {
   await page.locator('.avatar-stage').screenshot({path:`${output}/face-rotation.png`});
   await page.getByRole('button',{name:'Centralizar',exact:true}).click();
   await page.emulateMedia({reducedMotion:'reduce'});await page.waitForTimeout(200);const stopped=await page.evaluate(()=>window.avatarTestStats.draws);await page.waitForTimeout(180);assert.equal(await page.evaluate(()=>window.avatarTestStats.draws),stopped);
-  await page.locator('.avatar-stage').scrollIntoViewIfNeeded();await page.emulateMedia({reducedMotion:'no-preference'});await page.waitForTimeout(450);assert.ok(await page.evaluate(()=>window.avatarTestStats.draws)>stopped);
+  await canvas.scrollIntoViewIfNeeded();await page.emulateMedia({reducedMotion:'no-preference'});await page.waitForFunction(previous=>window.avatarTestStats.draws>previous,stopped,{timeout:2500});
   await page.locator('.avatar-stage').evaluate(e=>{e.style.display='none';});await page.waitForTimeout(120);const hidden=await page.evaluate(()=>window.avatarTestStats.draws);await page.waitForTimeout(150);assert.equal(await page.evaluate(()=>window.avatarTestStats.draws),hidden);await page.locator('.avatar-stage').evaluate(e=>{e.style.display='';});await page.emulateMedia({reducedMotion:'reduce'});
   console.log('Rotation, zoom, pointer drag, reduced motion and invisible render pause pass.');
   await tab('Criar por Foto');

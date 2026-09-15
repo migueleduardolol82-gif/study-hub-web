@@ -218,8 +218,6 @@ bpy.ops.export_scene.gltf(
     export_materials="EXPORT",
     export_cameras=False,
     export_lights=False,
-    export_draco_mesh_compression_enable=True,
-    export_draco_mesh_compression_level=6,
 )
 print(f"Saved {SOURCE}")
 print(f"Exported {OUTPUT / 'equipment-library.glb'}")
