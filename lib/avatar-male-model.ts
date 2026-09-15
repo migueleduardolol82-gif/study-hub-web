@@ -75,17 +75,32 @@ export async function createRogerMaleAvatar(appearance:Appearance,physicalDays=0
     if(object.userData.avatarPart==='underwear')underwear.push(object);
     if(object.userData.avatarPart==='hair'){
       object.visible=appearance.hair!=='raspado';
-      object.scale.multiplyScalar(THREE.MathUtils.clamp(appearance.hairLength??1,.82,1.22));
     }
-    if(object.userData.avatarPart==='facialHair')object.visible=appearance.beard;
+    if(object.userData.avatarPart==='facialHair'){
+      const style=appearance.beardStyle??(appearance.beard?'barba curta':'sem barba');
+      object.visible=appearance.beard&&style!=='sem barba'&&(style!=='cavanhaque'||!/Curtain|Stubble/.test(object.name));
+    }
     if(!(object instanceof THREE.Mesh))return;
     object.geometry=object.geometry.clone();
+    if(object.userData.avatarPart==='hair'||object.parent?.userData.avatarPart==='hair'){
+      // Deform the tips around the scalp; never scale a skinned mesh around its origin.
+      object.geometry.computeBoundingBox();
+      const bounds=object.geometry.boundingBox!;
+      const position=object.geometry.getAttribute('position');
+      const length=THREE.MathUtils.clamp(appearance.hairLength??1,.82,1.22);
+      const height=Math.max(bounds.max.y-bounds.min.y,.001);
+      for(let i=0;i<position.count;i++){
+        const y=position.getY(i),t=THREE.MathUtils.smoothstep(y,bounds.min.y+height*.65,bounds.max.y);
+        position.setY(i,y+(length-1)*height*t*.5);
+      }
+      position.needsUpdate=true;object.geometry.computeVertexNormals();object.geometry.computeBoundingBox();object.geometry.computeBoundingSphere();
+    }
     object.castShadow=true;object.receiveShadow=true;
     const originals=Array.isArray(object.material)?object.material:[object.material];
     const materials=originals.map(original=>{
       const material=original.clone() as THREE.MeshStandardMaterial;
       cloneTextureInputs(material);
-      if(material.name.includes('Skin_'))material.color.copy(bodyTint);
+      if(material.name.includes('Skin_')){material.color.copy(bodyTint);material.roughness=Math.max(material.roughness,.68);material.metalness=0;}
       if(material.name.includes('Hair')||material.name.includes('Scalp')||material.name.includes('Beard'))material.color.copy(hairTint);
       if(material.name.includes('Cornea')){material.transparent=true;material.opacity=.16;material.depthWrite=false;}
       if(material.name.includes('Tearline')){material.transparent=true;material.opacity=.22;material.depthWrite=false;}
@@ -112,4 +127,3 @@ export async function createRogerMaleAvatar(appearance:Appearance,physicalDays=0
   group.scale.set(width,1,.98+physique.softness*.05);
   return {group,underwear};
 }
-
