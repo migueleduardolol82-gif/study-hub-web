@@ -8,9 +8,11 @@ import { createEquipmentDetail } from '@/lib/avatar-equipment-model';
 import { createAvatarHead, disposeAvatarObject } from '@/lib/avatar-head';
 import { createRogerMaleAvatar, type RogerMaleAvatar } from '@/lib/avatar-male-model';
 import { fitRogerClothing } from '@/lib/avatar-clothing-fit';
+import {tintClothing} from '@/lib/avatar-clothing-materials';
+import type {ItemMaterialColors} from '@/lib/avatar-item-colors';
 import { frameAvatar, measureAvatar, type AvatarFocus } from '@/lib/avatar-camera';
 
-type Props = { appearance: Appearance; equipped: Record<string, string>; itemColors?:Record<string,string>; archetypes?: string[]; focus?: AvatarFocus; focusRevision?: number; physicalDays?: number; styleMode?: AvatarStyleMode };
+type Props = { appearance: Appearance; equipped: Record<string, string>; itemColors?:Record<string,string>; itemMaterialColors?:Record<string,ItemMaterialColors>; archetypes?: string[]; focus?: AvatarFocus; focusRevision?: number; physicalDays?: number; styleMode?: AvatarStyleMode };
 type Update = (props: Props, low: boolean, anatomy: boolean) => void;
 
 export default function AvatarScene(props: Props) {
@@ -104,7 +106,7 @@ export default function AvatarScene(props: Props) {
       void createEquipmentDetail(mode,style,props.itemColors?.[item.id]??item.color).then(detail=>{
         if(!detail)return;
         if(disposed||version!==detailVersion||body!==target){disposeAvatarObject(detail);return;}
-        target.clothing.add(detail);if(male)fitRogerClothing(target.clothing,male.group,props.appearance,props.physicalDays);schedule();
+        target.clothing.add(detail);const colors=props.itemMaterialColors?.[item.id];if(colors)tintClothing(detail,colors,'top');if(male)fitRogerClothing(target.clothing,male.group,props.appearance,props.physicalDays);schedule();
       }).catch(()=>{/* Procedural clothing remains available if the optional detail library cannot load. */});
     };
     const applyPending = () => {
@@ -114,13 +116,14 @@ export default function AvatarScene(props: Props) {
       const a = current.appearance;
       const nextLow = pending.low || mobile.matches;
       if (low !== nextLow) {low = nextLow; resize();}
-      const nextBody = JSON.stringify([a.skin, a.shape, a.fat, a.muscle, current.physicalDays, current.equipped, current.itemColors, current.archetypes, current.styleMode, low]);
+      const nextBody = JSON.stringify([a.skin, a.shape, a.fat, a.muscle, current.physicalDays, current.equipped, current.itemColors, current.itemMaterialColors, current.archetypes, current.styleMode, low]);
       if (nextBody !== bodyKey) {
         detailVersion++;
         if (body) {figure.remove(body.group); disposeAvatarObject(body.group);}
         body = createAvatarBody(a, current.equipped, current.archetypes, low, current.physicalDays, current.styleMode,current.itemColors); figure.add(body.group); bodyKey = nextBody;
         const torsoItem=avatarItems.find(item=>item.id===current?.equipped.tronco);loadDetail(body,current,torsoItem,detailVersion);
       }
+      if(body){const top=current.itemMaterialColors?.[current.equipped.tronco],shoe=current.itemMaterialColors?.[current.equipped['calçados']];if(top)tintClothing(body.clothing,top,'top');if(shoe)tintClothing(body.clothing,shoe,'shoes');}
       const usesRoger=a.shape==='masculino';
       if(usesRoger&&male&&body)fitRogerClothing(body.clothing,male.group,a,current.physicalDays);
       if (body) {

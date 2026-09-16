@@ -28,7 +28,7 @@ export async function createEquipmentDetail(mode:AvatarStyleMode,style:string,co
     const materials=(Array.isArray(object.material)?object.material:[object.material]).map(material=>{
       const next=material.clone();
       cloneTextureInputs(next);
-      if(next.name.startsWith('Tint_')&&'color' in next){const tinted=next as THREE.MeshStandardMaterial;tinted.color.set(color);tinted.map=null;tinted.needsUpdate=true;}
+      if(next.name.startsWith('Tint_')&&'color' in next){const tinted=next as THREE.MeshStandardMaterial;tinted.color.set(color);tinted.needsUpdate=true;}
       return next;
     });
     object.material=Array.isArray(object.material)?materials:materials[0];
@@ -36,4 +36,3 @@ export async function createEquipmentDetail(mode:AvatarStyleMode,style:string,co
   });
   return clone;
 }
-

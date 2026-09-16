@@ -1,0 +1,33 @@
+{
+  "gltfUp": "Y",
+  "units": "meters",
+  "measurements": {
+    "body_height": 1.9203191548585892,
+    "shoulder_joint_width": 0.38330426086079333,
+    "torso_joint_length": 0.5545786510287884,
+    "chest": {
+      "height": 1.32,
+      "width": 0.5086124241352081,
+      "depth": 0.27040381729602814
+    },
+    "waist": {
+      "height": 1.09,
+      "width": 0.29308734834194183,
+      "depth": 0.20990697294473648
+    },
+    "hip": {
+      "height": 0.88,
+      "width": 0.34491442143917084,
+      "depth": 0.2326226308941841
+    },
+    "arm_joint_length": 0.5395737315262965,
+    "leg_joint_length": 0.9487588652656758
+  },
+  "id": "roger-male-v1",
+  "boneCount": 101,
+  "scope": "Reference only. Original avatar buffers remain unchanged.",
+  "pose": "GLB bind pose; child joint positions are authoritative, not Blender display tails",
+  "rig": "Roger_Rig",
+  "sha256": "1fcd483a16886295d862517e980653cdac0c2c7c614812629f037984040fd0a3",
+  "blenderUp": "Z"
+}

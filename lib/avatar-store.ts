@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import 'server-only';
 import { getDatabase } from '@/lib/db';
-import { avatarItems, AvatarInputError, ensureAvatarDefaults, newAvatar, purchase, setAvatarItemColor, validateAppearance, type AvatarAccount } from '@/lib/avatar';
+import { avatarItems, AvatarInputError, ensureAvatarDefaults, newAvatar, purchase, setAvatarItemColor, setAvatarItemMaterialColors, validateAppearance, type AvatarAccount } from '@/lib/avatar';
 import { syncAvatarEvidence } from '@/lib/avatar-evidence';
 let initialized:Promise<void>|undefined;
 async function database(){
@@ -32,6 +32,7 @@ export async function mutateAvatar(userId:string,body:Record<string,unknown>,onl
   else if(body.action==='equip') {const item=avatarItems.find(i=>i.id===body.id);if(!item||!account.inventory.includes(item.id))throw new AvatarInputError('Item não disponível no inventário.');account.equipped[item.slot]=item.id;}
   else if(body.action==='unequip') {if(typeof body.slot!=='string'||!avatarItems.some(i=>i.slot===body.slot))throw new AvatarInputError('Slot inválido.');delete account.equipped[body.slot];}
   else if(body.action==='item-color') {if(typeof body.id!=='string'||typeof body.color!=='string')throw new AvatarInputError('Escolha uma cor para o item.');setAvatarItemColor(account,body.id,body.color);}
+  else if(body.action==='item-material-colors') {if(typeof body.id!=='string')throw new AvatarInputError('Escolha um item.');setAvatarItemMaterialColors(account,body.id,body.colors);}
   else if(body.action==='sync') {
    const rows=await sql`SELECT state FROM nexo_user_state WHERE user_id=${userId}`;
    const state=rows[0]?.state;

@@ -1,3 +1,4 @@
+import {validItemColors,type ItemMaterialColors} from './avatar-item-colors.ts';
 export const avatarHairStyles = ['social','moderno','bagunçado','ondulado','heroico','longo','raspado'] as const;
 export const avatarBeardStyles = ['sem barba','barba curta','barba marcada','cavanhaque'] as const;
 // Multipliers relative to the selected face preset. Missing fields keep legacy saves valid.
@@ -58,10 +59,10 @@ export const avatarItems: AvatarItem[] = [
 export function avatarItemName(item:AvatarItem,mode:AvatarStyleMode){return mode==='rpg'?item.rpgName:item.humanName;}
 export function avatarItemEquivalent(item:AvatarItem,mode:AvatarStyleMode){return mode==='rpg'?item.humanName:item.rpgName;}
 export const starterAvatarItems=['base','starter-boots','starter-bracer','starter-band'] as const;
-export type AvatarAccount = { evidence?:AvatarEvidence; appearance:Appearance; balance:number; inventory:string[]; equipped:Record<string,string>; itemColors?:Record<string,string>; days:string[]; claimed:number[]; created:string; history:{at:string; appearance:Appearance}[]; transactions:{id:string; at:string; amount:number; label:string}[] };
+export type AvatarAccount = { evidence?:AvatarEvidence; appearance:Appearance; balance:number; inventory:string[]; equipped:Record<string,string>; itemColors?:Record<string,string>; itemMaterialColors?:Record<string,ItemMaterialColors>; days:string[]; claimed:number[]; created:string; history:{at:string; appearance:Appearance}[]; transactions:{id:string; at:string; amount:number; label:string}[] };
 export function newAvatar(now:string):AvatarAccount { return {appearance:{...initialAppearance},balance:0,inventory:[...starterAvatarItems],equipped:{tronco:'base',calçados:'starter-boots',mão:'starter-bracer',cabeça:'starter-band'},itemColors:{},days:[],claimed:[],created:now,history:[],transactions:[]}; }
 export function ensureAvatarDefaults(account:AvatarAccount){account.inventory=[...new Set([...starterAvatarItems,...account.inventory])];account.itemColors??={};for(const [slot,id] of Object.entries({tronco:'base',calçados:'starter-boots',mão:'starter-bracer',cabeça:'starter-band'}))if(!account.equipped[slot])account.equipped[slot]=id;return account;}
-export function setAvatarItemColor(account:AvatarAccount,id:string,color:string){const item=avatarItems.find(candidate=>candidate.id===id);if(!item||!account.inventory.includes(id))throw new AvatarInputError('Item não disponível no inventário.');if(!/^#[0-9a-f]{6}$/i.test(color))throw new AvatarInputError('Cor inválida.');account.itemColors??={};account.itemColors[id]=color.toLowerCase();}
+export function setAvatarItemColor(account:AvatarAccount,id:string,color:string){const item=avatarItems.find(candidate=>candidate.id===id);if(!item||!account.inventory.includes(id))throw new AvatarInputError('Item não disponível no inventário.');if(!/^#[0-9a-f]{6}$/i.test(color))throw new AvatarInputError('Cor inválida.');account.itemColors??={};account.itemColors[id]=color.toLowerCase();if(account.itemMaterialColors?.[id])account.itemMaterialColors[id].primaryColor=color.toLowerCase();}
 export function validateAppearance(value:unknown):Appearance {
  if(!value || typeof value!=='object') throw new AvatarInputError('Informe as características do avatar.');
  const a=value as Appearance;
@@ -132,3 +133,12 @@ export type AvatarEvidence={fingerprint?:string;studyDays:string[];physicalDays:
 export const emptyAvatarEvidence=():AvatarEvidence=>({studyDays:[],physicalDays:[],lastSync:'',summary:{archetypes:[],skills:[],mastery:null,studiedConcepts:0}});
 
 export function avatarDay(iso:string){return /^\d{4}-\d{2}-\d{2}$/.test(iso)?iso:new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(iso));}
+
+export function setAvatarItemMaterialColors(account:AvatarAccount,id:string,value:unknown){
+ const item=avatarItems.find(candidate=>candidate.id===id);
+ if(!item||!account.inventory.includes(id))throw new AvatarInputError('Item não disponível no inventário.');
+ if(!validItemColors(value))throw new AvatarInputError('Informe cores válidas para o equipamento.');
+ const colors={primaryColor:value.primaryColor.toLowerCase(),secondaryColor:value.secondaryColor.toLowerCase(),detailColor:value.detailColor.toLowerCase()};
+ account.itemMaterialColors??={};account.itemMaterialColors[id]=colors;
+ setAvatarItemColor(account,id,colors.primaryColor);
+}
