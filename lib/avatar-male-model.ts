@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Appearance } from './avatar.ts';
 import { resolvePhysique } from './avatar-physique.ts';
+import { applyRogerFaceMorph } from './avatar-face-morph.ts';
 
 export const ROGER_MALE_PART_COUNT = 21;
 let library: Promise<THREE.Group> | undefined;
@@ -114,6 +115,7 @@ export async function createRogerMaleAvatar(appearance:Appearance,physicalDays=0
   });
   lowerArm(group,'L');lowerArm(group,'R');
   addForwardIrises(group,appearance.eyeColor??'#647d91');
+  applyRogerFaceMorph(group,appearance);
   const muscleScale=.9+physique.volume*.2;
   for(const side of ['L','R']){
     for(const part of ['Upperarm','Forearm','Thigh','Calf']){
@@ -125,5 +127,8 @@ export async function createRogerMaleAvatar(appearance:Appearance,physicalDays=0
   if(chest)chest.scale.set(.96+physique.volume*.1,1,.96+physique.volume*.08);
   const width=.96+physique.softness*.09+physique.volume*.025;
   group.scale.set(width,1,.98+physique.softness*.05);
+  group.updateMatrixWorld(true);
+  const groundedBounds=new THREE.Box3().setFromObject(group,true);
+  if(!groundedBounds.isEmpty())group.position.y-=groundedBounds.min.y;
   return {group,underwear};
 }

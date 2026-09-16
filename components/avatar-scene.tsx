@@ -7,6 +7,7 @@ import { createAvatarBody } from '@/lib/avatar-body';
 import { createEquipmentDetail } from '@/lib/avatar-equipment-model';
 import { createAvatarHead, disposeAvatarObject } from '@/lib/avatar-head';
 import { createRogerMaleAvatar, type RogerMaleAvatar } from '@/lib/avatar-male-model';
+import { fitRogerClothing } from '@/lib/avatar-clothing-fit';
 import { frameAvatar, measureAvatar, type AvatarFocus } from '@/lib/avatar-camera';
 
 type Props = { appearance: Appearance; equipped: Record<string, string>; itemColors?:Record<string,string>; archetypes?: string[]; focus?: AvatarFocus; focusRevision?: number; physicalDays?: number; styleMode?: AvatarStyleMode };
@@ -103,7 +104,7 @@ export default function AvatarScene(props: Props) {
       void createEquipmentDetail(mode,style,props.itemColors?.[item.id]??item.color).then(detail=>{
         if(!detail)return;
         if(disposed||version!==detailVersion||body!==target){disposeAvatarObject(detail);return;}
-        target.clothing.add(detail);schedule();
+        target.clothing.add(detail);if(male)fitRogerClothing(target.clothing,male.group,props.appearance,props.physicalDays);schedule();
       }).catch(()=>{/* Procedural clothing remains available if the optional detail library cannot load. */});
     };
     const applyPending = () => {
@@ -121,13 +122,14 @@ export default function AvatarScene(props: Props) {
         const torsoItem=avatarItems.find(item=>item.id===current?.equipped.tronco);loadDetail(body,current,torsoItem,detailVersion);
       }
       const usesRoger=a.shape==='masculino';
+      if(usesRoger&&male&&body)fitRogerClothing(body.clothing,male.group,a,current.physicalDays);
       if (body) {
         body.anatomy.visible=!usesRoger;
         body.clothing.visible=!showAnatomy;
         body.coverage.visible=showAnatomy&&!usesRoger;
       }
       male?.underwear.forEach(item=>{item.visible=true;});
-      const nextMale=usesRoger?JSON.stringify([a.skin,a.hairColor,a.eyeColor,a.hair,a.hairLength,a.beard,a.beardStyle,a.muscle,a.fat,current.physicalDays]):'';
+      const nextMale=usesRoger?JSON.stringify([a.skin,a.hairColor,a.eyeColor,a.hair,a.hairLength,a.beard,a.beardStyle,a.muscle,a.fat,a.face,a.facial,a.realism,current.physicalDays]):'';
       if(nextMale!==maleKey){
         const version=++maleVersion;
         if(male&&!usesRoger){figure.remove(male.group);disposeAvatarObject(male.group);male=null;}
@@ -139,6 +141,7 @@ export default function AvatarScene(props: Props) {
           if(head){figure.remove(head.group);disposeAvatarObject(head.group);head=null;}
           if(body)body.anatomy.visible=false;
           male=result;measurement=null;male.underwear.forEach(item=>{item.visible=true;});figure.add(result.group);
+          if(body)fitRogerClothing(body.clothing,result.group,a,current?.physicalDays);
           container.dataset.avatarModel='roger';schedule();
         }).catch(()=>{if(!disposed&&version===maleVersion){container.dataset.avatarModel=male?'roger':'procedural-fallback';if(!male){if(body)body.anatomy.visible=true;if(!head){head=createAvatarHead(a,undefined,low);figure.add(head.group);}}measurement=null;schedule();}});
       }

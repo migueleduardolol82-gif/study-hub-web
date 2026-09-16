@@ -56,3 +56,10 @@ Original input remains unchanged in the supplied Roger Blender project.
 viewport aspect and zoom limits). TypeScript and ESLint passed on the final working tree. Browser confirmed
 manual face focus and wheel zoom on the local procedural preview. Physical
 touch-device performance and Roger clothing animation remain unverified.
+
+## 2026-09-15 — facial deformation and grounded wardrobe
+
+- Roger now uses a relative runtime morph target for the existing facial controls; original vertex positions and topology remain intact. The same rest-space deformation is applied to eyes, hair and facial hair.
+- Ground height is measured from the posed mesh. Clothing is fitted against hip, neck, arm and leg landmarks, including asynchronously loaded details. Repeated fitting starts from original positions.
+- Validation: 96 existing/facial tests plus one wardrobe regression test passed; TypeScript and lint checked. Browser preview exercised masculine presentation and face width 1.15.
+- Remaining: shoulder/hip seam clipping needs artist-authored garment topology and skin weights. Runtime fitting is not a completed Blender wardrobe or animation system. The local avatar API returns 503 without account/database; appearance persistence is not verified here.
