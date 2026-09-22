@@ -32,6 +32,7 @@ for (const count of [80, 250, 310]) test(`${count} cartões em lotes, retomada i
   }
   assert.equal(productionProgress(path.cardProduction!).complete, false, "auditoria de lacunas ainda pendente");
   path.cardProduction!.sources[0].audited = true;
+  path.cardProduction!.sources[0].auditVersion = 2;
   assert.equal(productionProgress(path.cardProduction!).covered, count);
   assert.equal(productionProgress(path.cardProduction!).complete, true);
   assert.equal(path.units.length, 3);

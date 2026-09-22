@@ -2,7 +2,7 @@ import type { LearningPath, LearningExercise } from "./learning.ts";
 import { isRecord } from "./safe-json.ts";
 
 export type CardFact = { id: string; category: string; topic: string; objective: string; quote: string };
-export type CardSource = { id: string; reference: string; text: string; facts?: CardFact[]; audited?: boolean; completedFactIds: string[] };
+export type CardSource = { id: string; reference: string; text: string; facts?: CardFact[]; audited?: boolean; auditVersion?: 2; completedFactIds: string[] };
 export type CardProduction = { version: 1; sources: CardSource[]; status: "paused" | "running" | "complete" | "error"; error?: string };
 export type ProducedCard = { factId: string; front: string; back: string; explanation: string; essentialCriteria: string[] };
 
@@ -28,7 +28,8 @@ export function productionProgress(job: CardProduction) {
   const analyzed = job.sources.filter(source => source.facts !== undefined).length;
   const facts = job.sources.reduce((sum, source) => sum + (source.facts?.length || 0), 0);
   const covered = job.sources.reduce((sum, source) => sum + (source.facts || []).filter(fact => source.completedFactIds.includes(fact.id)).length, 0);
-  return { analyzed, total: job.sources.length, facts, covered, complete: job.sources.length > 0 && analyzed === job.sources.length && covered === facts && job.sources.every(source => source.audited) };
+  const audited = job.sources.filter(source => source.audited && source.auditVersion === 2).length;
+  return { analyzed, audited, total: job.sources.length, facts, covered, complete: job.sources.length > 0 && analyzed === job.sources.length && covered === facts && audited === job.sources.length };
 }
 
 const string = { type: "string" };
