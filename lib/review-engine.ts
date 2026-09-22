@@ -52,7 +52,7 @@ export function chooseItems(path: LearningPath, progress: PathProgress, mode: Re
   const counts = new Map<string, number>();
   history.forEach(a => { latest.set(a.exerciseId, a); counts.set(a.exerciseId, (counts.get(a.exerciseId) || 0) + 1); });
   const lessons = path.units.flatMap(u => u.lessons);
-  const unlocked = new Set(lessons.filter((lesson, i) => path.unlockAll || !i || progress.completedLessonIds.includes(lesson.id) || progress.completedLessonIds.includes(lessons[i - 1].id)).map(l => l.id));
+  const unlocked = new Set(lessons.filter((lesson, i) => path.cardProduction || path.unlockAll || !i || progress.completedLessonIds.includes(lesson.id) || progress.completedLessonIds.includes(lessons[i - 1].id)).map(l => l.id));
   let source = bank(path).filter(({ unit, lesson, exercise }) => unlocked.has(lesson.id) && (["all", "errors", "weak", "today"].includes(scope) || scope === unit.id || scope === lesson.id || scope === conceptKey(lesson, exercise)));
   const last = (id: string) => latest.get(id);
   const legacyErrors = new Set(Object.values(progress.lessonResults).flatMap(r => r.wrongExerciseIds));

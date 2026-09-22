@@ -231,3 +231,8 @@
   .review-explain-actions { grid-template-columns: minmax(0, 1fr); }
   .review-app-actions { padding-inline: 12px; }
 }
+.detailed-card-production { display: grid; gap: 16px; padding: 22px; margin-bottom: 24px; border: 1px solid var(--border); border-radius: 20px; background: var(--panel); }
+.detailed-card-production p { line-height: 1.6; margin: 8px 0; overflow-wrap: anywhere; }
+.detailed-card-production progress { width: 100%; accent-color: var(--accent); }
+.detailed-card-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.detailed-card-actions button { min-height: 44px; }

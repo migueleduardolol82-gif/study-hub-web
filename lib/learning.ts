@@ -123,6 +123,7 @@ export type LearningUnit = {
 };
 
 export type LearningPath = {
+  cardProduction?: import("./flashcard-production.ts").CardProduction;
   id: string;
   title: string;
   themeId?: string;

@@ -1,6 +1,8 @@
 "use client";
 
 import "./review-session.css";
+import { loadCardSources, produceFlashcards } from "@/lib/flashcard-production-client";
+import { productionProgress } from "@/lib/flashcard-production";
 
 import { BookOpen, BrainCircuit, Check, ChevronRight, Clock3, Gauge, Layers3, Library, LoaderCircle, LockKeyhole, Plus, RotateCcw, ShieldCheck, Sparkles, Target, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -113,6 +115,28 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
     const message = error instanceof Error ? error.message : "Não foi possível concluir esta etapa.";
     setGenerationError({ message, retryable: error instanceof ApiClientError ? error.retryable : true });
     notify(message);
+  }
+
+  async function detailedFlashcards(existing?: LearningPath) {
+    if (requestRef.current) return;
+    const controller = new AbortController(); requestRef.current = controller;
+    setBackground(true); setGenerationError(null); setRetryLesson(null);
+    try {
+      let path = existing;
+      if (!path?.cardProduction) {
+        setGenerationStage("Carregando o texto integral dos materiais…");
+        const selected = existing ? documents.filter(doc => existing.documentIds?.includes(doc.id) && doc.status === "ready") : documents.filter(doc => doc.selected && doc.status === "ready");
+        const extra = existing ? (selected.length ? "" : existing.source?.content || "") : [sourceText, includeMaterial ? materialContext : ""].filter(Boolean).join("\n\n");
+        const sources = await loadCardSources(selected, extra, controller.signal);
+        const now = new Date().toISOString();
+        path = { ...(existing || { id: `path-${crypto.randomUUID()}`, title: prompt.trim() || selected[0]?.name || "Meu deck de estudos", units: [], createdAt: now, updatedAt: now, unlockAll: true, documentIds: selected.map(doc => doc.id) }), cardProduction: { version: 1, sources, status: "paused" } };
+        const created = path;
+        setPaths(current => existing ? current.map(item => item.id === created.id ? created : item) : [created, ...current]);
+        setActivePathId(path.id); setCreatorOpen(false);
+      }
+      await produceFlashcards(path, saved => setPaths(current => current.map(item => item.id === saved.id ? { ...item, units: saved.units, knowledgeBase: saved.knowledgeBase, cardProduction: saved.cardProduction, updatedAt: saved.updatedAt } : item)), setGenerationStage, controller.signal);
+    } catch (error) { if (!controller.signal.aborted) showGenerationError(error); }
+    finally { requestRef.current = null; setBackground(false); setGenerationStage(""); }
   }
 
   async function generatePath() {
@@ -282,10 +306,15 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
       </section>
 
       <section className="review-units">
-        <div className="section-heading"><div><span className="eyebrow">CONTEÚDO DA TRILHA</span><h3>Unidades</h3></div><button className="review-secondary" onClick={() => setPaths(current => current.map(path => path.id === activePath.id ? { ...path, unlockAll: !path.unlockAll } : path))}>{activePath.unlockAll ? "Usar progressão" : "Liberar todas"}</button></div>
+        <div className="detailed-card-production">
+          <div><span className="eyebrow">FLASHCARDS DETALHADOS</span><h3>Do material inteiro ao seu deck</h3><p>Definições, regras, exceções, exemplos e detalhes organizados por categoria e subdeck. A quantidade acompanha o conteúdo: 80, 250 ou mais cartões quando o material justificar.</p></div>
+          {activePath.cardProduction && (() => { const stats = productionProgress(activePath.cardProduction); return <div aria-live="polite"><strong>{stats.covered} cartões gerados</strong><p>{stats.analyzed}/{stats.total} trechos analisados · {stats.covered}/{stats.facts} conceitos identificados com cartão</p><progress aria-label="Trechos analisados" value={stats.analyzed} max={stats.total || 1} /><p>{stats.complete ? "Todos os trechos processados e conceitos identificados convertidos em cartões." : "Os cartões prontos já podem ser estudados. Use Retomar geração para continuar etapas pendentes. Mantenha esta área aberta durante a geração."} A cobertura indica o processamento da fonte e dos conceitos identificados pela IA; não é garantia de ausência de omissões.</p>{activePath.cardProduction.error && <p role="alert">{activePath.cardProduction.error}</p>}</div>; })()}
+          <div className="detailed-card-actions"><button className="review-primary" disabled={busy || background || activePath.cardProduction?.status === "complete"} onClick={() => void detailedFlashcards(activePath)}>{background ? "Gerando…" : activePath.cardProduction ? activePath.cardProduction.status === "complete" ? "Geração concluída" : "Retomar geração" : "Gerar flashcards do material"}</button>{background && <button onClick={() => requestRef.current?.abort()}>Pausar geração</button>}</div>
+        </div>
+        <div className="section-heading"><div><span className="eyebrow">CONTEÚDO DA TRILHA</span><h3>{activePath.cardProduction ? "Decks e subdecks" : "Unidades"}</h3></div><button className="review-secondary" onClick={() => setPaths(current => current.map(path => path.id === activePath.id ? { ...path, unlockAll: !path.unlockAll } : path))}>{activePath.unlockAll ? "Usar progressão" : "Liberar todas"}</button></div>
         <div className="unit-list">{activePath.units.map((unit, unitIndex) => {
           const lessonsBefore = activePath.units.slice(0, unitIndex).flatMap(item => item.lessons);
-          const unlocked = Boolean(activePath.unlockAll) || unitIndex === 0 || lessonsBefore.every(item => completed.has(item.id));
+          const unlocked = Boolean(activePath.cardProduction) || Boolean(activePath.unlockAll) || unitIndex === 0 || lessonsBefore.every(item => completed.has(item.id));
           const unitReady = unit.lessons.filter(item => item.exercises.length).length;
           return <details key={unit.id} open={unitIndex === 0} className={unlocked ? "unit-row" : "unit-row locked"}>
             <summary><span className="unit-number">{unlocked ? String(unitIndex + 1).padStart(2, "0") : <LockKeyhole />}</span><span><b>{unit.title}</b><small>{unitReady}/{unit.lessons.length} lições prontas · {unitMastery(unit.id)}% domínio</small></span><progress value={unitMastery(unit.id)} max={100} /><ChevronRight /></summary>
@@ -300,7 +329,9 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
       <header><div><span className="eyebrow lime">NOVA TRILHA</span><h2>Transforme material em aprendizado ativo</h2></div><button aria-label="Fechar criação" onClick={() => setCreatorOpen(false)}><X /></button></header>
       <DocumentUploadPanel documents={documents} setDocuments={setDocuments} title="Adicionar materiais" notify={notify} />
       <div className="learning-generator-grid"><label><span>Tema existente</span><select value={themeId} onChange={event => { setThemeId(event.target.value); const selected = themes.find(item => item.id === event.target.value); if (selected) setDifficulty(selected.difficulty); }}><option value="">Nenhum</option>{themes.filter(theme => !theme.archived).map(theme => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label><label><span>Organização existente</span><select value={mapId} onChange={event => setMapId(event.target.value)}><option value="">Nenhuma</option>{maps.filter(map => map.status !== "archived").map(map => <option key={map.id} value={map.id}>{map.name}</option>)}</select></label><label><span>Nível</span><select value={difficulty} onChange={event => setDifficulty(event.target.value as ThemeDifficulty)}><option value="iniciante">Iniciante</option><option value="intermediario">Intermediário</option><option value="avancado">Avançado</option></select></label><label><span>Profundidade</span><select value={depth} onChange={event => setDepth(event.target.value)}><option value="rapido">Rápida</option><option value="equilibrado">Equilibrada</option><option value="aprofundado">Aprofundada</option></select></label><label><span>Unidades aproximadas</span><select value={requestedUnits} onChange={event => setRequestedUnits(Number(event.target.value))}><option value={0}>Automático</option>{Array.from({ length: 19 }, (_, index) => index + 2).map(count => <option key={count} value={count}>{count}</option>)}</select></label><label className="wide-field"><span>O que deseja aprender?</span><textarea value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Ex.: ANCORD completa, com foco em regras, exceções e casos práticos." /></label><label className="wide-field"><span>Texto adicional</span><textarea value={sourceText} onChange={event => setSourceText(event.target.value)} placeholder="Cole aqui outro conteúdo, se quiser." /></label><label className="wide-field check-field"><input type="checkbox" checked={includeMaterial} disabled={!materialContext.trim()} onChange={event => setIncludeMaterial(event.target.checked)} /> Usar também os materiais da área de Estudos</label></div>
-      <button className="review-primary creator-generate" onClick={() => void generatePath()} disabled={busy || background}>{busy ? <LoaderCircle className="spin" /> : <Sparkles />} {busy ? generationStage || "Analisando…" : "Analisar e criar estrutura"}</button>
+      <button className="review-start creator-generate" onClick={() => void detailedFlashcards()} disabled={busy || background}><Layers3 /> Criar deck de flashcards detalhados</button>
+      <p>Usa o texto integral dos arquivos e do campo Texto adicional. Libera os primeiros cartões enquanto prepara os próximos; salva cada lote para retomar depois.</p>
+      <button className="review-primary creator-generate" onClick={() => void generatePath()} disabled={busy || background}>{busy ? <LoaderCircle className="spin" /> : <Sparkles />} {busy ? generationStage || "Analisando…" : "Analisar e criar estrutura de aulas"}</button>
       {generationError && <div className="review-inline-error"><p>{generationError.message}</p>{generationError.retryable && <button onClick={() => void generatePath()}><RotateCcw /> Tentar novamente</button>}</div>}
       {previewPath && <section className="review-preview"><div className="section-heading"><div><span className="eyebrow">CONFIRME A ESTRUTURA</span><h3>{previewPath.title}</h3></div><button onClick={addPreviewUnit}><Plus /> Unidade</button></div><p>Escolha o que será salvo. Você poderá ampliar o banco depois sem recriar a trilha.</p>{previewPath.units.map((unit, index) => <article key={unit.id}><label><input type="checkbox" checked={previewUnitIds.includes(unit.id)} onChange={event => setPreviewUnitIds(current => event.target.checked ? [...current, unit.id] : current.filter(id => id !== unit.id))} /><span><b>{index + 1}. {unit.title}</b><small>{unit.objective || unit.description}</small></span></label><div><button onClick={() => renamePreviewUnit(unit.id)}>Renomear</button><button onClick={() => editPreviewUnit(unit.id)}>Editar</button><button disabled={busy} onClick={() => void regeneratePreviewUnit(unit.id)}>Regenerar</button><button disabled={unit.lessons.length < 2} onClick={() => splitPreviewUnit(unit.id)}>Dividir</button><button disabled={index === 0} onClick={() => mergePreviewUnit(index)}>Juntar</button><button className="danger" onClick={() => deletePreviewUnit(unit.id)}>Excluir</button></div></article>)}<button className="review-start" onClick={savePreview}><Check /> Salvar e preparar primeira unidade</button></section>}
     </section></div>}
