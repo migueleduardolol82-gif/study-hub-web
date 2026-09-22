@@ -6,6 +6,8 @@ import { emptyPathProgress, type LearningPath, type PathProgress } from "@/lib/l
 import { bank, completeSession, conceptKey, modeLabels, recordAttempt, sessionStats, sessionXp, type ReviewSession as Session } from "@/lib/review-engine";
 import { validateSemanticGrade, type SemanticGrade } from "@/lib/semantic-grading";
 import { validateTutorAnswer, type TutorAnswer } from "@/lib/learning-tutor";
+import { customizedExercise, toggleFavorite, updateCardEdit, type CardEdit } from "@/lib/review-customization";
+import { ReviewCardEditor } from "@/components/review-card-editor";
 
 type Props = { path: LearningPath; progress: PathProgress; session: Session; setProgress: React.Dispatch<React.SetStateAction<Record<string, PathProgress>>>; onClose: () => void };
 type TutorStyle = "child" | "detailed" | "question";
@@ -36,6 +38,7 @@ function TutorPanel({ open, style, question, answer, busy, error, onQuestionChan
 const eventTime = () => Date.now();
 export function ReviewSession({ path, progress, session, setProgress, onClose }: Props) {
   const [grading, setGrading] = useState(false);
+  const [editingCard, setEditingCard] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [viewport, setViewport] = useState<{ top: number; height: number } | null>(null);
@@ -54,7 +57,7 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
   const scroll = useRef<HTMLDivElement>(null);
   const current = session.items[session.index];
   const row = bank(path).find(r => r.exercise.id === current?.exerciseId && r.lesson.id === current.lessonId);
-  const exercise = row?.exercise;
+  const exercise = row ? customizedExercise(row.exercise, progress) : undefined;
   const attempt = session.answers.find(a => a.exerciseId === current?.exerciseId);
   const stats = sessionStats(session);
   const seconds = session.deadline ? Math.max(0, Math.ceil((session.deadline - now) / 1000)) : 0;
@@ -63,6 +66,13 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
   const mastery = row ? progress.conceptMastery?.[conceptKey(row.lesson, row.exercise)]?.mastery || 0 : 0;
   const update = (change: Partial<Session>) => setProgress(all => { const p = all[path.id] || emptyPathProgress; if (p.reviewSession?.id !== session.id) return all; return { ...all, [path.id]: { ...p, reviewSession: { ...p.reviewSession, ...change } } }; });
   const persistTransient = () => update({ draft, revealed, taught });
+  function saveCard(edit: CardEdit | null) {
+    if (!exercise || grading || attempt) return;
+    const edited = updateCardEdit(progress, exercise.id, edit);
+    setProgress(all => ({ ...all, [path.id]: { ...all[path.id], cardEdits: edited.cardEdits } }));
+    setEditingCard(false); setDraft(""); setRevealed(false); setTutorAnswer(null); setTutorOpen(false);
+    update({ draft: "", revealed: false });
+  }
 
   useEffect(() => {
     mounted.current = true;
@@ -110,6 +120,7 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
   function finish(finalSession = session) { setProgress(all => ({ ...all, [path.id]: completeSession(all[path.id], finalSession, path) })); }
   function next(skip = false) {
     if (grading) return;
+    setEditingCard(false);
     if (expired || session.index + 1 >= session.items.length) { finish(skip && current ? { ...session, skipped: [...session.skipped, current.exerciseId] } : session); return; }
     update({ index: session.index + 1, draft: "", revealed: false, taught: false, skipped: skip && current ? [...session.skipped, current.exerciseId] : session.skipped });
     setDraft(""); setRevealed(false); setTaught(false); setError(""); setTutorOpen(false); setTutorQuestion(""); setTutorAnswer(null); setTutorError(""); setTutorStyle("question"); enteredAt.current = Date.now(); scroll.current?.scrollTo({ top: 0, behavior: "instant" });
@@ -155,6 +166,8 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
       : !exercise || !row ? <div><h2>Esta questão não está mais disponível.</h2><p>O conteúdo pode ter sido editado. Seu histórico permanece salvo.</p><button onClick={() => next(true)}>Pular questão indisponível</button></div>
       : <article className="review-question" key={exercise.id}>
         <div className="review-question-meta"><small>{row.unit.title} · {exercise.concept || row.lesson.title}</small><span>Domínio {mastery}%</span></div>
+        <div className="review-card-tools"><button aria-pressed={Boolean(progress.favoriteExerciseIds?.includes(exercise.id))} onClick={() => setProgress(all => ({ ...all, [path.id]: toggleFavorite(all[path.id] || emptyPathProgress, exercise.id) }))}>{progress.favoriteExerciseIds?.includes(exercise.id) ? "★ Favoritado" : "☆ Favoritar"}</button>{exercise.type === "flashcard" && ["flashcards", "memorizar"].includes(session.mode) && <button disabled={grading || Boolean(attempt)} onClick={() => setEditingCard(value => !value)}>{editingCard ? "Fechar edição" : "Editar cartão"}</button>}</div>
+        {editingCard && <ReviewCardEditor key={exercise.id} exercise={exercise} onSave={saveCard} onCancel={() => setEditingCard(false)} onRestore={() => saveCard(null)} />}
         {session.mode === "estudar" && !taught ? <div className="review-teaching">
           <span className="review-lesson-step">APRENDA O CONCEITO</span>
           <section className="review-teaching-card">

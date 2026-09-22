@@ -295,7 +295,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
         <div className="review-mode-grid">{(reviewModes.filter(id => id !== "desafio") as Exclude<ReviewMode, "desafio">[]).map(id => <button key={id} className={learningMode === id ? "active" : ""} aria-pressed={learningMode === id} onClick={() => setLearningMode(id)}><span>{modeInfo[id].icon}</span><b>{modeLabels[id]}</b><small>{modeInfo[id].text}</small></button>)}</div>
         <div className="review-session-config">
           <label><span>O que deseja estudar?</span><select value={scope} onChange={event => setScope(event.target.value)}>
-            <option value="all">Toda a trilha disponível</option><option value="today">Revisão de hoje</option><option value="errors">Somente erros</option><option value="weak">Pontos fracos</option>
+            <option value="all">Toda a trilha disponível</option><option value="today">Revisão de hoje</option><option value="errors">Somente erros</option><option value="weak">Pontos fracos</option><option value="favorites">Favoritos</option>
             {activePath.units.map(unit => <option key={unit.id} value={unit.id}>Unidade · {unit.title}</option>)}
             {Array.from(new Map(bank(activePath).map(row => [conceptKey(row.lesson, row.exercise), row.exercise.concept || row.lesson.title])).entries()).map(([key, label]) => <option key={key} value={key}>Conceito · {label}</option>)}
           </select></label>

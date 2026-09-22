@@ -140,6 +140,8 @@ export type LearningPath = {
 export type ExerciseAttempt = { selected: string; correct: string; wasCorrect: boolean };
 export type LessonResult = { correct: number; total: number; wrongExerciseIds: string[]; completedAt: string; answers?: Record<string, ExerciseAttempt> };
 export type PathProgress = {
+  favoriteExerciseIds?: string[];
+  cardEdits?: Record<string, import("./review-customization.ts").CardEdit>;
   xp: number;
   streak: number;
   lastStudyDate: string;
