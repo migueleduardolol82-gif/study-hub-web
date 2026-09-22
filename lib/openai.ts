@@ -7,6 +7,9 @@ export type OpenAIErrorCode =
   | "GENERATION_IN_PROGRESS"
   | "OPENAI_KEY_MISSING"
   | "OPENAI_AUTH_FAILED"
+  | "OPENAI_ACCESS_DENIED"
+  | "OPENAI_MODEL_UNAVAILABLE"
+  | "OPENAI_INVALID_REQUEST"
   | "OPENAI_RATE_LIMIT"
   | "OPENAI_QUOTA_EXCEEDED"
   | "OPENAI_TIMEOUT"
@@ -145,8 +148,17 @@ async function createTextResponseAttempt({
 
   if (!response.ok) {
     const technical = (getNestedMessage(payload) || rawBody.slice(0, 500) || `HTTP ${response.status}`).replace(/sk-[a-zA-Z0-9_-]+/g, "[redacted]");
-    if (response.status === 401 || response.status === 403) {
-      throw new OpenAIRequestError("OPENAI_AUTH_FAILED", "A configuração da IA precisa ser revisada.", response.status, false, technical);
+    if (response.status === 401) {
+      throw new OpenAIRequestError("OPENAI_AUTH_FAILED", "A credencial da IA foi recusada. Revise a chave no servidor.", 401, false, technical);
+    }
+    if (response.status === 403) {
+      throw new OpenAIRequestError("OPENAI_ACCESS_DENIED", "O projeto da IA não tem permissão para esta solicitação.", 403, false, technical);
+    }
+    if (response.status === 404) {
+      throw new OpenAIRequestError("OPENAI_MODEL_UNAVAILABLE", "O modelo configurado não está disponível para este projeto.", 404, false, technical);
+    }
+    if (response.status === 400) {
+      throw new OpenAIRequestError("OPENAI_INVALID_REQUEST", "A IA recusou o formato ou tamanho da solicitação. Revise a configuração da geração.", 400, false, technical);
     }
     if (response.status === 429) {
       const providerError = isRecord(payload) && isRecord(payload.error) ? payload.error : {};
@@ -177,17 +189,28 @@ async function createTextResponseAttempt({
   return output;
 }
 
-// Uma única recuperação, somente para truncamento explícito. As duas chamadas
-// compartilham o prazo original; respostas parciais nunca são aceitas.
+// At most one recovery within the original deadline. Never retry permanent
+// configuration failures or malformed output; partial output is never accepted.
 export async function createTextResponse(options: Parameters<typeof createTextResponseAttempt>[0]) {
   const deadline = Date.now() + (options.timeoutMs ?? 55_000);
   try {
     return await createTextResponseAttempt(options);
   } catch (error) {
     const remaining = deadline - Date.now();
-    if (!(error instanceof OpenAIRequestError) || error.code !== "AI_OUTPUT_LIMIT" ||
-        !options.maxOutputTokens || options.maxOutputTokens >= 24000 ||
-        remaining < 1000 || options.signal?.aborted) throw error;
+    if (!(error instanceof OpenAIRequestError) || remaining < 1000 || options.signal?.aborted) throw error;
+    const transient = error.code === "OPENAI_RATE_LIMIT" || (error.code === "OPENAI_UNAVAILABLE" && error.retryable);
+    if (transient) {
+      const delay = 500 + Math.floor(Math.random() * 250);
+      if (remaining < delay + 1000) throw error;
+      await new Promise<void>((resolve) => {
+        const done = () => { clearTimeout(timer); options.signal?.removeEventListener("abort", done); resolve(); };
+        const timer = setTimeout(done, delay);
+        options.signal?.addEventListener("abort", done, { once: true });
+      });
+      if (options.signal?.aborted) throw error;
+      return createTextResponseAttempt({ ...options, timeoutMs: Math.max(1, deadline - Date.now()) });
+    }
+    if (error.code !== "AI_OUTPUT_LIMIT" || !options.maxOutputTokens || options.maxOutputTokens >= 24000) throw error;
     const expanded = Math.min(24000, options.maxOutputTokens * 2);
     console.warn("ai_output_limit_retry", { schema: options.schemaName, previousLimit: options.maxOutputTokens, nextLimit: expanded, remainingMs: remaining });
     return createTextResponseAttempt({ ...options, maxOutputTokens: expanded, timeoutMs: remaining });

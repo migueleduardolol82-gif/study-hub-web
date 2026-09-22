@@ -1,6 +1,7 @@
 "use client";
 
 import "./review-session.css";
+import { StudyAIStatus } from "./study-ai-status";
 import { loadCardSources, produceFlashcards } from "@/lib/flashcard-production-client";
 import { productionProgress } from "@/lib/flashcard-production";
 
@@ -264,6 +265,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
       <div className="review-top-actions"><button className="review-secondary" onClick={() => setLibraryOpen(value => !value)}><Library /> Trilhas</button><button className="review-primary" onClick={() => setCreatorOpen(true)}><Plus /> Nova trilha</button></div>
     </header>
 
+    <StudyAIStatus />
     {libraryOpen && <section className="review-library" aria-label="Suas trilhas">
       <div><h3>Suas trilhas</h3><button aria-label="Fechar biblioteca" onClick={() => setLibraryOpen(false)}><X /></button></div>
       {paths.length ? paths.map(path => {

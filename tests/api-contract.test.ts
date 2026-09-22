@@ -111,3 +111,35 @@ test("limita recuperação a duas chamadas e não repete outros motivos de falha
     if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key;
   }
 });
+
+test("configuration errors are precise and never retried", async () => {
+  const original = globalThis.fetch;
+  const key = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key-not-real";
+  try {
+    for (const [status, code] of [[400, "OPENAI_INVALID_REQUEST"], [401, "OPENAI_AUTH_FAILED"], [403, "OPENAI_ACCESS_DENIED"], [404, "OPENAI_MODEL_UNAVAILABLE"]] as const) {
+      let calls = 0;
+      globalThis.fetch = async () => { calls++; return Response.json({ error: { message: "Rejected" } }, { status }); };
+      await assert.rejects(() => createStructuredResponse({ instructions: "test", input: "test", validate: x => x }), e => e instanceof OpenAIRequestError && e.code === code && !e.retryable);
+      assert.equal(calls, 1);
+    }
+  } finally {
+    globalThis.fetch = original;
+    if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key;
+  }
+});
+
+test("temporary provider failure recovers once", async () => {
+  const original = globalThis.fetch;
+  const key = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key-not-real";
+  let calls = 0;
+  globalThis.fetch = async () => ++calls === 1 ? Response.json({error:{message:"Busy"}}, {status:503}) : Response.json({output_text:'{"ok":true}'});
+  try {
+    assert.deepEqual(await createStructuredResponse({instructions:"test", input:"test", validate:x=>x}), {ok:true});
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = original;
+    if (key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = key;
+  }
+});

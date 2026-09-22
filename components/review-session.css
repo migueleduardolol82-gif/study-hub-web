@@ -237,3 +237,9 @@
 .detailed-card-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .detailed-card-actions button { min-height: 44px; }
 .review-card-tools, .review-card-editor > div { display: flex; flex-wrap: wrap; gap: 10px; margin-block: 12px; } .review-card-editor { display: grid; gap: 14px; padding: 16px; border: 1px solid #555; border-radius: 16px; } .review-card-editor label { display: grid; gap: 6px; } .review-card-editor textarea { width: 100%; min-height: 90px; padding: 12px; border: 1px solid #555; border-radius: 8px; background: #17191d; color: #fff; resize: vertical; }
+
+.study-ai-status { padding: 12px 16px; border: 1px solid currentColor; border-radius: 14px; font-size: 13px; }
+.study-ai-status summary { cursor: pointer; font-weight: 600; }
+.study-ai-status p { margin: 10px 0; line-height: 1.5; overflow-wrap: anywhere; }
+.study-ai-status p:empty { display: none; }
+.study-ai-status button:disabled { opacity: .65; cursor: wait; }
