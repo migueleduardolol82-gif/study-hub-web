@@ -49,7 +49,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   const [scope, setScope] = useState("all");
   const [background, setBackground] = useState(false);
   const [speedDuration, setSpeedDuration] = useState(60);
-  const [creatorOpen, setCreatorOpen] = useState(paths.length === 0 || Boolean(requestedDocumentId));
+  const [creatorOpen, setCreatorOpen] = useState(Boolean(requestedDocumentId));
   const [studySection, setStudySection] = useState<"home" | "decks">("home");
   const [deckFilter, setDeckFilter] = useState<"all" | "active" | "complete">("all");
   const [deckQuery, setDeckQuery] = useState("");
