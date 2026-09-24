@@ -5,7 +5,7 @@ import {defaultPlatformPreferences,moveWidget,normalizePlatformPreferences} from
 test('preferências antigas recebem tema e widgets sem alterar o objeto original',()=>{
   const legacy={palette:'apagada',customAccent:'red',widgets:['today','today','desconhecido']};
   const before=JSON.stringify(legacy),value=normalizePlatformPreferences(legacy);
-  assert.deepEqual(value,{palette:'neon',customAccent:'',widgets:['today'],density:'comfortable',radius:'rounded',effects:'ambient',mode:'dark'});
+  assert.deepEqual(value,{palette:'neon',customAccent:'',widgets:['today'],density:'comfortable',radius:'rounded',effects:'minimal',mode:'dark'});
   assert.equal(JSON.stringify(legacy),before);
   assert.notEqual(normalizePlatformPreferences(null).widgets,defaultPlatformPreferences.widgets);
 });

@@ -50,6 +50,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   const [speedDuration, setSpeedDuration] = useState(60);
   const [creatorOpen, setCreatorOpen] = useState(paths.length === 0 || Boolean(requestedDocumentId));
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [studySection, setStudySection] = useState<"study" | "decks">("study");
   const [todayClock] = useState(() => Date.now());
   const [retryLesson, setRetryLesson] = useState<{ path: LearningPath; lesson: LearningLesson } | null>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -120,6 +121,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
 
   async function detailedFlashcards(existing?: LearningPath) {
     if (requestRef.current) return;
+    setStudySection("decks");
     const controller = new AbortController(); requestRef.current = controller;
     setBackground(true); setGenerationError(null); setRetryLesson(null);
     try {
@@ -239,7 +241,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   function deletePreviewUnit(unitId: string) { updatePreview((path) => ({ ...path, units: path.units.filter((unit) => unit.id !== unitId) })); setPreviewUnitIds((current) => current.filter((id) => id !== unitId)); }
   function splitPreviewUnit(unitId: string) { updatePreview((path) => { const index = path.units.findIndex((unit) => unit.id === unitId); const unit = path.units[index]; if (!unit || unit.lessons.length < 2) return path; const middle = Math.ceil(unit.lessons.length / 2); const id = `unit-${crypto.randomUUID()}`; setPreviewUnitIds((current) => [...current, id]); const units = [...path.units]; units.splice(index, 1, { ...unit, lessons: unit.lessons.slice(0, middle) }, { ...unit, id, title: `${unit.title} — continuação`, lessons: unit.lessons.slice(middle) }); return { ...path, units }; }); }
   function mergePreviewUnit(index: number) { updatePreview((path) => { if (index < 1) return path; const previous = path.units[index - 1]; const current = path.units[index]; const merged = { ...previous, title: `${previous.title} + ${current.title}`, description: `${previous.description} ${current.description}`, contents: [...(previous.contents || []), ...(current.contents || [])], concepts: [...(previous.concepts || []), ...(current.concepts || [])], references: [...new Set([...(previous.references || []), ...(current.references || [])])], lessons: [...previous.lessons, ...current.lessons] }; return { ...path, units: [...path.units.slice(0, index - 1), merged, ...path.units.slice(index + 1)] }; }); }
-  function savePreview() { if (!previewPath) return; const selected = previewPath.units.filter((unit) => previewUnitIds.includes(unit.id)); if (!selected.length) { notify("Selecione pelo menos uma unidade."); return; } const saved = syncKnowledgeBase({ ...previewPath, units: selected, updatedAt: new Date().toISOString() }); setPaths((current) => [saved, ...current]); setProgressByPath((current) => ({ ...current, [saved.id]: { ...emptyPathProgress } })); setActivePathId(saved.id); setPreviewPath(null); setPreviewUnitIds([]); setCreatorOpen(false); notify(`Trilha “${saved.title}” salva. Preparando a primeira lição; você poderá começar assim que ela ficar pronta.`); void prepareRemaining(saved); }
+  function savePreview() { if (!previewPath) return; const selected = previewPath.units.filter((unit) => previewUnitIds.includes(unit.id)); if (!selected.length) { notify("Selecione pelo menos uma unidade."); return; } const saved = syncKnowledgeBase({ ...previewPath, units: selected, updatedAt: new Date().toISOString() }); setPaths((current) => [saved, ...current]); setProgressByPath((current) => ({ ...current, [saved.id]: { ...emptyPathProgress } })); setActivePathId(saved.id); setStudySection("decks"); setPreviewPath(null); setPreviewUnitIds([]); setCreatorOpen(false); notify(`Trilha “${saved.title}” salva. Preparando a primeira lição; você poderá começar assim que ela ficar pronta.`); void prepareRemaining(saved); }
 
   if (sessionOpen && activePath && progress.reviewSession) return <ReviewSession path={activePath} progress={progress} session={progress.reviewSession} setProgress={setProgressByPath} onClose={() => setSessionOpen(false)} />;
 
@@ -261,11 +263,12 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
 
   return <div className="review-home">
     <header className="review-home-top">
-      <div><span className="eyebrow lime">REVISÃO ATIVA</span><h2>Não estudar mais. Aprender melhor.</h2><p>O conteúdo fica na trilha. Você decide como quer aprender hoje.</p></div>
+      <div><span className="eyebrow lime">ESTUDOS</span><h2>Seu estudo</h2></div>
       <div className="review-top-actions"><button className="review-secondary" onClick={() => setLibraryOpen(value => !value)}><Library /> Trilhas</button><button className="review-primary" onClick={() => setCreatorOpen(true)}><Plus /> Nova trilha</button></div>
     </header>
 
     <StudyAIStatus />
+    <nav className="review-subtabs" aria-label="Seções de estudos"><button type="button" aria-current={studySection === "study" ? "page" : undefined} onClick={() => setStudySection("study")}>Estudar</button><button type="button" aria-current={studySection === "decks" ? "page" : undefined} onClick={() => setStudySection("decks")}>Decks e conteúdo</button></nav>
     {libraryOpen && <section className="review-library" aria-label="Suas trilhas">
       <div><h3>Suas trilhas</h3><button aria-label="Fechar biblioteca" onClick={() => setLibraryOpen(false)}><X /></button></div>
       {paths.length ? paths.map(path => {
@@ -292,7 +295,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
         {progress.reviewSession && !progress.reviewSession.finished && <button className="continue-session" onClick={resumeSession}><span><small>CONTINUAR SESSÃO</small><b>{modeLabels[progress.reviewSession.mode]} · questão {progress.reviewSession.index + 1}</b></span><ChevronRight /></button>}
       </section>
 
-      <section className="review-mode-picker">
+      {studySection === "study" && <section className="review-mode-picker">
         <div className="section-heading"><div><span className="eyebrow">ESCOLHA SUA EXPERIÊNCIA</span><h3>Como você quer estudar hoje?</h3></div>{background && <span className="background-status"><LoaderCircle className="spin" /> {generationStage || "Preparando conteúdo"}</span>}</div>
         <div className="review-mode-grid">{(reviewModes.filter(id => id !== "desafio") as Exclude<ReviewMode, "desafio">[]).map(id => <button key={id} className={learningMode === id ? "active" : ""} aria-pressed={learningMode === id} onClick={() => setLearningMode(id)}><span>{modeInfo[id].icon}</span><b>{modeLabels[id]}</b><small>{modeInfo[id].text}</small></button>)}</div>
         <div className="review-session-config">
@@ -305,12 +308,12 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
           <button className="review-start" onClick={() => openScope(activePath, scope)}><Zap /> Começar {modeLabels[learningMode]}</button>
         </div>
         {generationError && <div className="review-inline-error"><p>{generationError.message}</p>{generationError.retryable && <button onClick={() => retryLesson ? startLesson(retryLesson.lesson, true, retryLesson.path) : void prepareRemaining(activePath)}><RotateCcw /> Tentar novamente</button>}</div>}
-      </section>
+      </section>}
 
-      <section className="review-units">
+      {studySection === "decks" && <section className="review-units">
         <div className="detailed-card-production">
-          <div><span className="eyebrow">FLASHCARDS DETALHADOS</span><h3>Do material inteiro ao seu deck</h3><p>Definições, regras, exceções, exemplos e detalhes organizados por categoria e subdeck. A quantidade acompanha o conteúdo: 80, 250 ou mais cartões quando o material justificar.</p></div>
-          {activePath.cardProduction && (() => { const stats = productionProgress(activePath.cardProduction); return <div aria-live="polite"><strong>{stats.covered} cartões gerados</strong><p>{stats.analyzed}/{stats.total} trechos analisados · {stats.audited}/{stats.total} verificados sem novas lacunas · {stats.covered}/{stats.facts} conceitos identificados com cartão</p><progress aria-label="Trechos analisados" value={stats.analyzed} max={stats.total || 1} /><p>{stats.complete ? "Todos os trechos processados e conceitos identificados convertidos em cartões." : "Os cartões prontos já podem ser estudados. Use Retomar geração para continuar etapas pendentes. Mantenha esta área aberta durante a geração."} A cobertura indica o processamento da fonte e dos conceitos identificados pela IA; não é garantia de ausência de omissões.</p>{activePath.cardProduction.error && <p role="alert">{activePath.cardProduction.error}</p>}</div>; })()}
+          <div><span className="eyebrow">FLASHCARDS</span><h3>Gerar cartões</h3><p>Organize o material por assunto e continue a geração quando quiser.</p></div>
+          {activePath.cardProduction && (() => { const stats = productionProgress(activePath.cardProduction); return <div aria-live="polite"><strong>{stats.covered} cartões · {stats.covered}/{stats.facts} conceitos</strong><progress aria-label="Trechos analisados" value={stats.analyzed} max={stats.total || 1} /><details><summary>Detalhes da cobertura</summary><p>{stats.analyzed}/{stats.total} trechos analisados · {stats.audited}/{stats.total} verificados</p><p>{stats.complete ? "Geração concluída." : "Mantenha esta área aberta durante a geração. Os cartões prontos já podem ser estudados."} A auditoria da IA pode não identificar todas as omissões.</p></details>{activePath.cardProduction.error && <p role="alert">{activePath.cardProduction.error}</p>}</div>; })()}
           <div className="detailed-card-actions"><button className="review-primary" disabled={busy || background || (activePath.cardProduction ? productionProgress(activePath.cardProduction).complete : false)} onClick={() => void detailedFlashcards(activePath)}>{background ? "Gerando…" : activePath.cardProduction ? productionProgress(activePath.cardProduction).complete ? "Geração concluída" : "Retomar geração" : "Gerar flashcards do material"}</button>{background && <button onClick={() => requestRef.current?.abort()}>Pausar geração</button>}</div>
         </div>
         <div className="section-heading"><div><span className="eyebrow">CONTEÚDO DA TRILHA</span><h3>{activePath.cardProduction ? "Decks e subdecks" : "Unidades"}</h3></div><button className="review-secondary" onClick={() => setPaths(current => current.map(path => path.id === activePath.id ? { ...path, unlockAll: !path.unlockAll } : path))}>{activePath.unlockAll ? "Usar progressão" : "Liberar todas"}</button></div>
@@ -324,7 +327,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
           </details>;
         })}</div>
         <div className="processing-summary"><span>{readyLessons} lições prontas</span><span>{processingLessons} processando</span><span>{Math.max(0, flatLessons.length - readyLessons - processingLessons)} aguardando</span><button disabled={background || busy} onClick={() => void prepareRemaining(activePath)}>{background ? "Processando…" : "Continuar processamento"}</button><button disabled={background || busy} onClick={() => void expandBank()}>Gerar novas variações</button></div>
-      </section>
+      </section>}
     </> : <section className="review-empty"><BrainCircuit /><h2>Crie sua primeira trilha</h2><p>Envie seus materiais. A primeira unidade será liberada assim que estiver pronta.</p><button className="review-primary" onClick={() => setCreatorOpen(true)}><Plus /> Criar trilha</button></section>}
 
     {creatorOpen && <div className="review-creator-backdrop" role="presentation"><section className="review-creator" role="dialog" aria-modal="true" aria-label="Criar nova trilha">

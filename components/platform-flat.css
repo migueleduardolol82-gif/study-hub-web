@@ -1,0 +1,12 @@
+/* Solid surfaces keep the interface calm while the chosen accent remains editable. */
+.app-shell .workspace::before, .app-shell .workspace::after { display:none; }
+.app-shell .home-continue, .app-shell .home-continue > button,
+.app-shell .home-shortcuts > div:last-child button, .app-shell .study-area-grid > button,
+.app-shell .study-hub-primary > button, .app-shell .mentor-workspace,
+.app-shell .profile-hero, .app-shell .course-card { background:var(--surface-1); }
+.app-shell .main-nav button.active { background:var(--accent); box-shadow:none; }
+.app-shell .panel, .app-shell .home-continue, .app-shell .study-area-grid > button,
+.app-shell .home-shortcuts > div:last-child button { box-shadow:none; backdrop-filter:none; }
+.mode-light .home-continue, .mode-light .home-continue > button,
+.mode-light .study-hub-primary > button, .mode-light .timer-panel,
+.mode-light .panel { background:var(--surface-1); color:var(--text-primary); }

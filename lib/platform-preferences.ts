@@ -8,7 +8,7 @@ export const widgetCatalog = [
 export type HomeWidgetId = typeof widgetCatalog[number]['id'];
 
 export const platformPalettes = [
-  {id:'neon',label:'Nexo',accent:'#caff55',accent2:'#765ee8',base:'#08090b',surface:'#101216'},
+  {id:'neon',label:'Verde original',accent:'#caff55',accent2:'#765ee8',base:'#08090b',surface:'#101216'},
   {id:'ember',label:'Energia',accent:'#ff4b28',accent2:'#ffb14a',base:'#090807',surface:'#16110f'},
   {id:'violet',label:'Órbita',accent:'#d7ff4a',accent2:'#7351d6',base:'#08070c',surface:'#13101b'},
   {id:'ice',label:'Precisão',accent:'#68e1ff',accent2:'#5978ff',base:'#060a0c',surface:'#0d1418'},
@@ -20,7 +20,7 @@ export type PlatformRadius = 'rounded'|'soft'|'sharp';
 export type PlatformEffects = 'ambient'|'minimal';
 export type PlatformMode = 'dark'|'light';
 export type PlatformPreferences = {palette:PlatformPaletteId; customAccent:string; widgets:HomeWidgetId[]; density:PlatformDensity; radius:PlatformRadius; effects:PlatformEffects; mode:PlatformMode};
-export const defaultPlatformPreferences: PlatformPreferences = {palette:'neon',customAccent:'',widgets:['continue','today','evolution','shortcuts'],density:'comfortable',radius:'rounded',effects:'ambient',mode:'dark'};
+export const defaultPlatformPreferences: PlatformPreferences = {palette:'neon',customAccent:'',widgets:['continue','today','evolution','shortcuts'],density:'comfortable',radius:'rounded',effects:'minimal',mode:'dark'};
 
 const hex=/^#[0-9a-f]{6}$/i;
 export function normalizePlatformPreferences(value: unknown): PlatformPreferences {
@@ -31,7 +31,7 @@ export function normalizePlatformPreferences(value: unknown): PlatformPreference
   const widgets=Array.isArray(raw.widgets)?raw.widgets.filter((id,index,all):id is HomeWidgetId=>typeof id==='string'&&valid.has(id as HomeWidgetId)&&all.indexOf(id)===index):defaultPlatformPreferences.widgets;
   const density:PlatformDensity=raw.density==='compact'?'compact':'comfortable';
   const radius:PlatformRadius=raw.radius==='sharp'||raw.radius==='soft'?raw.radius:'rounded';
-  const effects:PlatformEffects=raw.effects==='minimal'?'minimal':'ambient';
+  const effects:PlatformEffects=raw.effects==='ambient'?'ambient':'minimal';
   const mode:PlatformMode=raw.mode==='light'?'light':'dark';
   return {palette,customAccent:typeof raw.customAccent==='string'&&hex.test(raw.customAccent)?raw.customAccent:'',widgets:[...widgets],density,radius,effects,mode};
 }
