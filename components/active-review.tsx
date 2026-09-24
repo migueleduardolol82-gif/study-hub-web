@@ -251,7 +251,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
 
   const modeInfo: Record<Exclude<ReviewMode, "desafio">, { icon: React.ReactNode; text: string }> = {
     estudar: { icon: <BookOpen />, text: "Aprenda em blocos curtos, com explicação, exemplo e prática." },
-    memorizar: { icon: <BrainCircuit />, text: "Recuperação ativa que fica mais difícil conforme você aprende." },
+    memorizar: { icon: <BrainCircuit />, text: "Cartões com alternativas de múltipla escolha e correção imediata." },
     flashcards: { icon: <Layers3 />, text: "Cartões com repetição espaçada e autoavaliação." },
     revisao: { icon: <RotateCcw />, text: "Prioriza erros, atrasos e conceitos perto de serem esquecidos." },
     speed: { icon: <Zap />, text: "Rodada cronometrada com sequência, precisão e pontuação." },

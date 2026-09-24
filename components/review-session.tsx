@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { requestAI } from "@/lib/ai-client";
 import { emptyPathProgress, type LearningPath, type PathProgress } from "@/lib/learning";
-import { bank, completeSession, conceptKey, modeLabels, recordAttempt, sessionStats, sessionXp, type ReviewSession as Session } from "@/lib/review-engine";
+import { bank, completeSession, conceptKey, memorizeOptions, modeLabels, recordAttempt, sessionStats, sessionXp, type ReviewSession as Session } from "@/lib/review-engine";
 import { validateSemanticGrade, type SemanticGrade } from "@/lib/semantic-grading";
 import { validateTutorAnswer, type TutorAnswer } from "@/lib/learning-tutor";
 import { customizedExercise, toggleFavorite, updateCardEdit, type CardEdit } from "@/lib/review-customization";
@@ -62,7 +62,9 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
   const stats = sessionStats(session);
   const seconds = session.deadline ? Math.max(0, Math.ceil((session.deadline - now) / 1000)) : 0;
   const expired = session.mode === "speed" && Boolean(session.deadline) && seconds <= 0;
-  const flashcard = session.mode === "flashcards" || exercise?.type === "flashcard" && session.mode !== "dominio";
+  const memorizeCard = session.mode === "memorizar" && exercise?.type === "flashcard";
+  const memoryOptions = memorizeCard && exercise ? memorizeOptions(path, exercise) : [];
+  const flashcard = session.mode === "flashcards" || exercise?.type === "flashcard" && !["dominio", "memorizar"].includes(session.mode);
   const mastery = row ? progress.conceptMastery?.[conceptKey(row.lesson, row.exercise)]?.mastery || 0 : 0;
   const update = (change: Partial<Session>) => setProgress(all => { const p = all[path.id] || emptyPathProgress; if (p.reviewSession?.id !== session.id) return all; return { ...all, [path.id]: { ...p, reviewSession: { ...p.reviewSession, ...change } } }; });
   const persistTransient = () => update({ draft, revealed, taught });
@@ -101,13 +103,15 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
   async function check() {
     if (!exercise || !row || attempt || request.current || expired || (session.deadline && eventTime() >= session.deadline) || !draft.trim()) return;
     setError("");
+    const memoryOption = memorizeCard ? memoryOptions.findIndex((_, i) => draft === `${exercise.id}:memorize:${i}`) : -1;
+    if (memorizeCard && memoryOption < 0) return;
     const option = exercise.options.findIndex((_, i) => draft === `${exercise.id}:option:${i}`);
-    const selected = option >= 0 ? exercise.options[option] : draft.trim();
+    const selected = memoryOption >= 0 ? memoryOptions[memoryOption] : option >= 0 ? exercise.options[option] : draft.trim();
     update({ draft, revealed, taught });
-    if (option >= 0 || ["matching", "ordering"].includes(exercise.type)) {
+    if (memoryOption >= 0 || option >= 0 || ["matching", "ordering"].includes(exercise.type)) {
       const canonical = (s: string) => s.split("|").map(p => p.trim()).join("|");
       const correct = canonical(selected) === canonical(exercise.answer);
-      handleGrade({ correct, missingPoints: [], feedback: exercise.explanation, referenceAnswer: exercise.answer }, selected, option >= 0 ? draft : undefined, eventTime());
+      handleGrade({ correct, missingPoints: [], feedback: exercise.explanation, referenceAnswer: exercise.answer }, selected, memoryOption >= 0 || option >= 0 ? draft : undefined, eventTime());
       return;
     }
     const controller = new AbortController(); request.current = controller; setGrading(true);
@@ -188,6 +192,7 @@ export function ReviewSession({ path, progress, session, setProgress, onClose }:
         </div> : <>
           <h2>{exercise.prompt}</h2>
           {flashcard ? <div className="review-flashcard">{!revealed ? <button onClick={() => setRevealed(true)}>Revelar resposta</button> : <><p>{exercise.answer}</p><div><button disabled={Boolean(attempt)} onClick={() => handleGrade({ correct: true, missingPoints: [], feedback: exercise.explanation, referenceAnswer: exercise.answer }, "Autoavaliação: lembrei", undefined, eventTime())}>Acertei</button><button disabled={Boolean(attempt)} onClick={() => handleGrade({ correct: false, missingPoints: [], feedback: exercise.explanation, referenceAnswer: exercise.answer }, "Autoavaliação: não lembrei", undefined, eventTime())}>Errei</button></div></>}</div>
+          : memorizeCard ? <div className="review-options review-memory-options" role="group" aria-label="Alternativas do cartão">{memoryOptions.map((option, index) => { const id = `${exercise.id}:memorize:${index}`; return <button key={id} disabled={grading || Boolean(attempt)} aria-pressed={draft === id} onClick={() => setDraft(id)}>{option}</button>; })}</div>
           : exercise.type === "ordering" ? <div className="review-options"><p>Toque nos passos na ordem correta.</p>{current.optionOrder.map(i => <button key={i} disabled={grading || Boolean(attempt) || draft.split("|").includes(exercise.options[i])} onClick={() => setDraft(currentDraft => [currentDraft, exercise.options[i]].filter(Boolean).join("|"))}>{exercise.options[i]}</button>)}<p>Sua ordem: {draft.replaceAll("|", " → ")}</p><button disabled={grading || Boolean(attempt)} onClick={() => setDraft("")}>Refazer ordem</button></div>
           : exercise.type === "matching" ? <div className="review-options">{exercise.answer.split("|").map(pair => pair.split("=>").map(p => p.trim())).map(([left], index) => <label key={left}>{left}<select disabled={grading || Boolean(attempt)} value={draft.split("|")[index]?.split("=>")[1] || ""} onChange={e => { const values = draft.split("|"); values[index] = `${left}=>${e.target.value}`; setDraft(values.join("|")); }}><option value="">Selecione</option>{exercise.answer.split("|").map(p => p.split("=>")[1]?.trim()).sort().map(right => <option key={right}>{right}</option>)}</select></label>)}</div>
           : exercise.options.length ? <div className="review-options">{current.optionOrder.map(i => { const id = `${exercise.id}:option:${i}`; return <button key={id} disabled={grading || Boolean(attempt) || expired} aria-pressed={draft === id} onClick={() => setDraft(id)}>{exercise.options[i]}</button>; })}</div>

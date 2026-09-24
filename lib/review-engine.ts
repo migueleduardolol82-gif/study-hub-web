@@ -20,6 +20,26 @@ export function conceptKey(lesson: LearningLesson, exercise: LearningExercise) {
   return `${lesson.id}:${(exercise.concept || lesson.title).trim().toLocaleLowerCase("pt-BR")}`;
 }
 export function bank(path: LearningPath) { return path.units.flatMap(unit => unit.lessons.flatMap(lesson => lesson.exercises.map(exercise => ({ unit, lesson, exercise })))); }
+export function memorizeOptions(path: LearningPath, exercise: LearningExercise): string[] {
+  const rows = bank(path);
+  const currentUnit = rows.find(row => row.exercise.id === exercise.id)?.unit.id;
+  const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+  const answer = exercise.answer.trim();
+  const seen = new Set([normalize(answer)]);
+  const candidates = rows.filter(row => row.exercise.id !== exercise.id && row.exercise.type === "flashcard" && row.exercise.answer.trim())
+    .sort((a, b) => Number(b.unit.id === currentUnit) - Number(a.unit.id === currentUnit));
+  const distractors: string[] = [];
+  for (const row of candidates) {
+    const value = row.exercise.answer.trim();
+    const key = normalize(value);
+    if (seen.has(key)) continue;
+    seen.add(key); distractors.push(value);
+    if (distractors.length === 3) break;
+  }
+  if (!distractors.length) distractors.push("Ainda não sei");
+  const stableHash = (value: string) => [...value].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) | 0, 7);
+  return [answer, ...distractors].sort((a, b) => stableHash(`${exercise.id}:${a}`) - stableHash(`${exercise.id}:${b}`));
+}
 export function syncKnowledgeBase(path: LearningPath, now = new Date().toISOString()): LearningPath {
   const previous = new Map((path.knowledgeBase?.concepts || []).map(concept => [`${concept.unitId}:${concept.topic}:${concept.title}`.toLocaleLowerCase("pt-BR"), concept]));
   const concepts = new Map<string, LearningConcept>();
@@ -61,6 +81,7 @@ export function chooseItems(path: LearningPath, progress: PathProgress, mode: Re
   if (scope === "weak") source = source.filter(({ lesson, exercise }) => (progress.conceptMastery?.[conceptKey(lesson, exercise)]?.mastery || 0) < 60);
   if (scope === "today") source = source.filter(({ lesson, exercise }) => { const mastery = progress.conceptMastery?.[conceptKey(lesson, exercise)]; return Boolean(mastery && Date.parse(mastery.dueAt) <= now); });
   let chosen = source.filter(({ lesson, exercise }) => {
+    if (mode === "memorizar") return exercise.type === "flashcard";
     if (mode === "hard") return exercise.difficulty === "avancado" && ["case_study", "calculation", "open_question", "error_identification", "cumulative_review", "multiple_choice"].includes(exercise.type);
     if (mode === "speed") return exercise.options.length > 0 && !["matching", "ordering"].includes(exercise.type);
     if (mode === "revisao") {

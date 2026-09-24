@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { emptyPathProgress, type LearningPath, type LearningExercise } from "../lib/learning.ts";
-import { chooseItems, completeSession, mergeQuestionBank, newReviewSession, recordAttempt, sessionStats, sessionXp, syncKnowledgeBase, type ReviewAttempt } from "../lib/review-engine.ts";
+import { chooseItems, completeSession, memorizeOptions, mergeQuestionBank, newReviewSession, recordAttempt, sessionStats, sessionXp, syncKnowledgeBase, type ReviewAttempt } from "../lib/review-engine.ts";
 import { validateSemanticGrade } from "../lib/semantic-grading.ts";
 import { validateTutorAnswer } from "../lib/learning-tutor.ts";
 import { validateQuestionBatch } from "../lib/learning-generation.ts";
@@ -18,10 +18,28 @@ test("contrato binário rejeita booleano textual, resposta parcial e contradiç�
 });
 test("trocar modo não altera a trilha e mantém identidades do banco", () => {
   const original = JSON.stringify(path);
-  for (const mode of ["estudar", "memorizar", "flashcards", "dominio"] as const) assert.equal(chooseItems(path, emptyPathProgress, mode).length, 2);
+  for (const mode of ["estudar", "flashcards", "dominio"] as const) assert.equal(chooseItems(path, emptyPathProgress, mode).length, 2);
+  assert.equal(chooseItems(path, emptyPathProgress, "memorizar").length, 0);
   assert.equal(JSON.stringify(path), original);
   assert.equal(chooseItems(path, emptyPathProgress, "hard")[0].exerciseId, "e2");
   assert.equal(chooseItems(path, emptyPathProgress, "speed")[0].exerciseId, "e2");
+});
+test("memorizar usa cartões e oferece alternativas distintas sem revelar a resposta", () => {
+  const cards = [
+    { ...exercise, id: "f1", type: "flashcard" as const, answer: "Água" },
+    { ...exercise, id: "f2", type: "flashcard" as const, answer: "Açúcares" },
+    { ...exercise, id: "f3", type: "flashcard" as const, answer: "Luz" },
+    { ...exercise, id: "f4", type: "flashcard" as const, answer: "Oxigênio" },
+  ];
+  const deck = { ...path, units: path.units.map(unit => ({ ...unit, lessons: unit.lessons.map(lesson => ({ ...lesson, exercises: [...cards, exercise] })) })) };
+  assert.equal(chooseItems(deck, emptyPathProgress, "memorizar").length, 4);
+  const options = memorizeOptions(deck, cards[0]);
+  assert.equal(options.length, 4);
+  assert.equal(new Set(options).size, 4);
+  assert.ok(options.includes("Água"));
+  assert.deepEqual(memorizeOptions(deck, cards[0]), options);
+  const single = { ...deck, units: deck.units.map(unit => ({ ...unit, lessons: unit.lessons.map(lesson => ({ ...lesson, exercises: [cards[0]] })) })) };
+  assert.deepEqual(new Set(memorizeOptions(single, cards[0])), new Set(["Água", "Ainda não sei"]));
 });
 test("escopo por unidade e conceito", () => {
   assert.equal(chooseItems(path, emptyPathProgress, "flashcards", "u1").length, 2);
