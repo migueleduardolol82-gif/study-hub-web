@@ -19,7 +19,7 @@ export function AuthShell({ mode, configured }: { mode: "sign-in" | "sign-up"; c
   return (
     <main className="auth-page">
       <section className="auth-story">
-        <span className="brand auth-brand"><span className="brand-mark"><Zap size={18} fill="currentColor" /></span>NEXO</span>
+        <span className="brand auth-brand"><span className="brand-mark"><Zap size={18} fill="currentColor" /></span>MERS</span>
         <span className="eyebrow"><LockKeyhole size={14} /> PAINEL INDIVIDUAL</span>
         <h1>{mode === "sign-in" ? "Continue sua evolução." : "Crie seu espaço de evolução."}</h1>
         <p>Ranking, arquétipos, aulas, mapas, planos, metas e revisões ligados à sua conta e sincronizados entre dispositivos.</p>

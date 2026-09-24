@@ -1,4 +1,5 @@
 "use client";
+import { HandWrittenTitle } from "@/components/ui/hand-writing-text";
 /* State hydration and migrations below deliberately synchronize React with local/cloud storage. */
 /* eslint-disable react-hooks/set-state-in-effect */
 
@@ -1941,8 +1942,7 @@ export function StudyHub({
   if (cloudEnabled && !cloudLoaded) {
     return (
       <main className="cloud-loading">
-        <span className="brand"><span className="brand-mark"><Zap size={18} fill="currentColor" /></span><span>NEXO</span></span>
-        {cloudStatus === "error" ? <section className="cloud-recovery" role="alert"><HardDrive size={32} /><h1>Não foi possível abrir seu painel</h1><p>A conexão com seus dados falhou. Seus registros não foram substituídos.</p><button className="primary-button" onClick={() => { setCloudStatus("loading"); setCloudRetry(value => value + 1); }}><RotateCcw size={18} />Tentar novamente</button><small>Se a conexão continuar indisponível, tente novamente mais tarde.</small></section> : <><div className="app-skeleton" role="status" aria-label="Carregando seu painel"><span /><span /><div><i /><i /><i /></div><span /></div><p>Organizando seu painel…</p></>}
+        {cloudStatus === "error" ? <><span className="brand"><span className="brand-mark"><Zap size={18} fill="currentColor" /></span><span>MERS</span></span><section className="cloud-recovery" role="alert"><HardDrive size={32} /><h1>Não foi possível abrir seu painel</h1><p>A conexão com seus dados falhou. Seus registros não foram substituídos.</p><button className="primary-button" onClick={() => { setCloudStatus("loading"); setCloudRetry(value => value + 1); }}><RotateCcw size={18} />Tentar novamente</button><small>Se a conexão continuar indisponível, tente novamente mais tarde.</small></section></> : <div className="mers-loading" role="status" aria-label="Carregando seu painel"><HandWrittenTitle title="Mers" subtitle="Organizando seu painel…" /><span className="mers-loading-line" aria-hidden="true" /></div>}
       </main>
     );
   }
@@ -1953,7 +1953,7 @@ export function StudyHub({
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
         <div className="brand">
           <span className="brand-mark"><Zap size={18} fill="currentColor" /></span>
-          <span>NEXO</span>
+          <span>MERS</span>
         </div>
         <button className="mobile-close" onClick={() => setMobileNav(false)} aria-label="Fechar menu"><X /></button>
 
@@ -2340,7 +2340,7 @@ export function StudyHub({
               <div className="creator-copy">
                 <span className="eyebrow lime">NOVA SESSÃO INTELIGENTE</span>
                 <h2>Transforme uma aula em um plano de estudo.</h2>
-                <p>Envie qualquer vídeo ou áudio, ou cole um link público direto. O Nexo normaliza o áudio, divide aulas longas, transcreve e encontra lacunas.</p>
+                <p>Envie qualquer vídeo ou áudio, ou cole um link público direto. O Mers normaliza o áudio, divide aulas longas, transcreve e encontra lacunas.</p>
                 <div className="flow-line"><span><Video size={17} /> Aula</span><i /><span><FileText size={17} /> Apostila</span><i /><span><Sparkles size={17} /> Mapa</span></div>
               </div>
               <div className="creator-form">
@@ -2482,7 +2482,7 @@ export function StudyHub({
                   ))}
                 </section>
                 {mapping.nextSteps.length ? (
-                  <section className="next-steps panel"><div><span className="next-icon"><Target /></span><div><span className="eyebrow">RECOMENDAÇÃO DO NEXO</span><h3>Plano para a próxima sessão</h3></div></div><ol>{mapping.nextSteps.map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol><button className="primary-button" onClick={generateRevision} disabled={busy === "generate"}>{busy === "generate" ? <LoaderCircle className="spin" size={18} /> : <BrainCircuit size={18} />} Gerar revisão das lacunas</button></section>
+                  <section className="next-steps panel"><div><span className="next-icon"><Target /></span><div><span className="eyebrow">RECOMENDAÇÃO DO MERS</span><h3>Plano para a próxima sessão</h3></div></div><ol>{mapping.nextSteps.map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol><button className="primary-button" onClick={generateRevision} disabled={busy === "generate"}>{busy === "generate" ? <LoaderCircle className="spin" size={18} /> : <BrainCircuit size={18} />} Gerar revisão das lacunas</button></section>
                 ) : (
                   <section className="map-ready panel"><span className="next-icon"><Video /></span><div><span className="eyebrow">PRÓXIMO PASSO</span><h3>Seu mapa está pronto para receber uma aula</h3><p>Adicione o vídeo ou a transcrição. A apostila é opcional quando você já informou as referências.</p></div><button className="primary-button" onClick={() => setTab("sessions")}>Adicionar aula <ArrowRight size={16} /></button></section>
                 )}
@@ -2497,7 +2497,7 @@ export function StudyHub({
               <div>
                 <span className="eyebrow lime">PLANEJAMENTO PERSONALIZADO</span>
                 <h2>Um plano que cabe na sua rotina.</h2>
-                <p>Defina sua disponibilidade e o Nexo distribui os tópicos prioritários em sessões objetivas, com revisão e questões.</p>
+                <p>Defina sua disponibilidade e o Mers distribui os tópicos prioritários em sessões objetivas, com revisão e questões.</p>
               </div>
               {studyPlan.length > 0 && (
                 <div className="plan-progress-card">
@@ -2673,7 +2673,7 @@ export function StudyHub({
           />
         )}
 
-        {tab === "mentor" && <div className="mentor-page"><section className="mentor-page-head"><span className="bot-avatar"><Bot /></span><div><span className="eyebrow lime">MENTOR NEXO</span><h2>Converse, decida e aprenda.</h2><p>O mentor considera sua trilha, seu material e seu contexto atual.</p></div></section><section className="mentor-workspace panel"><div className="mentor-prompts"><button onClick={() => setChatText("Analise esta situação comigo")}>Analisar situação</button><button onClick={() => setChatText("Ajude-me a tomar uma decisão")}>Decidir</button><button onClick={() => setChatText("Explique minha maior lacuna de forma simples")}>Aprender</button><button onClick={() => setChatText("Questione minhas premissas e me contradiga se necessário")}>Me contradiga</button></div><div className="mentor-messages" aria-live="polite">{chatMessages.map((message, index) => <div key={index} className={`chat-message ${message.role}`}>{message.text}</div>)}{chatBusy && <div className="chat-message assistant typing" role="status" aria-label="Mentor preparando resposta"><i /><i /><i /></div>}{chatError}</div><form className="mentor-composer" onSubmit={sendChat}><label><span className="sr-only">Mensagem para o mentor</span><textarea value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Converse com seu mentor..." /></label><button aria-label="Enviar mensagem" disabled={!chatText.trim() || chatBusy}><Send /></button></form></section></div>}
+        {tab === "mentor" && <div className="mentor-page"><section className="mentor-page-head"><span className="bot-avatar"><Bot /></span><div><span className="eyebrow lime">MENTOR MERS</span><h2>Converse, decida e aprenda.</h2><p>O mentor considera sua trilha, seu material e seu contexto atual.</p></div></section><section className="mentor-workspace panel"><div className="mentor-prompts"><button onClick={() => setChatText("Analise esta situação comigo")}>Analisar situação</button><button onClick={() => setChatText("Ajude-me a tomar uma decisão")}>Decidir</button><button onClick={() => setChatText("Explique minha maior lacuna de forma simples")}>Aprender</button><button onClick={() => setChatText("Questione minhas premissas e me contradiga se necessário")}>Me contradiga</button></div><div className="mentor-messages" aria-live="polite">{chatMessages.map((message, index) => <div key={index} className={`chat-message ${message.role}`}>{message.text}</div>)}{chatBusy && <div className="chat-message assistant typing" role="status" aria-label="Mentor preparando resposta"><i /><i /><i /></div>}{chatError}</div><form className="mentor-composer" onSubmit={sendChat}><label><span className="sr-only">Mensagem para o mentor</span><textarea value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Converse com seu mentor..." /></label><button aria-label="Enviar mensagem" disabled={!chatText.trim() || chatBusy}><Send /></button></form></section></div>}
 
         {tab === "avatar" && <AvatarWorkspace />}
         {tab === "profile" && <div className="profile-page"><section className="profile-hero panel"><span className="profile-avatar"><UserRound aria-hidden="true" /></span><div><span className="eyebrow lime">SEU PERFIL</span><h2>Seu espaço de evolução</h2><p>{cloudStatus === "saved" ? "Dados sincronizados com sua conta." : localReadFailed || localWriteFailed ? "O salvamento local precisa de atenção." : cloudStatus === "error" ? "A sincronização precisa de atenção." : cloudEnabled ? "Sincronização em andamento." : "Seus dados ficam neste dispositivo."}</p></div></section><PlatformCustomizer value={platformPreferences} onChange={setPlatformPreferences} /><section className="profile-settings panel"><div className="home-section-title"><span>CONTA E DADOS</span></div><div className="profile-setting-row"><span><strong>Sincronização</strong><small>Trilhas, atividades, planos e progresso</small></span><em className={cloudStatus}>{cloudStatus === "saved" ? "Tudo salvo" : cloudStatus === "saving" ? "Salvando" : cloudStatus === "error" ? "Cópia local" : cloudEnabled ? "Sincronizando" : "Modo local"}</em></div><div className="profile-setting-row"><span><strong>Conteúdo preservado</strong><small>{learningPaths.length} trilhas · {studyPlans.length} planos · {journeys.length} jornadas</small></span><CheckCircle2 /></div><div className="profile-account"><AccountControl enabled={authEnabled} /></div></section><section className="profile-settings panel"><div className="home-section-title"><span>PREFERÊNCIAS</span></div><button className="profile-link" onClick={() => setTab("avatar")}><span><strong>Avatar evolutivo</strong><small>Aparência, equipamentos e Essência</small></span><ArrowRight /></button><button className="profile-link" onClick={() => setTab("evolution")}><span><strong>Evolução e atributos</strong><small>Níveis, ranking e histórico</small></span><ArrowRight /></button><button className="profile-link" onClick={() => setTab("journeys")}><span><strong>Jornadas pessoais</strong><small>Estudos, treino, leitura e metas</small></span><ArrowRight /></button></section></div>}
@@ -2714,7 +2714,7 @@ export function StudyHub({
       {tab !== "mentor" && <button className="chat-launcher" onClick={() => setChatOpen(true)} aria-label="Abrir tutor"><MessageCircle size={23} /><span>Tutor IA</span></button>}
       {chatOpen && (
         <aside className="chat-panel">
-          <header><span className="bot-avatar"><Bot size={20} /></span><div><strong>Tutor Nexo</strong><small><i /> Conectado ao seu material</small></div><button onClick={() => setChatOpen(false)} aria-label="Fechar chat"><X /></button></header>
+          <header><span className="bot-avatar"><Bot size={20} /></span><div><strong>Tutor Mers</strong><small><i /> Conectado ao seu material</small></div><button onClick={() => setChatOpen(false)} aria-label="Fechar chat"><X /></button></header>
           <div className="chat-messages">
             {chatMessages.map((message, index) => <div key={index} className={`chat-message ${message.role}`}>{message.text}</div>)}
             {chatBusy && <div className="chat-message assistant typing"><i /><i /><i /></div>}

@@ -28,7 +28,7 @@ async function waitUntilReady() {
 try {
   const home = await waitUntilReady();
   const html = await home.text();
-  assert.match(html, /NEXO/);
+  assert.match(html, /MERS/);
   // Internal areas are mounted after navigation; the initial HTML is the home hub.
   // journeys-ui and platform-ui cover the client navigation into those areas.
   assert.match(html, /Navegação principal/);

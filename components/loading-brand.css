@@ -1,0 +1,47 @@
+.cloud-loading {
+  background: var(--paper, #08090a);
+  color: var(--ink, #f7f8fa);
+}
+
+.mers-loading {
+  display: grid;
+  justify-items: center;
+  width: min(100%, 640px);
+}
+
+.cloud-loading .mers-loading h1 {
+  font-size: clamp(3rem, 12vw, 6rem);
+  line-height: 1;
+  color: currentColor;
+}
+
+.cloud-loading .mers-loading p {
+  color: var(--text-secondary, #a8adb5);
+}
+
+.mers-loading-line {
+  display: block;
+  width: min(44vw, 180px);
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #caff55) 30%, transparent);
+}
+
+.mers-loading-line::after {
+  content: "";
+  display: block;
+  width: 35%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, #caff55);
+  animation: mers-loading-progress 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes mers-loading-progress {
+  to { transform: translateX(185%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mers-loading-line::after { animation: none; width: 100%; }
+}
