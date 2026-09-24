@@ -34,7 +34,7 @@ function HandWrittenTitle({
           preserveAspectRatio="none"
           initial={reduceMotion ? false : "hidden"}
           animate="visible"
-          className="h-full w-full text-[var(--accent,#caff55)] opacity-75"
+          className="h-full w-full text-white opacity-75"
         >
           <motion.path
             d="M 950 90 C 1250 300, 1050 480, 600 520 C 250 520, 150 480, 150 300 C 150 120, 350 80, 600 80 C 850 80, 950 180, 950 180"

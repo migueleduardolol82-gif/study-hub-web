@@ -1,6 +1,6 @@
 .cloud-loading {
-  background: var(--paper, #08090a);
-  color: var(--ink, #f7f8fa);
+  background: #08090a;
+  color: #fff;
 }
 
 .mers-loading {
@@ -16,7 +16,7 @@
 }
 
 .cloud-loading .mers-loading p {
-  color: var(--text-secondary, #a8adb5);
+  color: rgba(255, 255, 255, .76);
 }
 
 .mers-loading-line {
@@ -25,7 +25,7 @@
   height: 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent, #caff55) 30%, transparent);
+  background: rgba(255, 255, 255, .24);
 }
 
 .mers-loading-line::after {
@@ -34,7 +34,7 @@
   width: 35%;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent, #caff55);
+  background: #fff;
   animation: mers-loading-progress 1.5s ease-in-out infinite alternate;
 }
 
