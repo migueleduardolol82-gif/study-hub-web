@@ -1,0 +1,48 @@
+.review-home { --study-card: var(--surface-1, #111419); --study-ink: var(--text-primary, #f5f7f8); --study-subtle: var(--text-secondary, #9da4ae); color: var(--study-ink); gap: 24px; }
+.review-home-top { align-items: center; }
+.review-home-top h2 { font-size: clamp(1.65rem, 3vw, 2.5rem); letter-spacing: -.035em; }
+.review-home .review-subtabs { width: 100%; border: 0; border-bottom: 1px solid var(--review-line); border-radius: 0; background: transparent; padding: 0; }
+.review-home .review-subtabs button { flex: 0 0 auto; border-radius: 0; min-height: 48px; padding-inline: 20px; color: var(--study-subtle); }
+.review-home .review-subtabs button[aria-current="page"] { color: var(--study-ink); background: transparent; box-shadow: inset 0 -3px var(--review-accent); }
+.study-landing { display: grid; gap: 28px; }
+.study-landing-hero { display: flex; align-items: center; gap: 32px; padding: 32px; min-height: 215px; border: 1px solid var(--review-line); border-radius: 24px; background: var(--study-card); }
+.study-landing-hero h3 { margin: 8px 0; font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.05; letter-spacing: -.055em; }
+.study-landing-hero p { margin: 0; max-width: 46ch; color: var(--study-subtle); }
+.study-landing-symbol { display: grid; place-items: center; flex: 0 0 130px; width: 130px; height: 130px; border-radius: 34px; background: color-mix(in srgb, var(--review-accent) 17%, var(--study-card)); color: var(--review-accent); transform: rotate(-7deg); }
+.study-landing-symbol svg { width: 65px; height: 65px; stroke-width: 1.5; transform: rotate(7deg); }
+.study-create-box { display: grid; gap: 12px; padding: 22px; border: 1px solid var(--review-line); border-radius: 24px; background: var(--study-card); }
+.study-create-box label { font-weight: 800; font-size: 1.05rem; }
+.study-create-box textarea { width: 100%; min-height: 98px; resize: vertical; padding: 14px; color: var(--study-ink); border: 1px solid var(--review-line); border-radius: 14px; background: transparent; font-size: 16px; }
+.study-create-box textarea::placeholder, .study-deck-search input::placeholder { color: var(--study-subtle); }
+.study-create-box > button { justify-self: end; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 17px; color: #111706; border: 0; border-radius: 999px; background: var(--review-accent); font-weight: 750; }
+.study-create-box > button svg, .study-quick-actions svg, .study-section-title svg { width: 18px; height: 18px; }
+.study-quick-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.study-quick-actions button { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 9px 18px; color: var(--study-ink); border: 1px solid var(--review-line); border-radius: 999px; background: var(--study-card); font-weight: 700; }
+.study-landing-section, .study-decks-index { display: grid; gap: 15px; }
+.study-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.study-section-title h3 { margin: 0; font-size: clamp(1.25rem, 2.3vw, 1.65rem); }
+.study-section-title button { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--study-ink); font-weight: 700; }
+.study-resume-card, .study-deck-card { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 104px; padding: 20px; text-align: left; color: var(--study-ink); border: 1px solid var(--review-line); border-radius: 20px; background: var(--study-card); }
+.study-resume-card > span:nth-child(2), .study-deck-card > span { display: grid; gap: 7px; min-width: 0; flex: 1; }
+.study-resume-card b, .study-deck-card b { font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.study-resume-card small, .study-deck-card small { color: var(--study-subtle); }
+.study-resume-card > svg, .study-deck-card > svg { width: 19px; flex: none; color: var(--study-subtle); }
+.study-deck-badge { display: grid; place-items: center; width: 60px; height: 60px; flex: none; border: 7px solid color-mix(in srgb, var(--review-accent) 28%, var(--study-card)); border-radius: 50%; color: var(--review-accent); font-weight: 800; }
+.study-deck-list { display: grid; gap: 11px; }
+.study-deck-list > p { padding: 18px; color: var(--study-subtle); }
+.study-deck-card { position: relative; overflow: hidden; min-height: 86px; padding-left: 27px; }
+.study-deck-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 7px; background: var(--deck-stripe); }
+.study-deck-search { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 15px; border: 1px solid var(--review-line); border-radius: 13px; background: var(--study-card); }
+.study-deck-search svg { width: 19px; color: var(--study-subtle); }
+.study-deck-search input { flex: 1; min-width: 0; border: 0; outline: 0; color: var(--study-ink); background: transparent; font: inherit; }
+.study-deck-filters { display: flex; gap: 8px; overflow-x: auto; }
+.study-deck-filters button { white-space: nowrap; min-height: 40px; padding: 7px 14px; border: 1px solid var(--review-line); border-radius: 999px; color: var(--study-ink); background: var(--study-card); }
+.study-deck-filters button[aria-pressed="true"] { color: #111706; border-color: var(--review-accent); background: var(--review-accent); font-weight: 750; }
+.study-deck-detail-heading { display: grid; gap: 7px; }
+.study-deck-detail-heading button { justify-self: start; padding: 0; border: 0; background: transparent; color: var(--study-subtle); }
+.study-deck-detail-heading h3, .study-deck-detail-heading p { margin: 0; }
+.study-deck-detail-heading h3 { font-size: 1.55rem; }
+.study-deck-detail-heading p { color: var(--study-subtle); }
+.mode-light .review-home { --review-surface: var(--surface-1); --review-line: var(--line); }
+.mode-light .review-home .review-top-actions button, .mode-light .review-home .review-subtabs button { color: var(--study-ink); }
+@media (max-width: 600px) { .review-home { gap: 17px; } .review-home-top { align-items: flex-start; } .review-home-top h2 { font-size: 1.55rem; } .review-home .review-subtabs button { flex: 1; } .study-landing { gap: 23px; } .study-landing-hero { min-height: 190px; gap: 15px; padding: 22px; border-radius: 20px; } .study-landing-symbol { flex-basis: 70px; width: 70px; height: 70px; border-radius: 20px; } .study-landing-symbol svg { width: 37px; height: 37px; } .study-landing-hero h3 { font-size: 2rem; } .study-landing-hero p { font-size: .85rem; } .study-create-box { padding: 17px; } .study-deck-card, .study-resume-card { padding-block: 16px; } }

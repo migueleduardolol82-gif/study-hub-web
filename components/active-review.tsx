@@ -1,11 +1,12 @@
 "use client";
 
 import "./review-session.css";
+import "./study-home.css";
 import { StudyAIStatus } from "./study-ai-status";
 import { loadCardSources, produceFlashcards } from "@/lib/flashcard-production-client";
 import { productionProgress } from "@/lib/flashcard-production";
 
-import { BookOpen, BrainCircuit, Check, ChevronRight, Clock3, Gauge, Layers3, Library, LoaderCircle, LockKeyhole, Plus, RotateCcw, ShieldCheck, Sparkles, Target, X, Zap } from "lucide-react";
+import { BookOpen, BrainCircuit, Check, ChevronRight, Clock3, FileText, Gauge, Layers3, Library, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Target, Upload, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { requestAI } from "@/lib/ai-client";
 import { ApiClientError } from "@/lib/api-contract";
@@ -49,8 +50,10 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   const [background, setBackground] = useState(false);
   const [speedDuration, setSpeedDuration] = useState(60);
   const [creatorOpen, setCreatorOpen] = useState(paths.length === 0 || Boolean(requestedDocumentId));
-  const [libraryOpen, setLibraryOpen] = useState(false);
-  const [studySection, setStudySection] = useState<"study" | "decks">("study");
+  const [studySection, setStudySection] = useState<"home" | "decks">("home");
+  const [deckFilter, setDeckFilter] = useState<"all" | "active" | "complete">("all");
+  const [deckQuery, setDeckQuery] = useState("");
+  const [deckOpen, setDeckOpen] = useState(false);
   const [todayClock] = useState(() => Date.now());
   const [retryLesson, setRetryLesson] = useState<{ path: LearningPath; lesson: LearningLesson } | null>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -122,6 +125,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   async function detailedFlashcards(existing?: LearningPath) {
     if (requestRef.current) return;
     setStudySection("decks");
+    setDeckOpen(true);
     const controller = new AbortController(); requestRef.current = controller;
     setBackground(true); setGenerationError(null); setRetryLesson(null);
     try {
@@ -241,7 +245,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   function deletePreviewUnit(unitId: string) { updatePreview((path) => ({ ...path, units: path.units.filter((unit) => unit.id !== unitId) })); setPreviewUnitIds((current) => current.filter((id) => id !== unitId)); }
   function splitPreviewUnit(unitId: string) { updatePreview((path) => { const index = path.units.findIndex((unit) => unit.id === unitId); const unit = path.units[index]; if (!unit || unit.lessons.length < 2) return path; const middle = Math.ceil(unit.lessons.length / 2); const id = `unit-${crypto.randomUUID()}`; setPreviewUnitIds((current) => [...current, id]); const units = [...path.units]; units.splice(index, 1, { ...unit, lessons: unit.lessons.slice(0, middle) }, { ...unit, id, title: `${unit.title} — continuação`, lessons: unit.lessons.slice(middle) }); return { ...path, units }; }); }
   function mergePreviewUnit(index: number) { updatePreview((path) => { if (index < 1) return path; const previous = path.units[index - 1]; const current = path.units[index]; const merged = { ...previous, title: `${previous.title} + ${current.title}`, description: `${previous.description} ${current.description}`, contents: [...(previous.contents || []), ...(current.contents || [])], concepts: [...(previous.concepts || []), ...(current.concepts || [])], references: [...new Set([...(previous.references || []), ...(current.references || [])])], lessons: [...previous.lessons, ...current.lessons] }; return { ...path, units: [...path.units.slice(0, index - 1), merged, ...path.units.slice(index + 1)] }; }); }
-  function savePreview() { if (!previewPath) return; const selected = previewPath.units.filter((unit) => previewUnitIds.includes(unit.id)); if (!selected.length) { notify("Selecione pelo menos uma unidade."); return; } const saved = syncKnowledgeBase({ ...previewPath, units: selected, updatedAt: new Date().toISOString() }); setPaths((current) => [saved, ...current]); setProgressByPath((current) => ({ ...current, [saved.id]: { ...emptyPathProgress } })); setActivePathId(saved.id); setStudySection("decks"); setPreviewPath(null); setPreviewUnitIds([]); setCreatorOpen(false); notify(`Trilha “${saved.title}” salva. Preparando a primeira lição; você poderá começar assim que ela ficar pronta.`); void prepareRemaining(saved); }
+  function savePreview() { if (!previewPath) return; const selected = previewPath.units.filter((unit) => previewUnitIds.includes(unit.id)); if (!selected.length) { notify("Selecione pelo menos uma unidade."); return; } const saved = syncKnowledgeBase({ ...previewPath, units: selected, updatedAt: new Date().toISOString() }); setPaths((current) => [saved, ...current]); setProgressByPath((current) => ({ ...current, [saved.id]: { ...emptyPathProgress } })); setActivePathId(saved.id); setStudySection("decks"); setDeckOpen(true); setPreviewPath(null); setPreviewUnitIds([]); setCreatorOpen(false); notify(`Trilha “${saved.title}” salva. Preparando a primeira lição; você poderá começar assim que ela ficar pronta.`); void prepareRemaining(saved); }
 
   if (sessionOpen && activePath && progress.reviewSession) return <ReviewSession path={activePath} progress={progress} session={progress.reviewSession} setProgress={setProgressByPath} onClose={() => setSessionOpen(false)} />;
 
@@ -260,26 +264,35 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   };
   const readyLessons = flatLessons.filter(item => item.exercises.length).length;
   const processingLessons = flatLessons.filter(item => item.preparation === "processing").length;
+  const visibleDecks = paths.filter(path => {
+    const lessons = path.units.flatMap(unit => unit.lessons);
+    const done = (progressByPath[path.id] || emptyPathProgress).completedLessonIds.length;
+    return path.title.toLocaleLowerCase("pt-BR").includes(deckQuery.toLocaleLowerCase("pt-BR")) && (deckFilter === "all" || (deckFilter === "complete" ? lessons.length > 0 && done >= lessons.length : done > 0 && done < lessons.length));
+  });
+  const openDeck = (path: LearningPath) => { setActivePathId(path.id); setScope("all"); setDeckOpen(true); setStudySection("decks"); };
+  const openQuickCreator = () => { if (prompt.trim().length > 220) { setSourceText(prompt); setPrompt("Material para estudar"); } setCreatorOpen(true); };
 
   return <div className="review-home">
     <header className="review-home-top">
-      <div><span className="eyebrow lime">ESTUDOS</span><h2>Seu estudo</h2></div>
-      <div className="review-top-actions"><button className="review-secondary" onClick={() => setLibraryOpen(value => !value)}><Library /> Trilhas</button><button className="review-primary" onClick={() => setCreatorOpen(true)}><Plus /> Nova trilha</button></div>
+      <div><span className="eyebrow lime">ESTUDOS</span><h2>{studySection === "home" ? "Comece por aqui" : "Baralhos"}</h2></div>
+      <div className="review-top-actions"><button className="review-secondary" onClick={() => { setStudySection("decks"); setDeckOpen(false); }}><Library /> Meus baralhos</button><button className="review-primary" onClick={() => setCreatorOpen(true)}><Plus /> Criar baralho</button></div>
     </header>
 
     <StudyAIStatus />
-    <nav className="review-subtabs" aria-label="Seções de estudos"><button type="button" aria-current={studySection === "study" ? "page" : undefined} onClick={() => setStudySection("study")}>Estudar</button><button type="button" aria-current={studySection === "decks" ? "page" : undefined} onClick={() => setStudySection("decks")}>Decks e conteúdo</button></nav>
-    {libraryOpen && <section className="review-library" aria-label="Suas trilhas">
-      <div><h3>Suas trilhas</h3><button aria-label="Fechar biblioteca" onClick={() => setLibraryOpen(false)}><X /></button></div>
-      {paths.length ? paths.map(path => {
-        const saved = progressByPath[path.id] || emptyPathProgress;
-        const lessons = path.units.flatMap(unit => unit.lessons);
-        const completion = lessons.length ? Math.round(saved.completedLessonIds.length / lessons.length * 100) : 0;
-        return <button key={path.id} className={path.id === activePath?.id ? "active" : ""} onClick={() => { setActivePathId(path.id); setScope("all"); setLibraryOpen(false); }}><span><BrainCircuit /><b>{path.title}</b></span><small>{path.units.length} unidades · {completion}% concluído</small><ChevronRight /></button>;
-      }) : <p>Você ainda não criou uma trilha.</p>}
-    </section>}
+    <nav className="review-subtabs" aria-label="Seções de estudos"><button type="button" aria-current={studySection === "home" ? "page" : undefined} onClick={() => setStudySection("home")}>Início</button><button type="button" aria-current={studySection === "decks" ? "page" : undefined} onClick={() => { setStudySection("decks"); setDeckOpen(false); }}>Baralhos</button></nav>
 
-    {activePath ? <>
+    {studySection === "home" && <div className="study-landing">
+      <section className="study-landing-hero"><div className="study-landing-symbol" aria-hidden="true"><BrainCircuit /></div><div><span className="eyebrow">SEU ESPAÇO DE APRENDIZADO</span><h3>O que vamos<br />estudar?</h3><p>Crie um baralho com texto ou material e volte a estudar de onde parou.</p></div></section>
+      <div className="study-create-box"><label htmlFor="study-quick-prompt">Quero estudar...</label><textarea id="study-quick-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Escreva um tema ou cole um texto para criar seu baralho" /><button type="button" onClick={openQuickCreator}><Plus /> {prompt.trim() ? "Continuar criação" : "Criar baralho"}</button></div>
+      <div className="study-quick-actions" aria-label="Formas de criar baralho"><button onClick={() => setCreatorOpen(true)}><FileText /> Texto</button><button onClick={() => setCreatorOpen(true)}><Upload /> Carregar</button><button onClick={() => { setStudySection("decks"); setDeckOpen(false); }}><Layers3 /> Baralhos</button></div>
+      {activePath?.id && <section className="study-landing-section"><div className="study-section-title"><h3>Continue de onde parou</h3><button onClick={() => openDeck(activePath)}>Ver baralho <ChevronRight /></button></div><button className="study-resume-card" onClick={() => progress.reviewSession && !progress.reviewSession.finished ? resumeSession() : openDeck(activePath)}><span className="study-deck-badge">{percent}%</span><span><b>{activePath.title}</b><small>{progress.reviewSession && !progress.reviewSession.finished ? `${modeLabels[progress.reviewSession.mode]} · questão ${progress.reviewSession.index + 1}` : `${bank(activePath).length} cartões · ${activePath.units.length} subdecks`}</small></span><ChevronRight /></button></section>}
+      <section className="study-landing-section"><div className="study-section-title"><h3>Meus baralhos</h3><button onClick={() => { setStudySection("decks"); setDeckOpen(false); }}>Ver todos <ChevronRight /></button></div><div className="study-deck-list">{paths.slice(0, 3).map((path, index) => <button key={path.id} className="study-deck-card" style={{ "--deck-stripe": ["#25bea8", "#7784ef", "#f0ac53"][index % 3] } as React.CSSProperties} onClick={() => openDeck(path)}><span><b>{path.title}</b><small>{bank(path).length} cartões · {path.units.length} subdecks</small></span><ChevronRight /></button>)}{!paths.length && <p>Seu primeiro baralho começa com um texto ou arquivo.</p>}</div></section>
+    </div>}
+
+    {studySection === "decks" && !deckOpen && <section className="study-decks-index"><div className="study-section-title"><h3>Meus baralhos</h3><button onClick={() => setCreatorOpen(true)}><Plus /> Novo</button></div><label className="study-deck-search"><Search /><span className="sr-only">Buscar baralhos</span><input value={deckQuery} onChange={event => setDeckQuery(event.target.value)} placeholder="Buscar baralho" /></label><div className="study-deck-filters" aria-label="Filtrar baralhos">{([["all", "Todos"], ["active", "Em andamento"], ["complete", "Concluídos"]] as const).map(([id, label]) => <button key={id} aria-pressed={deckFilter === id} onClick={() => setDeckFilter(id)}>{label}</button>)}</div><div className="study-deck-list">{visibleDecks.map((path, index) => { const lessons = path.units.flatMap(unit => unit.lessons); const saved = progressByPath[path.id] || emptyPathProgress; const completion = lessons.length ? Math.round(saved.completedLessonIds.length / lessons.length * 100) : 0; return <button key={path.id} className="study-deck-card" style={{ "--deck-stripe": ["#25bea8", "#7784ef", "#f0ac53", "#f174aa", "#e8ce35"][index % 5] } as React.CSSProperties} onClick={() => openDeck(path)}><span><b>{path.title}</b><small>{bank(path).length} cartões · {path.units.length} subdecks · {completion}% concluído</small></span><ChevronRight /></button>; })}{!visibleDecks.length && <p>Nenhum baralho encontrado para este filtro.</p>}</div></section>}
+
+    {studySection === "decks" && deckOpen && activePath ? <>
+      <div className="study-deck-detail-heading"><button onClick={() => setDeckOpen(false)}>← Todos os baralhos</button><h3>{activePath.title}</h3><p>{bank(activePath).length} cartões · {activePath.units.length} subdecks</p></div>
       <section className="review-today">
         <div><span className="eyebrow">HOJE</span><h3>{dueToday ? `${dueToday} conceitos precisam de revisão` : "Seu próximo passo está pronto"}</h3><p>{weakConcepts} pontos com domínio abaixo de 60% · {wrongIds.length} erros ativos</p></div>
         <div className="today-actions">
@@ -295,7 +308,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
         {progress.reviewSession && !progress.reviewSession.finished && <button className="continue-session" onClick={resumeSession}><span><small>CONTINUAR SESSÃO</small><b>{modeLabels[progress.reviewSession.mode]} · questão {progress.reviewSession.index + 1}</b></span><ChevronRight /></button>}
       </section>
 
-      {studySection === "study" && <section className="review-mode-picker">
+      <section className="review-mode-picker">
         <div className="section-heading"><div><span className="eyebrow">ESCOLHA SUA EXPERIÊNCIA</span><h3>Como você quer estudar hoje?</h3></div>{background && <span className="background-status"><LoaderCircle className="spin" /> {generationStage || "Preparando conteúdo"}</span>}</div>
         <div className="review-mode-grid">{(reviewModes.filter(id => id !== "desafio") as Exclude<ReviewMode, "desafio">[]).map(id => <button key={id} className={learningMode === id ? "active" : ""} aria-pressed={learningMode === id} onClick={() => setLearningMode(id)}><span>{modeInfo[id].icon}</span><b>{modeLabels[id]}</b><small>{modeInfo[id].text}</small></button>)}</div>
         <div className="review-session-config">
@@ -308,9 +321,9 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
           <button className="review-start" onClick={() => openScope(activePath, scope)}><Zap /> Começar {modeLabels[learningMode]}</button>
         </div>
         {generationError && <div className="review-inline-error"><p>{generationError.message}</p>{generationError.retryable && <button onClick={() => retryLesson ? startLesson(retryLesson.lesson, true, retryLesson.path) : void prepareRemaining(activePath)}><RotateCcw /> Tentar novamente</button>}</div>}
-      </section>}
+      </section>
 
-      {studySection === "decks" && <section className="review-units">
+      <section className="review-units">
         <div className="detailed-card-production">
           <div><span className="eyebrow">FLASHCARDS</span><h3>Gerar cartões</h3><p>Organize o material por assunto e continue a geração quando quiser.</p></div>
           {activePath.cardProduction && (() => { const stats = productionProgress(activePath.cardProduction); return <div aria-live="polite"><strong>{stats.covered} cartões · {stats.covered}/{stats.facts} conceitos</strong><progress aria-label="Trechos analisados" value={stats.analyzed} max={stats.total || 1} /><details><summary>Detalhes da cobertura</summary><p>{stats.analyzed}/{stats.total} trechos analisados · {stats.audited}/{stats.total} verificados</p><p>{stats.complete ? "Geração concluída." : "Mantenha esta área aberta durante a geração. Os cartões prontos já podem ser estudados."} A auditoria da IA pode não identificar todas as omissões.</p></details>{activePath.cardProduction.error && <p role="alert">{activePath.cardProduction.error}</p>}</div>; })()}
@@ -327,8 +340,8 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
           </details>;
         })}</div>
         <div className="processing-summary"><span>{readyLessons} lições prontas</span><span>{processingLessons} processando</span><span>{Math.max(0, flatLessons.length - readyLessons - processingLessons)} aguardando</span><button disabled={background || busy} onClick={() => void prepareRemaining(activePath)}>{background ? "Processando…" : "Continuar processamento"}</button><button disabled={background || busy} onClick={() => void expandBank()}>Gerar novas variações</button></div>
-      </section>}
-    </> : <section className="review-empty"><BrainCircuit /><h2>Crie sua primeira trilha</h2><p>Envie seus materiais. A primeira unidade será liberada assim que estiver pronta.</p><button className="review-primary" onClick={() => setCreatorOpen(true)}><Plus /> Criar trilha</button></section>}
+      </section>
+    </> : null}
 
     {creatorOpen && <div className="review-creator-backdrop" role="presentation"><section className="review-creator" role="dialog" aria-modal="true" aria-label="Criar nova trilha">
       <header><div><span className="eyebrow lime">NOVA TRILHA</span><h2>Transforme material em aprendizado ativo</h2></div><button aria-label="Fechar criação" onClick={() => setCreatorOpen(false)}><X /></button></header>
