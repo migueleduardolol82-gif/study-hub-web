@@ -3,10 +3,13 @@
 import "./review-session.css";
 import "./study-home.css";
 import { StudyAIStatus } from "./study-ai-status";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { loadCardSources, produceFlashcards } from "@/lib/flashcard-production-client";
 import { productionProgress } from "@/lib/flashcard-production";
 
-import { BookOpen, BrainCircuit, Check, ChevronRight, Clock3, FileText, Gauge, Layers3, Library, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Target, Upload, X, Zap } from "lucide-react";
+import { BarChart3, BookOpen, BrainCircuit, Check, ChevronRight, Clock3, FileText, Gauge, Layers3, Library, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Target, Upload, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { requestAI } from "@/lib/ai-client";
 import { ApiClientError } from "@/lib/api-contract";
@@ -264,6 +267,19 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   };
   const readyLessons = flatLessons.filter(item => item.exercises.length).length;
   const processingLessons = flatLessons.filter(item => item.preparation === "processing").length;
+  const allAttempts = paths.flatMap(path => progressByPath[path.id]?.reviewHistory || []);
+  const allCards = paths.reduce((count, path) => count + bank(path).length, 0);
+  const allLessons = paths.flatMap(path => path.units.flatMap(unit => unit.lessons)).length;
+  const completedLessons = paths.reduce((count, path) => count + (progressByPath[path.id]?.completedLessonIds.length || 0), 0);
+  const accuracy = allAttempts.length ? Math.round(allAttempts.filter(attempt => attempt.grade.correct).length / allAttempts.length * 100) : null;
+  const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const weeklyActivity = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(todayClock); day.setHours(12, 0, 0, 0); day.setDate(day.getDate() - (6 - index));
+    const key = localDate(day);
+    return { key, label: new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(day).replace(".", ""), count: allAttempts.filter(attempt => localDate(new Date(attempt.answeredAt)) === key).length };
+  });
+  const weeklyMax = Math.max(1, ...weeklyActivity.map(day => day.count));
+  const weeklyTotal = weeklyActivity.reduce((sum, day) => sum + day.count, 0);
   const visibleDecks = paths.filter(path => {
     const lessons = path.units.flatMap(unit => unit.lessons);
     const done = (progressByPath[path.id] || emptyPathProgress).completedLessonIds.length;
@@ -284,7 +300,12 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
     {studySection === "home" && <div className="study-landing">
       <section className="study-landing-hero"><div className="study-landing-symbol" aria-hidden="true"><BrainCircuit /></div><div><span className="eyebrow">SEU ESPAÇO DE APRENDIZADO</span><h3>O que vamos<br />estudar?</h3><p>Crie um baralho com texto ou material e volte a estudar de onde parou.</p></div></section>
       <div className="study-create-box"><label htmlFor="study-quick-prompt">Quero estudar...</label><textarea id="study-quick-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Escreva um tema ou cole um texto para criar seu baralho" /><button type="button" onClick={openQuickCreator}><Plus /> {prompt.trim() ? "Continuar criação" : "Criar baralho"}</button></div>
-      <div className="study-quick-actions" aria-label="Formas de criar baralho"><button onClick={() => setCreatorOpen(true)}><FileText /> Texto</button><button onClick={() => setCreatorOpen(true)}><Upload /> Carregar</button><button onClick={() => { setStudySection("decks"); setDeckOpen(false); }}><Layers3 /> Baralhos</button></div>
+      <div className="study-quick-actions" aria-label="Formas de criar baralho"><Button variant="outline" onClick={() => setCreatorOpen(true)}><FileText /> Texto</Button><Button variant="outline" onClick={() => setCreatorOpen(true)}><Upload /> Carregar</Button><Button variant="outline" onClick={() => { setStudySection("decks"); setDeckOpen(false); }}><Layers3 /> Baralhos</Button></div>
+      <section className="study-insights" aria-label="Seu progresso em Estudos">
+        <div className="study-section-title"><h3>Seu progresso</h3><span>Dados dos seus baralhos</span></div>
+        <div className="study-stat-grid"><Card className="study-stat-card"><Layers3 /><strong>{allCards}</strong><span>Cartões disponíveis</span></Card><Card className="study-stat-card"><BarChart3 /><strong>{weeklyTotal}</strong><span>Respostas em 7 dias</span></Card><Card className="study-stat-card"><Target /><strong>{accuracy === null ? "—" : `${accuracy}%`}</strong><span>Acertos no histórico</span></Card></div>
+        <div className="study-chart-grid"><Card className="study-activity-card"><div><h4>Atividade da semana</h4><small>{weeklyTotal ? `${weeklyTotal} respostas registradas` : "Seu gráfico começa na primeira resposta"}</small></div><div className="study-bars" role="img" aria-label={`Respostas por dia nos últimos sete dias: ${weeklyActivity.map(day => `${day.label} ${day.count}`).join(", ")}`}>{weeklyActivity.map(day => <div key={day.key} className="study-bar-day"><span className="study-bar-track"><span style={{ height: `${day.count ? Math.max(10, day.count / weeklyMax * 100) : 3}%` }} /></span><small>{day.label}</small></div>)}</div></Card><Card className="study-completion-card"><h4>Conteúdo percorrido</h4><div className="study-progress-ring" style={{ "--progress": `${allLessons ? Math.round(completedLessons / allLessons * 100) : 0}%` } as React.CSSProperties}><strong>{allLessons ? Math.round(completedLessons / allLessons * 100) : 0}%</strong></div><Progress value={allLessons ? Math.round(completedLessons / allLessons * 100) : 0} aria-label="Lições concluídas" /><p>{completedLessons} de {allLessons} lições concluídas</p><Button variant="outline" onClick={() => { setStudySection("decks"); setDeckOpen(false); }}>Explorar baralhos <ChevronRight /></Button></Card></div>
+      </section>
       {activePath?.id && <section className="study-landing-section"><div className="study-section-title"><h3>Continue de onde parou</h3><button onClick={() => openDeck(activePath)}>Ver baralho <ChevronRight /></button></div><button className="study-resume-card" onClick={() => progress.reviewSession && !progress.reviewSession.finished ? resumeSession() : openDeck(activePath)}><span className="study-deck-badge">{percent}%</span><span><b>{activePath.title}</b><small>{progress.reviewSession && !progress.reviewSession.finished ? `${modeLabels[progress.reviewSession.mode]} · questão ${progress.reviewSession.index + 1}` : `${bank(activePath).length} cartões · ${activePath.units.length} subdecks`}</small></span><ChevronRight /></button></section>}
       <section className="study-landing-section"><div className="study-section-title"><h3>Meus baralhos</h3><button onClick={() => { setStudySection("decks"); setDeckOpen(false); }}>Ver todos <ChevronRight /></button></div><div className="study-deck-list">{paths.slice(0, 3).map((path, index) => <button key={path.id} className="study-deck-card" style={{ "--deck-stripe": ["#25bea8", "#7784ef", "#f0ac53"][index % 3] } as React.CSSProperties} onClick={() => openDeck(path)}><span><b>{path.title}</b><small>{bank(path).length} cartões · {path.units.length} subdecks</small></span><ChevronRight /></button>)}{!paths.length && <p>Seu primeiro baralho começa com um texto ou arquivo.</p>}</div></section>
     </div>}

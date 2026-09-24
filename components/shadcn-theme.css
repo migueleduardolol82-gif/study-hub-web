@@ -1,0 +1,23 @@
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Map shadcn utilities to the existing, user-editable Nexo palette. */
+@theme inline {
+  --color-background: var(--surface-1, #111419);
+  --color-foreground: var(--text-primary, #f5f7f8);
+  --color-card: var(--surface-1, #111419);
+  --color-card-foreground: var(--text-primary, #f5f7f8);
+  --color-primary: var(--accent, #caff55);
+  --color-primary-foreground: #111706;
+  --color-secondary: var(--surface-2, #1b1e24);
+  --color-secondary-foreground: var(--text-primary, #f5f7f8);
+  --color-muted: var(--surface-2, #1b1e24);
+  --color-muted-foreground: var(--text-secondary, #9da4ae);
+  --color-border: var(--line, #292c31);
+  --color-input: var(--line, #292c31);
+  --color-ring: var(--accent, #caff55);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+}
