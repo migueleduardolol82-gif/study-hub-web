@@ -22,3 +22,4 @@ test('personalização global normaliza densidade, cantos e efeitos',()=>{
   assert.deepEqual(normalizePlatformPreferences({palette:'ice',customAccent:'#112233',customText:'#abcdef',customSurface:'invalid',widgets:['focus'],density:'compact',radius:'sharp',effects:'minimal',mode:'light'}),{...defaultPlatformPreferences,palette:'ice',customAccent:'#112233',customText:'#abcdef',widgets:['focus'],density:'compact',radius:'sharp',effects:'minimal',mode:'light'});
   assert.deepEqual(normalizePlatformPreferences({density:'gigante',radius:'círculo',effects:'ruído'}),defaultPlatformPreferences);
 });
+test('fonte e escala são restauradas sem afetar preferências antigas',()=>{assert.equal(normalizePlatformPreferences({font:'editorial',typeScale:'large'}).font,'editorial');assert.equal(normalizePlatformPreferences({font:'unknown',typeScale:'huge'}).typeScale,'normal');});

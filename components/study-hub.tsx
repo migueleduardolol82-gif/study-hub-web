@@ -3,6 +3,7 @@ import { HandWrittenTitle } from "@/components/ui/hand-writing-text";
 import { ParticleWave } from "@/components/ui/particle-wave";
 import { ShaderBackground } from "@/components/ui/kk";
 import { HomeMetricWidgetBoard, type MetricSnapshot } from "@/components/home-metric-widget-board";
+import { IconBook2, IconHome2, IconMenu2, IconPlus, IconRobot, IconSearch, IconShieldChevron, IconSparkles } from "@tabler/icons-react";
 import { defaultMetricWidgets, normalizeMetricWidgets, type MetricIndicator, type MetricWidgetConfig } from "@/lib/home-metric-widgets";
 /* State hydration and migrations below deliberately synchronize React with local/cloud storage. */
 /* eslint-disable react-hooks/set-state-in-effect */
@@ -34,7 +35,6 @@ import {
   ListChecks,
   LockKeyhole,
   LoaderCircle,
-  Menu,
   MessageCircle,
   MoreVertical,
   Plus,
@@ -1984,7 +1984,7 @@ export function StudyHub({
   }
 
   return (
-    <div className={`app-shell mode-${platformPreferences.mode} palette-${platformPreferences.palette} density-${platformPreferences.density} radius-${platformPreferences.radius} effects-${platformPreferences.effects}`} style={platformStyle}>
+    <div className={`app-shell mode-${platformPreferences.mode} palette-${platformPreferences.palette} density-${platformPreferences.density} radius-${platformPreferences.radius} effects-${platformPreferences.effects} font-${platformPreferences.font} type-${platformPreferences.typeScale}`} style={platformStyle}>
       {mobileNav && <button className="nav-backdrop" onClick={() => setMobileNav(false)} aria-label="Fechar navegação" />}
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
         <div className="brand">
@@ -2027,7 +2027,7 @@ export function StudyHub({
       <main className="workspace">
         <ShaderBackground className="mers-page-background" />
         <header className="topbar">
-          <button className="menu-button" onClick={() => setMobileNav(true)} aria-label="Abrir menu"><Menu /></button>
+          <button className="menu-button" onClick={() => setMobileNav(true)} aria-label="Abrir menu"><IconMenu2 size={23} stroke={1.8} /></button>
           <div>
             <span className="eyebrow" suppressHydrationWarning>{new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" }).toUpperCase()}</span>
             <h1>{viewLabels[tab]}</h1>
@@ -2035,8 +2035,8 @@ export function StudyHub({
           <div className="top-actions">
             <span className={`cloud-status ${cloudStatus}`}>{cloudStatus === "saved" ? "Salvo na nuvem" : cloudStatus === "saving" ? "Salvando…" : cloudStatus === "error" ? "Falha ao sincronizar" : cloudStatus === "loading" ? "Sincronizando…" : "Modo local"}</span>
             <div className="global-search"><label className="search-box"><Search size={17} /><input aria-label="Pesquisar em toda a plataforma" placeholder="Buscar em tudo" value={globalSearch} onFocus={() => setSearchOpen(true)} onChange={(event) => { setGlobalSearch(event.target.value); setSearchOpen(true); }} /></label>{searchOpen && normalizedSearch && <div className="search-results" role="listbox" aria-label="Resultados da busca">{searchResults.length ? searchResults.map(result => <button role="option" aria-selected="false" key={`${result.detail}:${result.id}`} onClick={() => openSearchResult(result)}><span><strong>{result.title}</strong><small>{result.detail}</small></span><ArrowRight size={16} /></button>) : <p>Nenhum resultado encontrado.</p>}</div>}</div>
-            <button className="mobile-search-button" aria-label="Abrir busca" onClick={() => setMobileSearchOpen(true)}><Search size={19} /></button>
-            <button className="outline-button" onClick={() => setTab("mentor")}><Sparkles size={17} /> Abrir Mentor</button>
+            <button className="mobile-search-button" aria-label="Abrir busca" onClick={() => setMobileSearchOpen(true)}><IconSearch size={21} stroke={1.8} /></button>
+            <button className="outline-button top-mentor-button" aria-label="Abrir Mentor" onClick={() => setTab("mentor")}><IconSparkles size={21} stroke={1.8} /><span>Abrir Mentor</span></button>
           </div>
         </header>
 
@@ -2719,9 +2719,9 @@ export function StudyHub({
 
       <nav className="mobile-bottom-nav" aria-label="Navegação principal no celular">
         {tabs.filter(item => item.id !== "profile").flatMap((item) => {
-          const Icon = item.icon;
-          const navigationButton = <button key={item.id} className={activeGlobalTab === item.id ? "active" : ""} aria-current={activeGlobalTab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); setMobileNav(false); }}><Icon size={20} /><span>{item.label}</span></button>;
-          return item.id === "study" ? [navigationButton, <button key="create" className="mobile-create" onClick={() => setQuickActionsOpen(true)} aria-label="Criar ou registrar"><Plus size={24} /><span>Criar</span></button>] : [navigationButton];
+          const Icon = item.id === "dashboard" ? IconHome2 : item.id === "study" ? IconBook2 : item.id === "evolution" ? IconShieldChevron : IconRobot;
+          const navigationButton = <button key={item.id} className={activeGlobalTab === item.id ? "active" : ""} aria-current={activeGlobalTab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); setMobileNav(false); }}><Icon size={23} stroke={1.8} /><span>{item.label}</span></button>;
+          return item.id === "study" ? [navigationButton, <button key="create" className="mobile-create" onClick={() => setQuickActionsOpen(true)} aria-label="Criar ou registrar"><IconPlus size={25} stroke={1.9} /><span>Criar</span></button>] : [navigationButton];
         })}
       </nav>
 

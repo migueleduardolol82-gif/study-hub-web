@@ -5,12 +5,13 @@ export type Habit = {
   contributions: { id: string; weight: number }[]; archived: boolean; created: string; kind?: 'habit'|'training'|'exam'; notes?: string;
 };
 export type HabitEntry = { habitId: string; date: string; value: number; target: number; name: string; unit: string };
-export type RoutineState = { habits: Habit[]; entries: HabitEntry[]; goals: Record<string, boolean>; dismissed: string[]; minutes: number; recovery: boolean };
-export const emptyRoutine = (): RoutineState => ({ habits: [], entries: [], goals: {}, dismissed: [], minutes: 90, recovery: false });
+export type ArchetypeLevel = 'zero'|'beginner'|'intermediate'|'advanced';
+export type RoutineState = { habits: Habit[]; entries: HabitEntry[]; goals: Record<string, boolean>; dismissed: string[]; minutes: number; recovery: boolean; archetypeLevels: Record<string,ArchetypeLevel> };
+export const emptyRoutine = (): RoutineState => ({ habits: [], entries: [], goals: {}, dismissed: [], minutes: 90, recovery: false, archetypeLevels: {} });
 export function localDate(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 export function shiftDate(date: string, days: number) { const d = new Date(`${date}T12:00:00`); d.setDate(d.getDate()+days); return localDate(d); }
 export function weekDates(date: string) { const day = new Date(`${date}T12:00:00`).getDay(); const start=shiftDate(date,-((day+6)%7)); return Array.from({length:7},(_,i)=>shiftDate(start,i)); }
-export function normalizeRoutine(value?: Partial<RoutineState> | null): RoutineState { return { ...emptyRoutine(), ...value, habits: Array.isArray(value?.habits)?value.habits:[], entries: Array.isArray(value?.entries)?value.entries:[], goals: value?.goals??{}, dismissed:value?.dismissed??[] }; }
+export function normalizeRoutine(value?: Partial<RoutineState> | null): RoutineState { const levels=value?.archetypeLevels??{}; return { ...emptyRoutine(), ...value, habits: Array.isArray(value?.habits)?value.habits:[], entries: Array.isArray(value?.entries)?value.entries:[], goals: value?.goals??{}, dismissed:value?.dismissed??[], archetypeLevels:Object.fromEntries(Object.entries(levels).filter((entry):entry is [string,ArchetypeLevel]=>['zero','beginner','intermediate','advanced'].includes(entry[1]))) }; }
 export function complete(entry?: HabitEntry) { return Boolean(entry && entry.value >= entry.target); }
 export function entryFor(state: RoutineState, id: string, date: string) { return state.entries.find(e=>e.habitId===id&&e.date===date); }
 export function due(h: Habit, date: string, state: RoutineState) {

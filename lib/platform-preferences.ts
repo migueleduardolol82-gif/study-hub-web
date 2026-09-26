@@ -19,8 +19,10 @@ export type PlatformDensity = 'comfortable'|'compact';
 export type PlatformRadius = 'rounded'|'soft'|'sharp';
 export type PlatformEffects = 'ambient'|'minimal';
 export type PlatformMode = 'dark'|'light';
-export type PlatformPreferences = {palette:PlatformPaletteId; customAccent:string; customSecondary:string; customBackground:string; customSurface:string; customText:string; customTextSecondary:string; customTextTertiary:string; widgets:HomeWidgetId[]; density:PlatformDensity; radius:PlatformRadius; effects:PlatformEffects; mode:PlatformMode};
-export const defaultPlatformPreferences: PlatformPreferences = {palette:'neon',customAccent:'',customSecondary:'',customBackground:'',customSurface:'',customText:'',customTextSecondary:'',customTextTertiary:'',widgets:['continue','today','evolution','shortcuts'],density:'comfortable',radius:'rounded',effects:'minimal',mode:'dark'};
+export type PlatformFont = 'geist'|'system'|'editorial'|'mono';
+export type PlatformTypeScale = 'compact'|'normal'|'large';
+export type PlatformPreferences = {palette:PlatformPaletteId; customAccent:string; customSecondary:string; customBackground:string; customSurface:string; customText:string; customTextSecondary:string; customTextTertiary:string; widgets:HomeWidgetId[]; density:PlatformDensity; radius:PlatformRadius; effects:PlatformEffects; mode:PlatformMode; font:PlatformFont; typeScale:PlatformTypeScale};
+export const defaultPlatformPreferences: PlatformPreferences = {palette:'neon',customAccent:'',customSecondary:'',customBackground:'',customSurface:'',customText:'',customTextSecondary:'',customTextTertiary:'',widgets:['continue','today','evolution','shortcuts'],density:'comfortable',radius:'rounded',effects:'minimal',mode:'dark',font:'geist',typeScale:'normal'};
 
 const hex=/^#[0-9a-f]{6}$/i;
 export function normalizePlatformPreferences(value: unknown): PlatformPreferences {
@@ -33,8 +35,10 @@ export function normalizePlatformPreferences(value: unknown): PlatformPreference
   const radius:PlatformRadius=raw.radius==='sharp'||raw.radius==='soft'?raw.radius:'rounded';
   const effects:PlatformEffects=raw.effects==='ambient'?'ambient':'minimal';
   const mode:PlatformMode=raw.mode==='light'?'light':'dark';
+  const font:PlatformFont=raw.font==='system'||raw.font==='editorial'||raw.font==='mono'?raw.font:'geist';
+  const typeScale:PlatformTypeScale=raw.typeScale==='compact'||raw.typeScale==='large'?raw.typeScale:'normal';
   const color = (value: unknown) => typeof value==='string'&&hex.test(value)?value:'';
-  return {palette,customAccent:color(raw.customAccent),customSecondary:color(raw.customSecondary),customBackground:color(raw.customBackground),customSurface:color(raw.customSurface),customText:color(raw.customText),customTextSecondary:color(raw.customTextSecondary),customTextTertiary:color(raw.customTextTertiary),widgets:[...widgets],density,radius,effects,mode};
+  return {palette,customAccent:color(raw.customAccent),customSecondary:color(raw.customSecondary),customBackground:color(raw.customBackground),customSurface:color(raw.customSurface),customText:color(raw.customText),customTextSecondary:color(raw.customTextSecondary),customTextTertiary:color(raw.customTextTertiary),widgets:[...widgets],density,radius,effects,mode,font,typeScale};
 }
 
 export function moveWidget(widgets: HomeWidgetId[], id: HomeWidgetId, direction: -1|1) {
