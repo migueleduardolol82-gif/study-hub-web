@@ -7,6 +7,7 @@ import "@/components/shadcn-theme.css";
 import "@/components/platform-flat.css";
 import "@/components/loading-brand.css";
 import "@/components/page-background.css";
+import "@/components/home-metric-widget-board.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

@@ -2,6 +2,8 @@
 import { HandWrittenTitle } from "@/components/ui/hand-writing-text";
 import { ParticleWave } from "@/components/ui/particle-wave";
 import { ShaderBackground } from "@/components/ui/kk";
+import { HomeMetricWidgetBoard, type MetricSnapshot } from "@/components/home-metric-widget-board";
+import { defaultMetricWidgets, normalizeMetricWidgets, type MetricIndicator, type MetricWidgetConfig } from "@/lib/home-metric-widgets";
 /* State hydration and migrations below deliberately synchronize React with local/cloud storage. */
 /* eslint-disable react-hooks/set-state-in-effect */
 
@@ -197,6 +199,7 @@ type DashboardState = {
   skillTracks: SkillTrack[];
   liveClasses: LiveClassSession[];
   platformPreferences?: PlatformPreferences;
+  metricWidgets?: MetricWidgetConfig[];
 };
 
 const initialMapping: Mapping = {
@@ -422,6 +425,7 @@ export function StudyHub({
   const previousTab = useRef<Tab>(tab);
   const [customizingHome, setCustomizingHome] = useState(false);
   const [platformPreferences, setPlatformPreferences] = useState<PlatformPreferences>(defaultPlatformPreferences);
+  const [metricWidgets, setMetricWidgets] = useState<MetricWidgetConfig[]>(() => defaultMetricWidgets.map((widget) => ({ ...widget })));
   const [timerSnapshot, setTimerSnapshot] = useState<TimerSnapshot>(() => initialTimer());
   const sessionMode = timerSnapshot.phase === "focus" ? "focus" : "break";
   const [goals, setGoals] = useState<Goal[]>(initialGoals);
@@ -564,6 +568,7 @@ export function StudyHub({
         if (Array.isArray(state.skillTracks)) setSkillTracks(state.skillTracks);
         if (Array.isArray(state.liveClasses)) setLiveClasses(recoverLiveClasses(state.liveClasses));
         setPlatformPreferences(normalizePlatformPreferences(state.platformPreferences));
+        setMetricWidgets(state.metricWidgets === undefined ? defaultMetricWidgets.map((widget) => ({ ...widget })) : normalizeMetricWidgets(state.metricWidgets));
       } else if (!authEnabled) {
         const stored = window.localStorage.getItem("nexo-goals-v1");
         if (stored) setGoals(JSON.parse(stored));
@@ -645,7 +650,8 @@ export function StudyHub({
     skillTracks,
     liveClasses,
     platformPreferences,
-  }), [routine, tertiaryArchetype, goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks, liveClasses, platformPreferences]);
+    metricWidgets,
+  }), [routine, tertiaryArchetype, goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks, liveClasses, platformPreferences, metricWidgets]);
 
   useEffect(() => {
     if (!storageReady || localReadFailed || (cloudEnabled && !cloudLoaded)) return;
@@ -704,6 +710,7 @@ export function StudyHub({
           setSkillTracks(Array.isArray(state.skillTracks) ? state.skillTracks : []);
           setLiveClasses(recoverLiveClasses(Array.isArray(state.liveClasses) ? state.liveClasses : []));
           setPlatformPreferences(normalizePlatformPreferences(state.platformPreferences));
+          setMetricWidgets(state.metricWidgets === undefined ? defaultMetricWidgets.map((widget) => ({ ...widget })) : normalizeMetricWidgets(state.metricWidgets));
         }
         setCloudStatus(state ? "saved" : "saving");
         if (!cancelled) setCloudLoaded(true);
@@ -896,6 +903,25 @@ export function StudyHub({
   const currentPathMasteryValues = Object.values(currentPathProgress.conceptMastery || {}).map(value => value.mastery || 0);
   const currentPathMastery = currentPathMasteryValues.length ? Math.round(currentPathMasteryValues.reduce((total, value) => total + value, 0) / currentPathMasteryValues.length) : 0;
   const dueReviews = learningPaths.reduce((total, path) => total + Object.values(learningProgress[path.id]?.conceptMastery || {}).filter(value => new Date(value.dueAt).getTime() <= Date.now()).length, 0);
+  const metricDates = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date();
+    day.setDate(day.getDate() - 6 + index);
+    return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+  });
+  const metricSeries = (type: "xp" | "study" | "training" | "active") => metricDates.map((date) => completedEvolutionLogs.filter((log) => log.createdAt.slice(0, 10) === date && (type === "xp" || type === "active" || (type === "study" ? log.type === "study" : log.type === "run" || log.type === "strength"))).reduce((total, log) => total + (type === "xp" ? log.xp : type === "active" ? 1 : log.minutes), 0));
+  const metricValues: Record<MetricIndicator, MetricSnapshot> = {
+    xp: { value: totalXp.toLocaleString("pt-BR"), detail: "XP acumulado", series: metricSeries("xp") },
+    streak: { value: String(currentStreak), detail: currentStreak === 1 ? "dia em sequência" : "dias em sequência", series: metricSeries("active") },
+    reviews: { value: String(dueReviews), detail: "conceitos para revisar" },
+    path: { value: `${currentPathCompletion}%`, detail: currentPath?.title || "Nenhuma trilha iniciada", progress: currentPathCompletion },
+    mastery: { value: `${currentPathMastery}%`, detail: "domínio da trilha atual", progress: currentPathMastery },
+    goals: { value: `${goalProgress}%`, detail: `${completedGoals} de ${goals.length} metas concluídas`, progress: goalProgress },
+    habits: { value: routineToday.length ? `${Math.round((routineToday.length - routinePending) / routineToday.length * 100)}%` : "—", detail: `${routineToday.length - routinePending} de ${routineToday.length} hábitos de hoje`, progress: routineToday.length ? Math.round((routineToday.length - routinePending) / routineToday.length * 100) : 0 },
+    study: { value: `${(weeklyByType("study") / 60).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h`, detail: "estudadas nos últimos 7 dias", series: metricSeries("study") },
+    training: { value: `${((weeklyByType("run") + weeklyByType("strength")) / 60).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h`, detail: "de treino nos últimos 7 dias", series: metricSeries("training") },
+    journeys: { value: `${journeyAverage}%`, detail: `${activeJourneys.length} jornadas ativas`, progress: journeyAverage },
+    plans: { value: `${planProgress}%`, detail: `${planCompletedCount} de ${planSessionCount} sessões`, progress: planProgress },
+  };
   const nextPlanSession = allPlanSessions.find(session => !session.done);
   const overallLevel = Math.round(averageSkill);
   const normalizedSearch = globalSearch.trim().toLocaleLowerCase("pt-BR");
@@ -2031,6 +2057,8 @@ export function StudyHub({
             <section className="home-greeting"><div><span className="eyebrow lime">SEU DIA</span><h2>Olá. Vamos evoluir?</h2><p>O que vamos evoluir hoje?</p></div><button className="home-customize-button" aria-expanded={customizingHome} onClick={() => setCustomizingHome(value => !value)}><SlidersHorizontal size={17} /> Personalizar</button></section>
 
             {customizingHome && <PlatformCustomizer value={platformPreferences} onChange={setPlatformPreferences} onClose={() => setCustomizingHome(false)} />}
+
+            <HomeMetricWidgetBoard widgets={metricWidgets} onChange={setMetricWidgets} values={metricValues} />
 
             {hasWidget("continue") && <section className="home-continue home-widget panel" style={{order:widgetOrder("continue")}}>
               <div className="home-section-title"><span>CONTINUAR</span><small>{currentPathProgress.reviewSession ? `Questão ${currentPathProgress.reviewSession.index + 1}` : "Seu último progresso"}</small></div>
