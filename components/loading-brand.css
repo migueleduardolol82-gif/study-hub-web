@@ -1,6 +1,18 @@
 .cloud-loading {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background: #08090a;
   color: #fff;
+}
+
+.mers-particle-wave {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .mers-loading {

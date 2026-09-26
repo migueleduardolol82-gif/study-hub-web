@@ -1,5 +1,6 @@
 "use client";
 import { HandWrittenTitle } from "@/components/ui/hand-writing-text";
+import { ParticleWave } from "@/components/ui/particle-wave";
 /* State hydration and migrations below deliberately synchronize React with local/cloud storage. */
 /* eslint-disable react-hooks/set-state-in-effect */
 
@@ -1948,7 +1949,7 @@ export function StudyHub({
   if (cloudEnabled && (!cloudLoaded || !openingFinished)) {
     return (
       <main className="cloud-loading">
-        {cloudStatus === "error" ? <><span className="brand"><span className="brand-mark"><Zap size={18} fill="currentColor" /></span><span>MERS</span></span><section className="cloud-recovery" role="alert"><HardDrive size={32} /><h1>Não foi possível abrir seu painel</h1><p>A conexão com seus dados falhou. Seus registros não foram substituídos.</p><button className="primary-button" onClick={() => { setCloudStatus("loading"); setCloudRetry(value => value + 1); }}><RotateCcw size={18} />Tentar novamente</button><small>Se a conexão continuar indisponível, tente novamente mais tarde.</small></section></> : <div className="mers-loading" role="status" aria-label="Carregando seu painel"><HandWrittenTitle title="Mers" subtitle="Organizando seu painel…" /><span className="mers-loading-line" aria-hidden="true" /></div>}
+        {cloudStatus === "error" ? <><span className="brand"><span className="brand-mark"><Zap size={18} fill="currentColor" /></span><span>MERS</span></span><section className="cloud-recovery" role="alert"><HardDrive size={32} /><h1>Não foi possível abrir seu painel</h1><p>A conexão com seus dados falhou. Seus registros não foram substituídos.</p><button className="primary-button" onClick={() => { setCloudStatus("loading"); setCloudRetry(value => value + 1); }}><RotateCcw size={18} />Tentar novamente</button><small>Se a conexão continuar indisponível, tente novamente mais tarde.</small></section></> : <><ParticleWave className="mers-particle-wave" /><div className="mers-loading" role="status" aria-label="Carregando seu painel"><HandWrittenTitle title="Mers" subtitle="Organizando seu painel…" /><span className="mers-loading-line" aria-hidden="true" /></div></>}
       </main>
     );
   }
