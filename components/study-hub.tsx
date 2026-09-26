@@ -1,6 +1,7 @@
 "use client";
 import { HandWrittenTitle } from "@/components/ui/hand-writing-text";
 import { ParticleWave } from "@/components/ui/particle-wave";
+import { ShaderBackground } from "@/components/ui/kk";
 /* State hydration and migrations below deliberately synchronize React with local/cloud storage. */
 /* eslint-disable react-hooks/set-state-in-effect */
 
@@ -1996,6 +1997,7 @@ export function StudyHub({
       </aside>
 
       <main className="workspace">
+        <ShaderBackground className="mers-page-background" />
         <header className="topbar">
           <button className="menu-button" onClick={() => setMobileNav(true)} aria-label="Abrir menu"><Menu /></button>
           <div>

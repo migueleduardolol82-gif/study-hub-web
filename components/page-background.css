@@ -1,0 +1,26 @@
+.app-shell .workspace {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+}
+
+.app-shell .mers-page-background {
+  position: fixed;
+  inset: 0 0 0 236px;
+  z-index: -1;
+  width: calc(100vw - 236px) !important;
+  height: 100dvh !important;
+  opacity: .42;
+  pointer-events: none;
+}
+
+.app-shell.mode-light .mers-page-background {
+  opacity: .14;
+}
+
+@media (max-width: 820px) {
+  .app-shell .mers-page-background {
+    inset: 0;
+    width: 100vw !important;
+  }
+}
