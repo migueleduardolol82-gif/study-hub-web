@@ -6,6 +6,8 @@
 .routine-area button.routine-primary,.routine-sheet button.routine-primary { background:#ceff58;color:#172009;border-color:#ceff58;font-weight:700; }
 .routine-heading { display:flex;align-items:center;justify-content:space-between;gap:12px; }
 .routine-tabs { display:flex;gap:6px;overflow-x:auto;max-width:100%;padding-block:6px; }
+.routine-tabs { scrollbar-width:none; }
+.routine-tabs::-webkit-scrollbar { display:none; }
 .routine-tabs button { flex-shrink:0;min-height:44px;padding:8px 13px;color:#adb2bd;background:transparent;border:0;border-bottom:2px solid transparent;border-radius:0; }
 .routine-tabs button[aria-current] { color:#ceff58;border-bottom-color:#ceff58; }
 .routine-area progress { width:100%;height:6px;accent-color:#ceff58; }
@@ -44,6 +46,34 @@
 .ascension-plan-row p { margin:0;line-height:1.6; }
 .ascension-increment { grid-column:1/-1;min-width:0; }
 .ascension-existing { display:contents; }
+.routine-area { color:var(--text-primary,#ecedf0); }
+.routine-area button,.routine-sheet button { color:var(--text-primary,#eef0f4);background:var(--surface-2,#1b1e23);border-color:var(--line,#34383e); }
+.routine-area button.routine-primary,.routine-sheet button.routine-primary { color:var(--surface-base,#172009);background:var(--accent,#ceff58);border-color:var(--accent,#ceff58); }
+.routine-tabs button[aria-current],.routine-status,.routine-tick[aria-pressed=true] { color:var(--accent-readable,var(--accent,#ceff58));border-color:var(--accent,#ceff58); }
+.routine-area progress { accent-color:var(--accent,#ceff58); }
+.routine-muted,.routine-area small { color:var(--text-secondary,#a4aab5); }
+.routine-area :is(input,select,textarea),.routine-sheet :is(input,select,textarea) { width:100%;min-height:44px;max-width:100%;padding:10px;color:var(--text-primary,#f4f5f7);background:var(--surface-2,#101318);border:1px solid var(--line,#414750);border-radius:9px;font:inherit;font-size:16px;color-scheme:inherit; }
+.routine-area textarea,.routine-sheet textarea { resize:vertical; }
+.routine-sheet { color:var(--text-primary,#f4f5f7);background:var(--surface-1,#15181d);border-color:var(--line,#353a42); }
+.routine-row { border-color:var(--line,#2c3037); }
+.routine-presets,.routine-assistant,.routine-calendar { display:grid;gap:14px;padding:clamp(16px,3vw,24px);background:color-mix(in srgb,var(--surface-1) 82%,transparent);border:1px solid var(--line);border-radius:18px;backdrop-filter:blur(18px); }
+.routine-presets > div { display:flex;flex-wrap:wrap;gap:8px; }
+.routine-presets p,.routine-assistant p,.routine-calendar p { margin:0; }
+.routine-calendar header { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.routine-calendar header h3 { text-transform:none; }
+.routine-calendar-grid { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px; }
+.routine-calendar-weekday { text-align:center;color:var(--text-secondary);font-size:.75rem; }
+.routine-area .routine-calendar-grid button { display:grid;align-content:start;justify-items:start;gap:3px;min-height:90px;padding:9px;text-align:left;border-radius:12px; }
+.routine-calendar-grid button.today { border-color:var(--accent); }
+.routine-calendar-grid button strong { font-size:1rem; }
+.routine-calendar-grid button span { font-size:.68rem;line-height:1.2;color:var(--accent-readable,var(--accent)); }
+.routine-assistant-intro { display:flex;align-items:center;gap:12px; }
+.routine-assistant-intro svg { color:var(--accent);flex-shrink:0; }
+.routine-file { display:flex!important;align-items:center;gap:10px;padding:12px;border:1px dashed var(--line);border-radius:12px;cursor:pointer; }
+.routine-file input { position:absolute;opacity:0;width:1px!important;height:1px; }
+.routine-proposals { display:grid;gap:14px; }
+.routine-proposals article { display:grid;gap:10px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2); }
+@media(max-width:700px) { .routine-calendar-grid { gap:3px; } .routine-area .routine-calendar-grid button { min-height:64px;padding:5px; } .routine-calendar-grid button span { font-size:.56rem; } }
 @media(max-width:700px) {
  .routine-week { grid-template-columns:1fr; }
  .routine-week > button { padding:16px; }

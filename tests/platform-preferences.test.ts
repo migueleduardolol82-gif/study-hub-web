@@ -5,7 +5,7 @@ import {defaultPlatformPreferences,moveWidget,normalizePlatformPreferences} from
 test('preferências antigas recebem tema e widgets sem alterar o objeto original',()=>{
   const legacy={palette:'apagada',customAccent:'red',widgets:['today','today','desconhecido']};
   const before=JSON.stringify(legacy),value=normalizePlatformPreferences(legacy);
-  assert.deepEqual(value,{palette:'neon',customAccent:'',widgets:['today'],density:'comfortable',radius:'rounded',effects:'minimal',mode:'dark'});
+  assert.deepEqual(value,{...defaultPlatformPreferences,widgets:['today']});
   assert.equal(JSON.stringify(legacy),before);
   assert.notEqual(normalizePlatformPreferences(null).widgets,defaultPlatformPreferences.widgets);
 });
@@ -19,6 +19,6 @@ test('widgets são reordenados dentro dos limites sem mutação',()=>{
 });
 
 test('personalização global normaliza densidade, cantos e efeitos',()=>{
-  assert.deepEqual(normalizePlatformPreferences({palette:'ice',customAccent:'#112233',widgets:['focus'],density:'compact',radius:'sharp',effects:'minimal',mode:'light'}),{palette:'ice',customAccent:'#112233',widgets:['focus'],density:'compact',radius:'sharp',effects:'minimal',mode:'light'});
+  assert.deepEqual(normalizePlatformPreferences({palette:'ice',customAccent:'#112233',customText:'#abcdef',customSurface:'invalid',widgets:['focus'],density:'compact',radius:'sharp',effects:'minimal',mode:'light'}),{...defaultPlatformPreferences,palette:'ice',customAccent:'#112233',customText:'#abcdef',widgets:['focus'],density:'compact',radius:'sharp',effects:'minimal',mode:'light'});
   assert.deepEqual(normalizePlatformPreferences({density:'gigante',radius:'círculo',effects:'ruído'}),defaultPlatformPreferences);
 });

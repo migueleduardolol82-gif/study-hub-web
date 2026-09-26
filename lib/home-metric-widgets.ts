@@ -23,6 +23,7 @@ export interface MetricWidgetConfig {
   size: MetricWidgetSize;
   view: MetricWidgetView;
   prompt: string;
+  color?: string;
 }
 
 export const defaultMetricWidgets: MetricWidgetConfig[] = [
@@ -52,6 +53,7 @@ export function normalizeMetricWidgets(value: unknown): MetricWidgetConfig[] {
       size: sizes.has(item.size as MetricWidgetSize) ? item.size as MetricWidgetSize : "sm",
       view: views.has(item.view as MetricWidgetView) ? item.view as MetricWidgetView : "number",
       prompt: typeof item.prompt === "string" ? item.prompt.slice(0, 300) : "",
+      ...(typeof item.color === "string" && /^#[0-9a-f]{6}$/i.test(item.color) ? { color: item.color } : {}),
     }];
   });
 }

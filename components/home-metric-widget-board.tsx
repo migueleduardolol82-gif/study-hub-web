@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
 import { Grip, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { DraggableWidgetGrid, type WidgetItem } from "@/components/ui/draggable-widget-grid";
 import { metricIndicators, widgetFromPrompt, type MetricIndicator, type MetricWidgetConfig, type MetricWidgetSize, type MetricWidgetView } from "@/lib/home-metric-widgets";
@@ -16,6 +16,7 @@ interface Props {
   widgets: MetricWidgetConfig[];
   onChange: (widgets: MetricWidgetConfig[]) => void;
   values: Record<MetricIndicator, MetricSnapshot>;
+  themeAccent: string;
 }
 
 const sizeOptions: { value: MetricWidgetSize; label: string }[] = [
@@ -42,7 +43,7 @@ function MetricTile({ widget, snapshot, onEdit, onRemove, rearranging }: {
   const series = snapshot.series ?? [];
   const maximum = Math.max(...series, 1);
   return (
-    <article className="mers-metric-tile">
+    <article className="mers-metric-tile" style={widget.color ? { "--widget-accent": widget.color } as CSSProperties : undefined}>
       <div className="mers-metric-tile-head">
         <span>{widget.title}</span>
         {rearranging ? <Grip size={17} aria-hidden="true" /> : <div className="mers-metric-actions"><button type="button" onClick={onEdit} aria-label={`Editar ${widget.title}`}><Pencil size={15} /></button><button type="button" onClick={onRemove} aria-label={`Remover ${widget.title}`}><Trash2 size={15} /></button></div>}
@@ -58,7 +59,7 @@ function MetricTile({ widget, snapshot, onEdit, onRemove, rearranging }: {
   );
 }
 
-export function HomeMetricWidgetBoard({ widgets, onChange, values }: Props) {
+export function HomeMetricWidgetBoard({ widgets, onChange, values, themeAccent }: Props) {
   const [formOpen, setFormOpen] = useState(false);
   const [rearranging, setRearranging] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -67,6 +68,7 @@ export function HomeMetricWidgetBoard({ widgets, onChange, values }: Props) {
   const [size, setSize] = useState<MetricWidgetSize>("sm");
   const [view, setView] = useState<MetricWidgetView>("number");
   const [prompt, setPrompt] = useState("");
+  const [color, setColor] = useState("");
 
   const openCreate = () => {
     setEditingId(null);
@@ -75,6 +77,7 @@ export function HomeMetricWidgetBoard({ widgets, onChange, values }: Props) {
     setSize("sm");
     setView("number");
     setPrompt("");
+    setColor("");
     setRearranging(false);
     setFormOpen(true);
   };
@@ -85,11 +88,12 @@ export function HomeMetricWidgetBoard({ widgets, onChange, values }: Props) {
     setSize(widget.size);
     setView(widget.view);
     setPrompt(widget.prompt);
+    setColor(widget.color || "");
     setFormOpen(true);
   };
   const save = (event: FormEvent) => {
     event.preventDefault();
-    const next = widgetFromPrompt(prompt, indicator, title, size, view);
+    const next = { ...widgetFromPrompt(prompt, indicator, title, size, view), color: color || undefined };
     if (editingId) onChange(widgets.map((item) => item.id === editingId ? { ...next, id: editingId } : item));
     else onChange([...widgets, next]);
     setFormOpen(false);
@@ -112,6 +116,7 @@ export function HomeMetricWidgetBoard({ widgets, onChange, values }: Props) {
           <label>Título<input maxLength={60} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={metricIndicators.find((item) => item.id === indicator)?.label} /></label>
           <label>Visual<select value={view} onChange={(event) => setView(event.target.value as MetricWidgetView)}>{viewOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
           <label>Tamanho<select value={size} onChange={(event) => setSize(event.target.value as MetricWidgetSize)}>{sizeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <label>Cor do widget<span className="home-metric-color"><input type="color" value={color || themeAccent} onChange={(event) => setColor(event.target.value)} aria-label="Cor do widget" /><button type="button" onClick={() => setColor("")}>{color ? "Usar cor do tema" : "Cor do tema"}</button></span></label>
         </div>
         <label className="home-metric-prompt">Descreva seu widget<textarea maxLength={300} rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={'Ex.: Mostre meu estudo da semana em barras, em um cartão largo chamado "Meu ritmo".'} /><small>O texto reconhece “barras”, “progresso”, “número”, “compacto”, “largo”, “alto”, “grande” e títulos entre aspas. Os valores vêm dos seus registros.</small></label>
         <div className="home-metric-form-footer"><button type="button" className="outline-button" onClick={() => { setPrompt(""); setTitle(""); setSize("sm"); setView("number"); }}><RotateCcw size={16} />Limpar</button><button type="submit" className="primary-button">{editingId ? "Salvar widget" : "Adicionar ao painel"}</button></div>

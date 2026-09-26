@@ -2,7 +2,7 @@ export type Habit = {
   id: string; name: string; target: number; unit: string; period: 'Manhã'|'Tarde'|'Noite'|'Sem horário'; time: string;
   frequency: 'daily'|'days'|'weekly'|'monthly'|'once'; days: number[]; times: number; date: string;
   skillId: string; routine: string; minutes: number; importance: number; physical: boolean;
-  contributions: { id: string; weight: number }[]; archived: boolean; created: string;
+  contributions: { id: string; weight: number }[]; archived: boolean; created: string; kind?: 'habit'|'training'|'exam'; notes?: string;
 };
 export type HabitEntry = { habitId: string; date: string; value: number; target: number; name: string; unit: string };
 export type RoutineState = { habits: Habit[]; entries: HabitEntry[]; goals: Record<string, boolean>; dismissed: string[]; minutes: number; recovery: boolean };
@@ -41,7 +41,18 @@ export function weekSummary(state: RoutineState,date: string) {
 }
 export type ArchetypePlan = { id:string; name:string; dailyProtocol:string[]; milestones:string[] };
 export function archetypeWeights(ids:string[]) { const unique=[...new Set(ids.filter(Boolean))].slice(0,3); const weights=[50,30,20];const total=weights.slice(0,unique.length).reduce((a,b)=>a+b,0);return unique.map((id,i)=>({id,weight:weights[i]/total})); }
-export function habitTemplate(name:string,date=localDate()):Habit { return {id:crypto.randomUUID(),name,target:1,unit:'vez',period:'Sem horário',time:'',frequency:'daily',days:[1,2,3,4,5],times:3,date,skillId:'',routine:'',minutes:15,importance:3,physical:false,contributions:[],archived:false,created:date}; }
+export function habitTemplate(name:string,date=localDate()):Habit { return {id:crypto.randomUUID(),name,target:1,unit:'vez',period:'Sem horário',time:'',frequency:'daily',days:[1,2,3,4,5],times:3,date,skillId:'',routine:'',minutes:15,importance:3,physical:false,contributions:[],archived:false,created:date,kind:'habit',notes:''}; }
+export const habitPresets = [
+  {name:'Estudo focado',kind:'habit',unit:'min',target:40,minutes:40,physical:false,frequency:'daily'},
+  {name:'Revisão ativa',kind:'habit',unit:'cartões',target:20,minutes:20,physical:false,frequency:'daily'},
+  {name:'Leitura',kind:'habit',unit:'páginas',target:15,minutes:25,physical:false,frequency:'daily'},
+  {name:'Treino de força',kind:'training',unit:'séries',target:12,minutes:50,physical:true,frequency:'weekly'},
+  {name:'Corrida',kind:'training',unit:'km',target:5,minutes:35,physical:true,frequency:'weekly'},
+  {name:'Mobilidade',kind:'training',unit:'min',target:15,minutes:15,physical:true,frequency:'weekly'},
+  {name:'Dia de prova',kind:'exam',unit:'prova',target:1,minutes:120,physical:false,frequency:'once'},
+] as const;
+export const skillPresets = ['Concentração','Memorização','Escrita','Matemática','Comunicação','Condicionamento físico','Força','Organização'];
+export function habitFromPreset(preset:typeof habitPresets[number],date=localDate()):Habit { return {...habitTemplate(preset.name,date),kind:preset.kind,target:preset.target,unit:preset.unit,minutes:preset.minutes,physical:preset.physical,frequency:preset.frequency,times:preset.frequency==='weekly'?3:1}; }
 const key=(name:string)=>name.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
 export function priorities(state:RoutineState,archetypes:ArchetypePlan[],ids:string[],date:string,deficits:Record<string,number>={}) {
   const weights=archetypeWeights(ids);const candidates=new Map<string,Habit>();
