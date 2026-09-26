@@ -106,7 +106,7 @@ export function HomeMetricWidgetBoard({ widgets, onChange, values, themeAccent }
     <section className="home-metric-board" aria-labelledby="home-metrics-title">
       <div className="home-metric-board-header">
         <div><span className="eyebrow">SEU PAINEL</span><h3 id="home-metrics-title">Indicadores à sua maneira</h3><p>Escolha um indicador real, crie o visual e organize os cartões.</p></div>
-        <div className="home-metric-board-buttons"><button type="button" className="outline-button" onClick={() => setRearranging((value) => !value)} aria-pressed={rearranging} disabled={!widgets.length}><Grip size={17} />{rearranging ? "Concluir" : "Mover"}</button><button type="button" className="primary-button" onClick={openCreate}><Plus size={17} />Criar widget</button></div>
+        <div className="home-metric-board-buttons"><button type="button" className="outline-button" title={rearranging ? "Concluir organização" : "Mover widgets"} aria-label={rearranging ? "Concluir organização dos widgets" : "Mover widgets"} onClick={() => setRearranging((value) => !value)} aria-pressed={rearranging} disabled={!widgets.length}><Grip size={19} /></button><button type="button" className="outline-button" title="Criar widget" aria-label="Criar widget" onClick={openCreate}><Plus size={20} /></button></div>
       </div>
 
       {formOpen && <form className="home-metric-form panel" onSubmit={save}>
@@ -122,7 +122,7 @@ export function HomeMetricWidgetBoard({ widgets, onChange, values, themeAccent }
         <div className="home-metric-form-footer"><button type="button" className="outline-button" onClick={() => { setPrompt(""); setTitle(""); setSize("sm"); setView("number"); }}><RotateCcw size={16} />Limpar</button><button type="submit" className="primary-button">{editingId ? "Salvar widget" : "Adicionar ao painel"}</button></div>
       </form>}
 
-      {widgets.length ? <><p className="home-metric-hint">{rearranging ? "Arraste os cartões. No celular, pressione e segure; no teclado, use Alt + setas." : "Toque em Mover para reorganizar seus widgets."}</p><DraggableWidgetGrid key={gridKey} items={items} editable={rearranging} cellSize={215} maxColumns={4} gap={14} onChange={(order) => onChange(order.flatMap(({ id }) => widgets.find((widget) => widget.id === id) ?? []))} renderItem={(item) => {
+      {widgets.length ? <>{rearranging && <p className="home-metric-hint">Arraste os cartões. No celular, pressione e segure; no teclado, use Alt + setas.</p>}<DraggableWidgetGrid key={gridKey} items={items} editable={rearranging} cellSize={250} maxColumns={4} gap={14} onChange={(order) => onChange(order.flatMap(({ id }) => widgets.find((widget) => widget.id === id) ?? []))} renderItem={(item) => {
         const widget = widgets.find((entry) => entry.id === item.id);
         return widget ? <MetricTile widget={widget} snapshot={values[widget.indicator]} onEdit={() => openEdit(widget)} onRemove={() => onChange(widgets.filter((entry) => entry.id !== widget.id))} rearranging={rearranging} /> : null;
       }} /></> : <div className="home-metric-empty-state"><Plus size={24} /><strong>Seu painel começa aqui</strong><p>Crie um widget para acompanhar XP, estudo, metas ou outro indicador.</p><button type="button" onClick={openCreate}>Escolher indicador</button></div>}

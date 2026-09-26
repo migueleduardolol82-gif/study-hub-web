@@ -623,7 +623,7 @@ const Widget = memo(function Widget({
 				zIndex: held ? 20 : raised ? 10 : 0,
 			}}>
 			<motion.div
-				initial={{ opacity: 0, y: 18, scale: 0.97 }}
+				initial={false}
 				animate={{ opacity: 1, y: 0, scale: 1 }}
 				transition={{
 					type: 'spring',

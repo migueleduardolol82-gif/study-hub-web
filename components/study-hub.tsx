@@ -3,7 +3,9 @@ import { HandWrittenTitle } from "@/components/ui/hand-writing-text";
 import { ParticleWave } from "@/components/ui/particle-wave";
 import { ShaderBackground } from "@/components/ui/kk";
 import { HomeMetricWidgetBoard, type MetricSnapshot } from "@/components/home-metric-widget-board";
-import { IconBook2, IconHome2, IconMenu2, IconPlus, IconRobot, IconSearch, IconShieldChevron, IconSparkles } from "@tabler/icons-react";
+import { HomeInspiration } from "@/components/home-inspiration";
+import { readableColor } from "@/lib/platform-colors";
+import { IconAdjustmentsHorizontal, IconBook2, IconHome2, IconMenu2, IconPlus, IconRobot, IconSearch, IconShieldChevron, IconSparkles } from "@tabler/icons-react";
 import { defaultMetricWidgets, normalizeMetricWidgets, type MetricIndicator, type MetricWidgetConfig } from "@/lib/home-metric-widgets";
 /* State hydration and migrations below deliberately synchronize React with local/cloud storage. */
 /* eslint-disable react-hooks/set-state-in-effect */
@@ -316,10 +318,10 @@ const archetypes: Archetype[] = [
     color: "#ff8d72",
     horizon: "3–4 anos",
     requirements: { body: 84, discipline: 78, knowledge: 42 },
-    milestones: ["Treinar 600 sessões", "Correr 3.000 km acumulados", "Completar uma maratona forte", "Manter força e mobilidade sem lesões"],
+    milestones: ["Estabelecer uma frequência semanal de treinos adequada ao nível", "Completar ciclos de treino com registro de esforço e recuperação", "Melhorar um indicador da modalidade escolhida", "Manter força e mobilidade com consistência"],
     phases: [
-      { period: "0–6 meses", name: "Base", actions: ["Treinar 4 vezes por semana", "Regular sono e alimentação", "Fortalecer joelhos, quadril e core"] },
-      { period: "6–18 meses", name: "Resistente", actions: ["Periodizar corrida e força", "Competir sem interromper a rotina", "Registrar carga e recuperação"] },
+      { period: "0–6 meses", name: "Base", actions: ["Começar com 2–3 sessões por semana e ajustar pelo nível", "Regular sono e alimentação", "Desenvolver força e mobilidade geral"] },
+      { period: "6–18 meses", name: "Resistente", actions: ["Periodizar modalidade e força", "Praticar técnica sem interromper a rotina", "Registrar carga e recuperação"] },
       { period: "18–36 meses", name: "Competidor", actions: ["Executar ciclos específicos", "Aumentar volume com segurança", "Dominar estratégia de prova"] },
       { period: "3–4 anos", name: "Atleta", actions: ["Sustentar alto desempenho", "Transformar disciplina em identidade", "Ajudar outros pelo exemplo"] },
     ],
@@ -937,19 +939,19 @@ export function StudyHub({
   const lightMode = platformPreferences.mode === "light";
   const surfaceBase = platformPreferences.customBackground || (lightMode ? "#f1efe9" : selectedPalette.base);
   const surface = platformPreferences.customSurface || (lightMode ? "#fbfaf7" : selectedPalette.surface);
-  const primaryText = platformPreferences.customText || (lightMode ? "#141310" : "#f4f6f7");
-  const secondaryText = platformPreferences.customTextSecondary || (lightMode ? "#68645d" : "#949ba6");
+  const primaryText = readableColor(platformPreferences.customText || (lightMode ? "#141310" : "#f4f6f7"), surface, 4.5);
+  const secondaryText = readableColor(platformPreferences.customTextSecondary || (lightMode ? "#68645d" : "#949ba6"), surface, 4.5);
   const platformStyle = {
     "--accent": accent, "--lime": accent, "--lime-dark": accent,
     "--accent-2": platformPreferences.customSecondary || selectedPalette.accent2, "--purple": platformPreferences.customSecondary || selectedPalette.accent2,
-    "--accent-readable": lightMode ? `color-mix(in srgb, ${accent} 48%, #111111)` : accent,
+    "--accent-readable": readableColor(accent, surface, 4.5),
     "--surface-base": surfaceBase, "--paper": surfaceBase,
     "--surface-1": surface, "--card": surface,
     "--surface-2": lightMode ? "#ece9e2" : "#171a1f",
     "--surface-3": lightMode ? "#e3dfd6" : "#1d2026",
     "--text-primary": primaryText, "--text": primaryText,
     "--text-secondary": secondaryText, "--muted": secondaryText,
-    "--text-tertiary": platformPreferences.customTextTertiary || (lightMode ? "#827d76" : "#747b86"),
+    "--text-tertiary": readableColor(platformPreferences.customTextTertiary || (lightMode ? "#827d76" : "#747b86"), surface, 3),
     "--line": lightMode ? "#d4cfc4" : "#292c31", "--border": lightMode ? "#d4cfc4" : "#292c31",
   } as CSSProperties;
   const hasWidget = (id: HomeWidgetId) => platformPreferences.widgets.includes(id);
@@ -2036,6 +2038,7 @@ export function StudyHub({
             <span className={`cloud-status ${cloudStatus}`}>{cloudStatus === "saved" ? "Salvo na nuvem" : cloudStatus === "saving" ? "Salvando…" : cloudStatus === "error" ? "Falha ao sincronizar" : cloudStatus === "loading" ? "Sincronizando…" : "Modo local"}</span>
             <div className="global-search"><label className="search-box"><Search size={17} /><input aria-label="Pesquisar em toda a plataforma" placeholder="Buscar em tudo" value={globalSearch} onFocus={() => setSearchOpen(true)} onChange={(event) => { setGlobalSearch(event.target.value); setSearchOpen(true); }} /></label>{searchOpen && normalizedSearch && <div className="search-results" role="listbox" aria-label="Resultados da busca">{searchResults.length ? searchResults.map(result => <button role="option" aria-selected="false" key={`${result.detail}:${result.id}`} onClick={() => openSearchResult(result)}><span><strong>{result.title}</strong><small>{result.detail}</small></span><ArrowRight size={16} /></button>) : <p>Nenhum resultado encontrado.</p>}</div>}</div>
             <button className="mobile-search-button" aria-label="Abrir busca" onClick={() => setMobileSearchOpen(true)}><IconSearch size={21} stroke={1.8} /></button>
+            {tab === "dashboard" && <button className="home-customize-button" aria-label="Personalizar página inicial" title="Personalizar página inicial" aria-expanded={customizingHome} onClick={() => setCustomizingHome(value => !value)}><IconAdjustmentsHorizontal size={21} stroke={1.8} /></button>}
             <button className="outline-button top-mentor-button" aria-label="Abrir Mentor" onClick={() => setTab("mentor")}><IconSparkles size={21} stroke={1.8} /><span>Abrir Mentor</span></button>
           </div>
         </header>
@@ -2056,7 +2059,7 @@ export function StudyHub({
 
         {tab === "dashboard" && (
           <div className="home-app">
-            <section className="home-greeting"><div><span className="eyebrow lime">SEU DIA</span><h2>Olá. Vamos evoluir?</h2><p>O que vamos evoluir hoje?</p></div><button className="home-customize-button" aria-expanded={customizingHome} onClick={() => setCustomizingHome(value => !value)}><SlidersHorizontal size={17} /> Personalizar</button></section>
+            <section className="home-greeting"><HomeInspiration /></section>
 
             {customizingHome && <PlatformCustomizer value={platformPreferences} onChange={setPlatformPreferences} onClose={() => setCustomizingHome(false)} />}
 

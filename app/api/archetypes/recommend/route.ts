@@ -43,6 +43,8 @@ export async function POST(request: Request) {
 
 Use padrões recorrentes observáveis em casos públicos de alto desempenho da área: prática deliberada, produção, feedback, ética, julgamento, colaboração, saúde sustentável e criação de valor. Cite 2 ou 3 casos públicos amplamente documentados por arquétipo apenas como modelos de aprendizagem. Não invente biografias, números ou hábitos privados e não prometa que imitar alguém produz o mesmo resultado. Se não houver segurança sobre um nome específico, use uma organização, equipe ou tradição profissional verificável.
 
+Quando criar um arquétipo esportivo, use referências públicas de treinamento sem inventar números de atletas individuais. Defina metas em número de sessões, duração aproximada, técnica, força e recuperação progressivas. Não presuma corrida, distância, km, pace, maratona ou modalidade que o usuário não informou. Evite copiar cargas de atletas profissionais para iniciantes. A referência geral da OMS para adultos é 150–300 minutos semanais de atividade aeróbica moderada e fortalecimento em pelo menos 2 dias; para quem começa do zero, avance gradualmente.
+
 Personalize fitScore e justificativa com os atributos fornecidos, sem tratar renda, personalidade, gênero, país ou origem como mérito. Personalidade serve para adaptar a rota. O horizonte deve ser realista, de 3 a 10 anos. Cada marco deve ser verificável. O protocolo diário deve caber em uma rotina real; o plano semanal deve cobrir exatamente segunda a domingo e combinar o arquétipo principal com saúde e reflexão. Use frases objetivas em cada ação para entregar a estrutura completa dentro do tempo disponível. Escreva em português do Brasil, com profundidade, clareza e sem linguagem clínica.`,
       input,
     });
