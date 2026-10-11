@@ -74,6 +74,7 @@ import { emptyPathProgress, type ContentMapping, type LearningPath, type Learnin
 import type { StudyDocument } from "@/lib/study-documents";
 import { DocumentUploadPanel } from "@/components/document-upload-panel";
 import { PlatformCustomizer } from "@/components/platform-customizer";
+import { PersonalAssistant } from "@/components/personal-assistant";
 import { defaultPlatformPreferences, normalizePlatformPreferences, platformPalettes, type HomeWidgetId, type PlatformPreferences } from "@/lib/platform-preferences";
 import { analyzeStudyDocuments } from "@/lib/document-analysis-client";
 import type { SkillTrack } from "@/lib/ascension-index";
@@ -368,12 +369,12 @@ const tabs: { id: Tab; label: string; icon: typeof BarChart3 }[] = [
   { id: "dashboard", label: "Início", icon: Home },
   { id: "study", label: "Estudar", icon: BookOpen },
   { id: "evolution", label: "Evolução", icon: Shield },
-  { id: "mentor", label: "Mentor", icon: Bot },
+  { id: "mentor", label: "Assistente", icon: Bot },
   { id: "profile", label: "Perfil", icon: UserRound },
 ];
 
 const viewLabels: Record<Tab, string> = {
-  avatar: "Avatar", dashboard: "Início", study: "Estudar", mentor: "Mentor", profile: "Perfil", today: "Rotina", journeys: "Jornadas",
+  avatar: "Avatar", dashboard: "Início", study: "Estudar", mentor: "Assistente", profile: "Perfil", today: "Rotina", journeys: "Jornadas",
   mapping: "Mapas preservados", themes: "Temas preservados", review: "Revisão Ativa", evolution: "Evolução", sessions: "Aulas e estudos", plans: "Planos",
 };
 
@@ -417,6 +418,9 @@ export function StudyHub({
   cloudEnabled?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("dashboard");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("assistant") === "integrations") setTab("mentor");
+  }, []);
   const [mobileNav, setMobileNav] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
@@ -532,7 +536,9 @@ export function StudyHub({
 
   useEffect(() => {
     try {
-      const v3 = window.localStorage.getItem(dashboardStorageKey) || window.localStorage.getItem(accountId ? `nexo-dashboard-v5:${accountId}` : "nexo-dashboard-v5") || window.localStorage.getItem(accountId ? `nexo-dashboard-v4:${accountId}` : "nexo-dashboard-v4") || window.localStorage.getItem(accountId ? `nexo-dashboard-v3:${accountId}` : "nexo-dashboard-v3");
+      // Signed-in data is loaded from the account-scoped server record only.
+      // Browser storage is shared across accounts on the same device.
+      const v3 = authEnabled ? null : window.localStorage.getItem(dashboardStorageKey) || window.localStorage.getItem("nexo-dashboard-v5") || window.localStorage.getItem("nexo-dashboard-v4") || window.localStorage.getItem("nexo-dashboard-v3");
       if (v3) {
         const state = JSON.parse(v3) as Partial<DashboardState>;
         if (Array.isArray(state.goals)) setGoals(state.goals);
@@ -597,7 +603,7 @@ export function StudyHub({
         const storedGoal = window.localStorage.getItem("nexo-study-goal-v1");
         if (storedGoal) setStudyGoal(storedGoal);
       }
-      if (authEnabled && !window.localStorage.getItem(legacyMarkerKey)) {
+      if (!authEnabled && !window.localStorage.getItem(legacyMarkerKey)) {
         const hasLegacy = Boolean(
           window.localStorage.getItem("nexo-dashboard-v3")
             || window.localStorage.getItem("nexo-personal-map-v1")
@@ -655,7 +661,7 @@ export function StudyHub({
   }), [routine, tertiaryArchetype, goals, studyPlans, activePlanId, skillLevels, evolutionLogs, assessmentResult, dailyMissionChecks, selectedArchetype, secondaryArchetype, generatedArchetypes, archetypeSummary, archetypeArea, archetypeContext, mapping, courseName, studyGoal, transcript, syllabus, syllabusName, quiz, flashcards, sessionMode, timerSnapshot, themes, studyMaps, activeStudyMapId, learningPaths, learningProgress, documents, journeys, skillTracks, liveClasses, platformPreferences, metricWidgets]);
 
   useEffect(() => {
-    if (!storageReady || localReadFailed || (cloudEnabled && !cloudLoaded)) return;
+    if (authEnabled || !storageReady || localReadFailed || (cloudEnabled && !cloudLoaded)) return;
     try {
       window.localStorage.setItem(dashboardStorageKey, JSON.stringify(dashboardState));
       setLocalWriteFailed(false);
@@ -663,7 +669,7 @@ export function StudyHub({
       setLocalWriteFailed(true);
       setNotice("O armazenamento deste navegador está cheio ou indisponível. Não feche a página antes de confirmar o salvamento na nuvem.");
     }
-  }, [dashboardState, dashboardStorageKey, storageReady, cloudEnabled, cloudLoaded, localReadFailed]);
+  }, [authEnabled, dashboardState, dashboardStorageKey, storageReady, cloudEnabled, cloudLoaded, localReadFailed]);
 
   useEffect(() => {
     if (!cloudEnabled || !storageReady) return;
@@ -2715,7 +2721,7 @@ export function StudyHub({
           />
         )}
 
-        {tab === "mentor" && <div className="mentor-page"><section className="mentor-page-head"><span className="bot-avatar"><Bot /></span><div><span className="eyebrow lime">MENTOR MERS</span><h2>Converse, decida e aprenda.</h2><p>O mentor considera sua trilha, seu material e seu contexto atual.</p></div></section><section className="mentor-workspace panel"><div className="mentor-prompts"><button onClick={() => setChatText("Analise esta situação comigo")}>Analisar situação</button><button onClick={() => setChatText("Ajude-me a tomar uma decisão")}>Decidir</button><button onClick={() => setChatText("Explique minha maior lacuna de forma simples")}>Aprender</button><button onClick={() => setChatText("Questione minhas premissas e me contradiga se necessário")}>Me contradiga</button></div><div className="mentor-messages" aria-live="polite">{chatMessages.map((message, index) => <div key={index} className={`chat-message ${message.role}`}>{message.text}</div>)}{chatBusy && <div className="chat-message assistant typing" role="status" aria-label="Mentor preparando resposta"><i /><i /><i /></div>}{chatError}</div><form className="mentor-composer" onSubmit={sendChat}><label><span className="sr-only">Mensagem para o mentor</span><textarea value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Converse com seu mentor..." /></label><button aria-label="Enviar mensagem" disabled={!chatText.trim() || chatBusy}><Send /></button></form></section></div>}
+        {tab === "mentor" && <PersonalAssistant />}
 
         {tab === "profile" && <div className="profile-page"><section className="profile-hero panel"><span className="profile-avatar"><UserRound aria-hidden="true" /></span><div><span className="eyebrow lime">SEU PERFIL</span><h2>Seu espaço de evolução</h2><p>{cloudStatus === "saved" ? "Dados sincronizados com sua conta." : localReadFailed || localWriteFailed ? "O salvamento local precisa de atenção." : cloudStatus === "error" ? "A sincronização precisa de atenção." : cloudEnabled ? "Sincronização em andamento." : "Seus dados ficam neste dispositivo."}</p></div></section><PlatformCustomizer value={platformPreferences} onChange={setPlatformPreferences} /><section className="profile-settings panel"><div className="home-section-title"><span>CONTA E DADOS</span></div><div className="profile-setting-row"><span><strong>Sincronização</strong><small>Trilhas, atividades, planos e progresso</small></span><em className={cloudStatus}>{cloudStatus === "saved" ? "Tudo salvo" : cloudStatus === "saving" ? "Salvando" : cloudStatus === "error" ? "Cópia local" : cloudEnabled ? "Sincronizando" : "Modo local"}</em></div><div className="profile-setting-row"><span><strong>Conteúdo preservado</strong><small>{learningPaths.length} trilhas · {studyPlans.length} planos · {journeys.length} jornadas</small></span><CheckCircle2 /></div><div className="profile-account"><AccountControl enabled={authEnabled} /></div></section><section className="profile-settings panel"><div className="home-section-title"><span>PREFERÊNCIAS</span></div><button className="profile-link" onClick={() => setTab("evolution")}><span><strong>Evolução e atributos</strong><small>Níveis, ranking e histórico</small></span><ArrowRight /></button><button className="profile-link" onClick={() => setTab("journeys")}><span><strong>Jornadas pessoais</strong><small>Estudos, treino, leitura e metas</small></span><ArrowRight /></button></section></div>}
       </main>
@@ -2767,3 +2773,4 @@ export function StudyHub({
     </div>
   );
 }
+

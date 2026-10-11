@@ -13,5 +13,6 @@ export default async function Home() {
     if (!userId) redirect("/sign-in");
     accountId = userId;
   }
-  return <StudyHub accountId={accountId} authEnabled={authEnabled} cloudEnabled={isCloudConfigured()} />;
+  return <StudyHub key={accountId ?? "local"} accountId={accountId} authEnabled={authEnabled} cloudEnabled={isCloudConfigured()} />;
 }
+
