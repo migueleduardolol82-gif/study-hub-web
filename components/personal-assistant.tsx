@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CalendarDays, Check, MessageSquare, Plus, Send, Trash2, Brain, Pencil, Plug } from "lucide-react";
 import { readApiResponse } from "@/lib/api-contract";
 import type { AgendaItem, AssistantMessage } from "@/lib/assistant-store";
@@ -8,6 +8,19 @@ import "./personal-assistant.css";
 
 type Conversation = { id: string; title: string; messages?: AssistantMessage[] };
 type Memory = { id: string; content: string };
+
+const promptPresets = [
+  { title: "Revisar escrita", prompt: "Revise minha escrita abaixo. Corrija erros gramaticais e ortográficos e sugira mudanças para torná-la mais clara. Explique brevemente as principais correções.\n\n[cole sua escrita]" },
+  { title: "Aprender com 80/20", prompt: "Quero aprender sobre [tópico]. Quais são os 20% de conceitos e práticas mais importantes que me ajudam a compreender 80% do tema? Organize uma sequência de estudo com exemplos." },
+  { title: "Plano de 30 dias", prompt: "Quero aprender ou melhorar [habilidade]. Estou começando do zero. Crie um plano prático de 30 dias, com uma tarefa por dia, progressão de dificuldade e formas de medir meu avanço." },
+  { title: "Insights de um livro", prompt: "Resuma o livro [título], de [autor]. Destaque as ideias e os insights mais úteis. Se você não tiver informações confiáveis sobre o livro, diga o que falta em vez de inventar." },
+  { title: "Avaliar argumento", prompt: "Analise meu argumento sob a perspectiva de [pessoa de referência]. Aponte pontos fortes, fragilidades e melhorias, sem atribuir falas inventadas a essa pessoa.\n\n[cole seu argumento]" },
+  { title: "Resolver problema", prompt: "Ajude-me a resolver [problema]. Divida a solução em passos concretos, explique as decisões importantes e indique como verificar se cada passo funcionou." },
+  { title: "Gerar ideias", prompt: "Estou escrevendo sobre [tópico]. Crie um esboço com dez pontos e cinco opções de título. Considere este público: [público]." },
+  { title: "Resumir texto", prompt: "Resuma o texto abaixo em até 500 palavras. Separe os pontos principais em seções curtas e preserve as nuances importantes.\n\n[cole o texto]" },
+  { title: "Memorizar com histórias", prompt: "Estou aprendendo sobre [tópico]. Transforme as lições principais em histórias e metáforas fáceis de lembrar. Depois explique os limites de cada metáfora." },
+  { title: "Testar conhecimento", prompt: "Estou aprendendo sobre [tópico]. Faça uma pergunta de cada vez para testar meu conhecimento. Depois de cada resposta, identifique lacunas, explique a resposta melhor e avance para a próxima pergunta." },
+];
 
 async function api<T>(path: string, method = "GET", body?: unknown) {
   const response = await fetch(path, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
@@ -28,6 +41,8 @@ export function PersonalAssistant() {
   const [kind, setKind] = useState<"event" | "task">("event");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [showAllPrompts, setShowAllPrompts] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [notion, setNotion] = useState<{ configured: boolean; connected: boolean; workspaceName?: string; lastSyncAt?: string } | null>(null);
 
   useEffect(() => {
@@ -82,6 +97,11 @@ export function PersonalAssistant() {
       setConversations((current) => current.map((entry) => entry.id === conversation!.id ? { ...entry, title: entry.title === "Nova conversa" ? message.slice(0, 70) : entry.title } : entry));
     } catch (reason) { setText(message); setError(reason instanceof Error ? reason.message : "Falha ao enviar mensagem."); }
     finally { setBusy(false); }
+  }
+
+  function choosePrompt(prompt: string) {
+    setText(prompt);
+    inputRef.current?.focus();
   }
 
   async function deleteConversation(id: string) {
@@ -145,7 +165,7 @@ export function PersonalAssistant() {
     {error && <p className="assistant-error" role="alert">{error}</p>}
     {view === "chat" && <div className="assistant-chat-layout">
       <aside className="assistant-conversations"><button className="assistant-new" onClick={createConversation}><Plus size={18} /> Nova conversa</button>{conversations.map((conversation) => <div className="assistant-conversation" key={conversation.id}><button className={active?.id === conversation.id ? "selected" : ""} onClick={() => openConversation(conversation.id)}>{conversation.title}</button><button className="assistant-icon" aria-label={`Excluir ${conversation.title}`} onClick={() => deleteConversation(conversation.id)}><Trash2 size={15} /></button></div>)}</aside>
-      <section className="assistant-chat"><div className="assistant-message-list" aria-live="polite">{!active?.messages?.length && <div className="assistant-empty"><MessageSquare size={28} /><h3>Em que posso ajudar?</h3><p>Posso considerar sua agenda e os dados disponíveis na sua conta. Ações externas ainda exigem uma integração ativa.</p></div>}{active?.messages?.map((message, index) => <div key={`${message.at}-${index}`} className={`assistant-message ${message.role}`}>{message.text}</div>)}{busy && <p className="assistant-thinking">Preparando resposta…</p>}</div><form className="assistant-compose" onSubmit={send}><label className="sr-only" htmlFor="assistant-input">Mensagem</label><textarea id="assistant-input" placeholder="Pergunte sobre seus estudos ou planeje seu dia…" value={text} onChange={(event) => setText(event.target.value)} maxLength={6000} /><button type="submit" disabled={!text.trim() || busy} aria-label="Enviar"><Send size={19} /></button></form></section>
+      <section className="assistant-chat"><div className="assistant-message-list" aria-live="polite">{!active?.messages?.length && <div className="assistant-empty"><MessageSquare size={28} /><h3>Em que posso ajudar?</h3><p>Posso considerar sua agenda e os dados disponíveis na sua conta. Ações externas ainda exigem uma integração ativa.</p><div className="assistant-prompt-list">{promptPresets.slice(0, showAllPrompts ? promptPresets.length : 4).map((preset) => <button key={preset.title} onClick={() => choosePrompt(preset.prompt)}>{preset.title}</button>)}</div><button className="assistant-more-prompts" onClick={() => setShowAllPrompts((value) => !value)}>{showAllPrompts ? "Mostrar menos" : "Ver os 10 atalhos"}</button></div>}{active?.messages?.map((message, index) => <div key={`${message.at}-${index}`} className={`assistant-message ${message.role}`}>{message.text}</div>)}{busy && <p className="assistant-thinking">Preparando resposta…</p>}</div><form className="assistant-compose" onSubmit={send}><label className="sr-only" htmlFor="assistant-input">Mensagem</label><textarea ref={inputRef} id="assistant-input" placeholder="Pergunte sobre seus estudos ou planeje seu dia…" value={text} onChange={(event) => setText(event.target.value)} maxLength={6000} /><button type="submit" disabled={!text.trim() || busy} aria-label="Enviar"><Send size={19} /></button></form></section>
     </div>}
     {view === "agenda" && <div className="assistant-panel"><h3>Compromissos e tarefas</h3><form className="assistant-agenda-form" onSubmit={createAgendaItem}><label>Título<input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} required /></label><label>Tipo<select value={kind} onChange={(event) => setKind(event.target.value as "event" | "task")}><option value="event">Compromisso</option><option value="task">Tarefa</option></select></label><label>Início<input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required /></label><label>Fim<input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} required /></label><button type="submit"><Plus size={16} /> Adicionar</button></form><div className="assistant-items">{items.length === 0 && <p>Nenhum compromisso ou tarefa ainda.</p>}{items.map((item) => <article key={item.id} className={item.done ? "done" : ""}><div><strong>{item.title}</strong><small>{item.kind === "task" ? "Tarefa" : "Compromisso"} · {new Date(item.startsAt).toLocaleString("pt-BR")} – {new Date(item.endsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small></div>{item.kind === "task" && <button className="assistant-icon" onClick={() => toggleTask(item)} aria-label={item.done ? "Reabrir tarefa" : "Concluir tarefa"}><Check size={18} /></button>}<button className="assistant-icon" onClick={() => deleteAgendaItem(item.id)} aria-label="Excluir item"><Trash2 size={17} /></button></article>)}</div></div>}
     {view === "memory" && <div className="assistant-panel"><h3>O que o assistente pode lembrar</h3><p>Adicione preferências e objetivos. Você pode corrigir ou apagar qualquer memória.</p><form className="assistant-memory-form" onSubmit={addMemory}><input value={memoryText} onChange={(event) => setMemoryText(event.target.value)} maxLength={500} placeholder="Ex.: prefiro estudar à noite" required /><button type="submit"><Plus size={17} /> Salvar</button></form><div className="assistant-items">{memories.length === 0 && <p>Nenhuma memória salva.</p>}{memories.map((memory) => <article key={memory.id}><strong>{memory.content}</strong><button className="assistant-icon" onClick={() => editMemory(memory)} aria-label="Editar memória"><Pencil size={16} /></button><button className="assistant-icon" onClick={() => deleteMemory(memory.id)} aria-label="Apagar memória"><Trash2 size={16} /></button></article>)}</div></div>}
