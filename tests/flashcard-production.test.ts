@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyDetailedCards, cardSources, productionProgress, validateCardFacts, validateDetailedCards } from "../lib/flashcard-production.ts";
+import { applyDetailedCards, cardSources, isLayoutQuestion, pruneLayoutCards, productionProgress, validateCardFacts, validateDetailedCards } from "../lib/flashcard-production.ts";
 import { emptyPathProgress, type LearningPath } from "../lib/learning.ts";
 import { chooseItems } from "../lib/review-engine.ts";
 
@@ -53,4 +53,19 @@ test("lote incompleto ou com IDs duplicados não pode marcar cobertura", () => {
   const card = { factId: "a", front: "Pergunta", back: "Resposta", explanation: "Detalhe", essentialCriteria: ["Resposta"] };
   assert.throws(() => validateDetailedCards({ cards: [card] }, facts));
   assert.throws(() => validateDetailedCards({ cards: [card, card] }, facts));
+});
+
+test("descarta pergunta sobre espaçamento do travessão e preserva conceito real", () => {
+  assert.equal(isLayoutQuestion("Qual é o espaço do travessão para a próxima frase?"), true);
+  assert.equal(isLayoutQuestion("Qual é a função do travessão no diálogo?"), false);
+  const source = "O travessão marca a fala em um diálogo.";
+  const facts = validateCardFacts({ facts: [
+    { category: "Texto", topic: "Diálogo", objective: "Espaço do travessão para a frase", quote: "O travessão marca" },
+    { category: "Texto", topic: "Diálogo", objective: "Função do travessão no diálogo", quote: "O travessão marca a fala" },
+  ] }, source);
+  assert.equal(facts.length, 1);
+  assert.throws(() => validateDetailedCards({ cards: [{ factId: facts[0].id, front: "Qual é o espaço do travessão para a próxima frase?", back: "Um espaço", explanation: "Um espaço", essentialCriteria: ["espaço"] }] }, facts), /formatação/);
+  const path: LearningPath = { id: "p", title: "Texto", createdAt: "now", updatedAt: "now", units: [{ id: "u", title: "Texto", description: "", lessons: [{ id: "l", title: "Diálogo", description: "", difficulty: "iniciante", xp: 20, exercises: [{ id: "card-bad", type: "flashcard", prompt: "Qual é o espaço do travessão para a próxima frase?", answer: "Um espaço", explanation: "", options: [] }] }] }], cardProduction: { version: 1, status: "complete", sources: [{ id: "s", reference: "PDF", text: source, facts: [{ id: "bad", category: "Texto", topic: "Diálogo", objective: "Função do travessão no diálogo", quote: "O travessão marca" }], completedFactIds: ["bad"] }] } };
+  assert.equal(pruneLayoutCards(path).units[0].lessons[0].exercises.length, 0);
+  assert.equal(pruneLayoutCards(path).cardProduction?.sources[0].facts?.length, 0);
 });

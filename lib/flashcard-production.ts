@@ -6,6 +6,31 @@ export type CardSource = { id: string; reference: string; text: string; facts?: 
 export type CardProduction = { version: 1; sources: CardSource[]; status: "paused" | "running" | "complete" | "error"; error?: string };
 export type ProducedCard = { factId: string; front: string; back: string; explanation: string; essentialCriteria: string[] };
 
+// PDF extraction can turn typography and layout into plausible-looking facts.
+// These are not learning objectives for a study deck.
+export function isLayoutQuestion(text: string) {
+  const value = normalize(text);
+  return /(?:espaç\w*|distância)\s+(?:do|de|entre|após|antes)?\s*(?:o\s+|a\s+)?(?:travessão|hífen|frase|palavra|linha)/u.test(value)
+    || /(?:quebra de linha|número da página|numeração da página|tamanho da fonte|tipo de fonte|margem da página|recuo do parágrafo|formatação do texto)/u.test(value);
+}
+
+export function pruneLayoutCards(path: LearningPath): LearningPath {
+  const job = path.cardProduction;
+  if (!job) return path;
+  const removed = new Set(job.sources.flatMap(source => (source.facts || []).filter(fact => isLayoutQuestion(fact.objective)).map(fact => fact.id)));
+  for (const exercise of path.units.flatMap(unit => unit.lessons.flatMap(lesson => lesson.exercises))) {
+    if (exercise.id.startsWith("card-") && isLayoutQuestion(exercise.prompt)) removed.add(exercise.id.slice(5));
+  }
+  const sources = job.sources.map(source => ({ ...source,
+    facts: source.facts?.filter(fact => !removed.has(fact.id)),
+    completedFactIds: source.completedFactIds.filter(id => !removed.has(id)),
+  }));
+  const units = path.units.map(unit => ({ ...unit, lessons: unit.lessons.map(lesson => ({ ...lesson,
+    exercises: lesson.exercises.filter(exercise => !removed.has(exercise.id.replace(/^card-/, "")) && !isLayoutQuestion(exercise.prompt)),
+  })) }));
+  return { ...path, units, cardProduction: { ...job, sources } };
+}
+
 export function appendCardSources(path: LearningPath, additions: CardSource[]): LearningPath {
   if (!path.cardProduction) throw new Error("Geração de cartões ainda não iniciada.");
   if (!additions.length) throw new Error("Adicione conteúdo para gerar mais cartões.");
@@ -27,10 +52,10 @@ export function cardSources(inputs: { reference: string; text: string }[]): Card
   return inputs.flatMap(input => {
     const sources: CardSource[] = [];
     for (let start = 0; start < input.text.length;) {
-      let end = Math.min(start + 2400, input.text.length);
+      let end = Math.min(start + 1400, input.text.length);
       if (end < input.text.length) {
         const boundary = input.text.lastIndexOf(" ", end);
-        if (boundary > start + 1200) end = boundary + 1;
+        if (boundary > start + 700) end = boundary + 1;
       }
       const text = input.text.slice(start, end);
       if (text.trim()) sources.push({ id: crypto.randomUUID(), reference: `${input.reference} · caracteres ${start + 1}–${end}`, text, completedFactIds: [] });
@@ -67,7 +92,7 @@ const normalizeEvidence = (text: string) => text.normalize("NFKC")
 export function validateCardFacts(value: unknown, source: string): CardFact[] {
   if (!isRecord(value) || !Array.isArray(value.facts)) throw new Error("Inventário de conceitos inválido.");
   const seen = new Set<string>();
-  return value.facts.map((item) => {
+  return value.facts.filter(item => !isRecord(item) || !isLayoutQuestion(String(item.objective || ""))).map((item) => {
     if (!isRecord(item)) throw new Error("Conceito inválido.");
     const quote = textField(item, "quote");
     if (!normalizeEvidence(source).includes(normalizeEvidence(quote))) throw new Error("A referência do conceito não está no material original.");
@@ -87,6 +112,7 @@ export function validateDetailedCards(value: unknown, facts: CardFact[]): Produc
     const factId = textField(item, "factId", 100);
     if (!pending.delete(factId)) throw new Error("Conceito repetido ou desconhecido.");
     const front = textField(item, "front", 1200);
+    if (isLayoutQuestion(front)) throw new Error("A pergunta trata de formatação, não do conteúdo estudado.");
     if (fronts.has(normalize(front))) throw new Error("Pergunta duplicada no lote.");
     fronts.add(normalize(front));
     if (!Array.isArray(item.essentialCriteria) || !item.essentialCriteria.length || item.essentialCriteria.some(s => typeof s !== "string" || !s.trim() || s.length > 1000)) throw new Error("Critérios essenciais ausentes.");

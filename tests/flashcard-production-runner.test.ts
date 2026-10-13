@@ -8,7 +8,7 @@ import { ApiClientError } from "../lib/api-contract.ts";
 const fact = (id: string): CardFact => ({ id, category: "Ciência", topic: "Conceitos", objective: `Conceito ${id}`, quote: `Fato ${id}` });
 const cards = (facts: CardFact[]) => ({ cards: facts.map(item => ({ factId: item.id, front: `Explique ${item.objective}`, back: item.quote, explanation: item.quote, essentialCriteria: [item.quote] })) });
 function initial(): LearningPath { return { id: "p", title: "Ciência", units: [], createdAt: "now", updatedAt: "now", cardProduction: { version: 1, status: "paused", sources: [{ id: "s", reference: "p.1", text: "Fato A. Fato B. Fato C.", completedFactIds: [] }] } }; }
-type Payload = { stage: string; facts: CardFact[]; existingObjectives?: string[] };
+type Payload = { stage: string; facts: CardFact[]; existingObjectives?: string[]; recoveryAttempt?: number; text?: string };
 function requester(handler: (body: Payload) => unknown | Promise<unknown>): CardRequester {
   return async <T>(_url: string, body: unknown) => await handler(body as Payload) as T;
 }
@@ -117,4 +117,50 @@ test("novo material amplia baralho concluído sem refazer cartões e retoma apó
   }));
   assert.equal(productionProgress(saved.cardProduction!).covered, 2);
   assert.equal(saved.units.flatMap(unit => unit.lessons.flatMap(lesson => lesson.exercises)).length, 2);
+});
+
+test("inventário inválido é refeito automaticamente e os cartões seguem", async () => {
+  let saved = initial();
+  const attempts: number[] = [];
+  await runFlashcardProduction(saved, path => { saved = structuredClone(path); }, () => {}, new AbortController().signal, requester(body => {
+    if (body.stage === "inventory") {
+      attempts.push(body.recoveryAttempt || 0);
+      if (!body.recoveryAttempt) throw new ApiClientError("Formato inválido", "MALFORMED_AI_RESPONSE", 502, true);
+      return { facts: [fact("A")] };
+    }
+    return body.stage === "audit" ? { facts: [] } : cards(body.facts);
+  }));
+  assert.deepEqual(attempts, [0, 1]);
+  assert.equal(productionProgress(saved.cardProduction!).covered, 1);
+});
+
+test("trecho problemático é dividido após tentativas e a geração continua", async () => {
+  let saved = initial();
+  saved.cardProduction!.sources[0].text = "Fato A. ".repeat(180);
+  let smallerCalls = 0;
+  await runFlashcardProduction(saved, path => { saved = structuredClone(path); }, () => {}, new AbortController().signal, requester(body => {
+    if (body.stage === "inventory") {
+      if ((body.text || "").length > 800) throw new ApiClientError("Formato inválido", "MALFORMED_AI_RESPONSE", 502, true);
+      smallerCalls++;
+      return { facts: [fact(String(smallerCalls))] };
+    }
+    return body.stage === "audit" ? { facts: [] } : cards(body.facts);
+  }));
+  assert.ok(saved.cardProduction!.sources.length > 1);
+  assert.equal(saved.cardProduction!.sources.map(source => source.text).join(""), "Fato A. ".repeat(180));
+  assert.equal(productionProgress(saved.cardProduction!).covered, smallerCalls);
+});
+
+test("cartão único com resposta inválida é recuperado sem perder inventário", async () => {
+  let saved = initial();
+  const attempts: number[] = [];
+  await runFlashcardProduction(saved, path => { saved = structuredClone(path); }, () => {}, new AbortController().signal, requester(body => {
+    if (body.stage === "inventory") return { facts: [fact("A")] };
+    if (body.stage === "audit") return { facts: [] };
+    attempts.push(body.recoveryAttempt || 0);
+    if (!body.recoveryAttempt) throw new ApiClientError("Formato inválido", "MALFORMED_AI_RESPONSE", 502, true);
+    return cards(body.facts);
+  }));
+  assert.deepEqual(attempts, [0, 1]);
+  assert.equal(productionProgress(saved.cardProduction!).covered, 1);
 });
