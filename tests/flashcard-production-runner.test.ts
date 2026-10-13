@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { runFlashcardProduction, type CardRequester } from "../lib/flashcard-production-runner.ts";
 import { productionProgress, type CardFact } from "../lib/flashcard-production.ts";
 import type { LearningPath } from "../lib/learning.ts";
+import { ApiClientError } from "../lib/api-contract.ts";
 
 const fact = (id: string): CardFact => ({ id, category: "Ciência", topic: "Conceitos", objective: `Conceito ${id}`, quote: `Fato ${id}` });
 const cards = (facts: CardFact[]) => ({ cards: facts.map(item => ({ factId: item.id, front: `Explique ${item.objective}`, back: item.quote, explanation: item.quote, essentialCriteria: [item.quote] })) });
@@ -50,6 +51,22 @@ test("falha no segundo lote preserva o primeiro; retomada não refaz inventário
   }));
   assert.deepEqual(resumed, facts.slice(10).map(item => item.id));
   assert.equal(productionProgress(saved.cardProduction!).complete, true);
+});
+
+test("resposta incompatível reduz o lote e conclui sem perder cartões", async () => {
+  let saved = initial();
+  const sizes: number[] = [];
+  const facts = Array.from({ length: 12 }, (_, i) => fact(String(i)));
+  await runFlashcardProduction(saved, path => { saved = structuredClone(path); }, () => {}, new AbortController().signal, requester(body => {
+    if (body.stage === "inventory") return { facts };
+    if (body.stage === "audit") return { facts: [] };
+    sizes.push(body.facts.length);
+    if (body.facts.length > 2) throw new ApiClientError("Formato incompatível", "MALFORMED_AI_RESPONSE", 502, true);
+    return cards(body.facts);
+  }));
+  assert.deepEqual(sizes.slice(0, 3), [10, 5, 2]);
+  assert.equal(saved.cardProduction?.status, "complete");
+  assert.equal(productionProgress(saved.cardProduction!).covered, 12);
 });
 
 test("pausa depois do inventário não consome outro lote e pode ser retomada", async () => {

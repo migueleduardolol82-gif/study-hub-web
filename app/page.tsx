@@ -15,4 +15,3 @@ export default async function Home() {
   }
   return <StudyHub key={accountId ?? "local"} accountId={accountId} authEnabled={authEnabled} cloudEnabled={isCloudConfigured()} />;
 }
-

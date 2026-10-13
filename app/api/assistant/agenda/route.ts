@@ -51,4 +51,3 @@ export async function DELETE(request: Request) {
   const rows = await sql`DELETE FROM nexo_agenda_items WHERE id = ${id} AND user_id = ${session.userId} RETURNING id`;
   return rows.length ? NextResponse.json(success({ deleted: true })) : NextResponse.json(failure("NOT_FOUND", "Item não encontrado."), { status: 404 });
 }
-

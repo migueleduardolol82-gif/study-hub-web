@@ -1,5 +1,6 @@
 import { applyDetailedCards, productionProgress, validateDetailedCards, type CardFact, type ProducedCard } from "./flashcard-production.ts";
 import { syncKnowledgeBase } from "./review-engine.ts";
+import { ApiClientError } from "./api-contract.ts";
 import type { LearningPath } from "./learning.ts";
 export type CardRequester = <T>(url: string, body: unknown, signal?: AbortSignal) => Promise<T>;
 // Each successful inventory and card batch is checkpointed before another request starts.
@@ -8,6 +9,7 @@ export async function runFlashcardProduction(initial: LearningPath, save: (path:
   let path = initial;
   if (!path.cardProduction) throw new Error("Material de origem ausente.");
   const checkpoint = () => { path = syncKnowledgeBase(path); save(path); };
+  let cardBatchSize = 10;
   path = { ...path, cardProduction: { ...path.cardProduction, status: "running", error: undefined } };
   checkpoint();
   try {
@@ -24,7 +26,7 @@ export async function runFlashcardProduction(initial: LearningPath, save: (path:
       while (true) {
         if (signal.aborted) throw new DOMException("Geração pausada.", "AbortError");
         source = path.cardProduction!.sources[index];
-        const pending = source.facts!.filter(fact => !source.completedFactIds.includes(fact.id)).slice(0, 10);
+        const pending = source.facts!.filter(fact => !source.completedFactIds.includes(fact.id)).slice(0, cardBatchSize);
         if (!pending.length) {
           if (source.audited && source.auditVersion === 2) break;
           report(`Verificando detalhes omitidos · trecho ${index + 1}/${path.cardProduction!.sources.length}`);
@@ -38,7 +40,17 @@ export async function runFlashcardProduction(initial: LearningPath, save: (path:
           continue;
         }
         report(`Gerando cartões · trecho ${index + 1}/${path.cardProduction!.sources.length} · ${productionProgress(path.cardProduction!).covered} prontos`);
-        const result = await requestAI<{ cards: ProducedCard[] }>("/api/learning/flashcards", { stage: "cards", text: source.text, reference: source.reference, facts: pending }, signal);
+        let result: { cards: ProducedCard[] };
+        try {
+          result = await requestAI<{ cards: ProducedCard[] }>("/api/learning/flashcards", { stage: "cards", text: source.text, reference: source.reference, facts: pending }, signal);
+        } catch (error) {
+          if (pending.length > 1 && error instanceof ApiClientError && (error.code === "MALFORMED_AI_RESPONSE" || error.code === "AI_OUTPUT_LIMIT")) {
+            cardBatchSize = Math.max(1, Math.floor(pending.length / 2));
+            report(`Ajustando o lote para ${cardBatchSize} cartão${cardBatchSize === 1 ? "" : "ões"} por vez`);
+            continue;
+          }
+          throw error;
+        }
         path = applyDetailedCards(path, source.id, validateDetailedCards(result, pending));
         checkpoint();
       }

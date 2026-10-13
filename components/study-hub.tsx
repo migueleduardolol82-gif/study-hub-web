@@ -2773,4 +2773,3 @@ export function StudyHub({
     </div>
   );
 }
-

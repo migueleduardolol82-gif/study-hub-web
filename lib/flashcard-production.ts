@@ -41,13 +41,20 @@ function textField(value: Record<string, unknown>, key: string, max = 3000) {
   return text.trim();
 }
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+// PDF extraction often inserts line breaks, soft hyphens and typographic punctuation.
+// Keep the original quote for display, but compare a canonical form for grounding.
+const normalizeEvidence = (text: string) => text.normalize("NFKC")
+  .replace(/\u00ad/g, "")
+  .replace(/([\p{L}])[-‐‑–]\s+(?=\p{L})/gu, "$1")
+  .replace(/[^\p{L}\p{N}]+/gu, " ")
+  .replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
 export function validateCardFacts(value: unknown, source: string): CardFact[] {
   if (!isRecord(value) || !Array.isArray(value.facts)) throw new Error("Inventário de conceitos inválido.");
   const seen = new Set<string>();
   return value.facts.map((item) => {
     if (!isRecord(item)) throw new Error("Conceito inválido.");
     const quote = textField(item, "quote");
-    if (!normalize(source).includes(normalize(quote))) throw new Error("A referência do conceito não está no material original.");
+    if (!normalizeEvidence(source).includes(normalizeEvidence(quote))) throw new Error("A referência do conceito não está no material original.");
     const objective = textField(item, "objective", 800);
     const key = normalize(objective);
     if (seen.has(key)) throw new Error("Conceito duplicado no inventário.");

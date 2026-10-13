@@ -4,7 +4,7 @@ Aplicativo em Next.js para organizar jornadas pessoais, estudos, treinos, leitur
 
 ## Assistente pessoal
 
-O menu **Assistente** oferece conversas persistentes, agenda de compromissos e tarefas, e memória editável. Esses registros ficam no Neon por usuário autenticado. O chat consulta dados resumidos de estudos e agenda da própria conta; operações sugeridas pela IA não são executadas automaticamente.
+O menu **Assistente** oferece conversas persistentes, dez atalhos de aprendizagem, agenda de compromissos e tarefas, e memória editável. Esses registros ficam no Neon por usuário autenticado. O chat consulta dados resumidos de estudos e agenda da própria conta. Pedidos de agendamento com data e horário suficientes geram uma proposta estruturada; o usuário precisa confirmar para gravá-la. Propostas, execuções e falhas ficam registradas. A IA não executa outras operações automaticamente.
 
 A conexão Notion usa OAuth de uma conexão pública com permissões escolhidas pelo usuário. Configure `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, `NOTION_REDIRECT_URI` e `INTEGRATION_ENCRYPTION_KEY` na Vercel. Cadastre exatamente a URL de retorno em `NOTION_REDIRECT_URI` no portal de desenvolvedores do Notion. Gere a chave de criptografia com 32 bytes aleatórios em base64 e mantenha-a estável; perdê-la impede ler os tokens existentes. O assistente pesquisa títulos das páginas autorizadas, lê trechos dos primeiros blocos de até três páginas e cita seus links; ainda não lê páginas completas ou edita o Notion.
 
@@ -75,4 +75,3 @@ Planos permitem duração livre por sessão, duração diferente por dia, Pomodo
 Os arquivos originais ficam em Blob privado. Metadados e partes extraídas ficam nas tabelas `nexo_documents` e `nexo_document_chunks`, sempre vinculadas ao usuário autenticado. Sem Clerk, Neon e Blob, o navegador mantém uma cópia local em IndexedDB e o restante do painel continua no `localStorage` versionado.
 
 Validação: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:http`. A chave OpenAI precisa estar configurada no servidor de implantação para testar a geração real.
-

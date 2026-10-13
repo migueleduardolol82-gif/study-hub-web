@@ -19,4 +19,3 @@ export async function GET(request: Request) {
   response.cookies.set("notion_oauth_state", `${session.userId}.${state}`, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 600, path: "/api/integrations/notion/callback" });
   return response;
 }
-

@@ -23,4 +23,3 @@ export async function DELETE(request: Request) {
   await sql`DELETE FROM nexo_notion_connections WHERE user_id = ${session.userId}`;
   return NextResponse.json(success({ disconnected: true }));
 }
-

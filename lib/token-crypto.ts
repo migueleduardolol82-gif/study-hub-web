@@ -21,4 +21,3 @@ export function decryptToken(encoded: string) {
   decipher.setAuthTag(value.subarray(12, 28));
   return Buffer.concat([decipher.update(value.subarray(28)), decipher.final()]).toString("utf8");
 }
-

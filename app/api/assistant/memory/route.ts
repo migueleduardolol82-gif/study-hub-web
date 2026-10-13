@@ -47,4 +47,3 @@ export async function DELETE(request: Request) {
   const rows = await sql`DELETE FROM nexo_assistant_memory WHERE id = ${id} AND user_id = ${session.userId} RETURNING id`;
   return rows.length ? NextResponse.json(success({ deleted: true })) : NextResponse.json(failure("NOT_FOUND", "Memória não encontrada."), { status: 404 });
 }
-

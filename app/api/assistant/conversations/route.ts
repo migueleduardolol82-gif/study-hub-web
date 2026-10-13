@@ -48,6 +48,6 @@ export async function DELETE(request: Request) {
   if (!id) return NextResponse.json(failure("INVALID_REQUEST", "Conversa inválida."), { status: 400 });
   const sql = await assistantDb();
   const rows = await sql`DELETE FROM nexo_assistant_conversations WHERE id = ${id} AND user_id = ${session.userId} RETURNING id`;
+  if (rows.length) await sql`DELETE FROM nexo_assistant_actions WHERE conversation_id = ${id} AND user_id = ${session.userId} AND status IN ('planned', 'failed', 'cancelled')`;
   return rows.length ? NextResponse.json(success({ deleted: true })) : NextResponse.json(failure("NOT_FOUND", "Conversa não encontrada."), { status: 404 });
 }
-

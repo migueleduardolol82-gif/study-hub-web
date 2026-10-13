@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CalendarDays, Check, MessageSquare, Plus, Send, Trash2, Brain, Pencil, Plug } from "lucide-react";
 import { readApiResponse } from "@/lib/api-contract";
-import type { AgendaItem, AssistantMessage } from "@/lib/assistant-store";
+import type { AgendaItem, AssistantAction, AssistantMessage } from "@/lib/assistant-store";
 import "./personal-assistant.css";
 
 type Conversation = { id: string; title: string; messages?: AssistantMessage[] };
@@ -31,6 +31,7 @@ export function PersonalAssistant() {
   const [view, setView] = useState<"chat" | "agenda" | "memory" | "integrations">(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("assistant") === "integrations" ? "integrations" : "chat");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [active, setActive] = useState<Conversation | null>(null);
+  const [actions, setActions] = useState<AssistantAction[]>([]);
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [text, setText] = useState("");
@@ -70,13 +71,20 @@ export function PersonalAssistant() {
       const conversation = await api<Conversation>("/api/assistant/conversations", "POST");
       setConversations((current) => [conversation, ...current]);
       setActive(conversation);
+      setActions([]);
       setView("chat");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao criar conversa."); }
   }
 
   async function openConversation(id: string) {
     setError("");
-    try { setActive(await api<Conversation>(`/api/assistant/conversations?id=${encodeURIComponent(id)}`)); }
+    try {
+      const [conversation, savedActions] = await Promise.all([
+        api<Conversation>(`/api/assistant/conversations?id=${encodeURIComponent(id)}`),
+        api<AssistantAction[]>(`/api/assistant/actions?conversationId=${encodeURIComponent(id)}`),
+      ]);
+      setActive(conversation); setActions(savedActions);
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao abrir conversa."); }
   }
 
@@ -90,10 +98,12 @@ export function PersonalAssistant() {
       if (!conversation) {
         conversation = await api<Conversation>("/api/assistant/conversations", "POST");
         setConversations((current) => [conversation!, ...current]);
+        setActions([]);
       }
       setActive({ ...conversation, messages: [...(conversation.messages || []), { role: "user", text: message, at: new Date().toISOString() }] });
-      const result = await api<{ messages: AssistantMessage[] }>("/api/assistant/message", "POST", { conversationId: conversation.id, message });
+      const result = await api<{ messages: AssistantMessage[]; proposedAction?: AssistantAction | null }>("/api/assistant/message", "POST", { conversationId: conversation.id, message, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
       setActive({ ...conversation, title: conversation.title === "Nova conversa" ? message.slice(0, 70) : conversation.title, messages: result.messages });
+      if (result.proposedAction) setActions((current) => [result.proposedAction!, ...current]);
       setConversations((current) => current.map((entry) => entry.id === conversation!.id ? { ...entry, title: entry.title === "Nova conversa" ? message.slice(0, 70) : entry.title } : entry));
     } catch (reason) { setText(message); setError(reason instanceof Error ? reason.message : "Falha ao enviar mensagem."); }
     finally { setBusy(false); }
@@ -110,7 +120,28 @@ export function PersonalAssistant() {
       await api(`/api/assistant/conversations?id=${encodeURIComponent(id)}`, "DELETE");
       setConversations((current) => current.filter((entry) => entry.id !== id));
       if (active?.id === id) setActive(null);
+      if (active?.id === id) setActions([]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao excluir conversa."); }
+  }
+
+  async function executeAction(action: AssistantAction) {
+    setError("");
+    setActions((current) => current.map((item) => item.id === action.id ? { ...item, status: "executing" } : item));
+    try {
+      const updated = await api<AssistantAction>("/api/assistant/actions", "POST", { id: action.id });
+      setActions((current) => current.map((item) => item.id === action.id ? updated : item));
+      setItems(await api<AgendaItem[]>("/api/assistant/agenda"));
+    } catch (reason) {
+      setActions((current) => current.map((item) => item.id === action.id ? { ...item, status: "failed" } : item));
+      setError(reason instanceof Error ? reason.message : "Falha ao executar ação.");
+    }
+  }
+
+  async function cancelAction(action: AssistantAction) {
+    try {
+      const updated = await api<AssistantAction>(`/api/assistant/actions?id=${encodeURIComponent(action.id)}`, "DELETE");
+      setActions((current) => current.map((item) => item.id === action.id ? updated : item));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Falha ao cancelar ação."); }
   }
 
   async function createAgendaItem(event: FormEvent) {
@@ -165,11 +196,10 @@ export function PersonalAssistant() {
     {error && <p className="assistant-error" role="alert">{error}</p>}
     {view === "chat" && <div className="assistant-chat-layout">
       <aside className="assistant-conversations"><button className="assistant-new" onClick={createConversation}><Plus size={18} /> Nova conversa</button>{conversations.map((conversation) => <div className="assistant-conversation" key={conversation.id}><button className={active?.id === conversation.id ? "selected" : ""} onClick={() => openConversation(conversation.id)}>{conversation.title}</button><button className="assistant-icon" aria-label={`Excluir ${conversation.title}`} onClick={() => deleteConversation(conversation.id)}><Trash2 size={15} /></button></div>)}</aside>
-      <section className="assistant-chat"><div className="assistant-message-list" aria-live="polite">{!active?.messages?.length && <div className="assistant-empty"><MessageSquare size={28} /><h3>Em que posso ajudar?</h3><p>Posso considerar sua agenda e os dados disponíveis na sua conta. Ações externas ainda exigem uma integração ativa.</p><div className="assistant-prompt-list">{promptPresets.slice(0, showAllPrompts ? promptPresets.length : 4).map((preset) => <button key={preset.title} onClick={() => choosePrompt(preset.prompt)}>{preset.title}</button>)}</div><button className="assistant-more-prompts" onClick={() => setShowAllPrompts((value) => !value)}>{showAllPrompts ? "Mostrar menos" : "Ver os 10 atalhos"}</button></div>}{active?.messages?.map((message, index) => <div key={`${message.at}-${index}`} className={`assistant-message ${message.role}`}>{message.text}</div>)}{busy && <p className="assistant-thinking">Preparando resposta…</p>}</div><form className="assistant-compose" onSubmit={send}><label className="sr-only" htmlFor="assistant-input">Mensagem</label><textarea ref={inputRef} id="assistant-input" placeholder="Pergunte sobre seus estudos ou planeje seu dia…" value={text} onChange={(event) => setText(event.target.value)} maxLength={6000} /><button type="submit" disabled={!text.trim() || busy} aria-label="Enviar"><Send size={19} /></button></form></section>
+      <section className="assistant-chat"><div className="assistant-message-list" aria-live="polite">{!active?.messages?.length && <div className="assistant-empty"><MessageSquare size={28} /><h3>Em que posso ajudar?</h3><p>Posso considerar sua agenda e os dados disponíveis na sua conta. Ações externas ainda exigem uma integração ativa.</p><div className="assistant-prompt-list">{promptPresets.slice(0, showAllPrompts ? promptPresets.length : 4).map((preset) => <button key={preset.title} onClick={() => choosePrompt(preset.prompt)}>{preset.title}</button>)}</div><button className="assistant-more-prompts" onClick={() => setShowAllPrompts((value) => !value)}>{showAllPrompts ? "Mostrar menos" : "Ver os 10 atalhos"}</button></div>}{active?.messages?.map((message, index) => <div key={`${message.at}-${index}`} className={`assistant-message ${message.role}`}>{message.text}</div>)}{actions.map((action) => <div className="assistant-action" key={action.id}><span className={`assistant-action-status ${action.status}`}>{action.status === "planned" ? "Proposta" : action.status === "executing" ? "Executando" : action.status === "executed" ? "Executado" : action.status === "failed" ? "Falhou" : "Cancelado"}</span><strong>{action.payload.title}</strong><small>{new Date(action.payload.startsAt).toLocaleString("pt-BR")} – {new Date(action.payload.endsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small>{["planned", "failed"].includes(action.status) && <div><button onClick={() => executeAction(action)}>{action.status === "failed" ? "Tentar novamente" : "Confirmar e criar na agenda"}</button>{action.status === "planned" && <button onClick={() => cancelAction(action)}>Cancelar</button>}</div>}</div>)}{busy && <p className="assistant-thinking">Preparando resposta…</p>}</div><form className="assistant-compose" onSubmit={send}><label className="sr-only" htmlFor="assistant-input">Mensagem</label><textarea ref={inputRef} id="assistant-input" placeholder="Pergunte sobre seus estudos ou planeje seu dia…" value={text} onChange={(event) => setText(event.target.value)} maxLength={6000} /><button type="submit" disabled={!text.trim() || busy} aria-label="Enviar"><Send size={19} /></button></form></section>
     </div>}
     {view === "agenda" && <div className="assistant-panel"><h3>Compromissos e tarefas</h3><form className="assistant-agenda-form" onSubmit={createAgendaItem}><label>Título<input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} required /></label><label>Tipo<select value={kind} onChange={(event) => setKind(event.target.value as "event" | "task")}><option value="event">Compromisso</option><option value="task">Tarefa</option></select></label><label>Início<input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required /></label><label>Fim<input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} required /></label><button type="submit"><Plus size={16} /> Adicionar</button></form><div className="assistant-items">{items.length === 0 && <p>Nenhum compromisso ou tarefa ainda.</p>}{items.map((item) => <article key={item.id} className={item.done ? "done" : ""}><div><strong>{item.title}</strong><small>{item.kind === "task" ? "Tarefa" : "Compromisso"} · {new Date(item.startsAt).toLocaleString("pt-BR")} – {new Date(item.endsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small></div>{item.kind === "task" && <button className="assistant-icon" onClick={() => toggleTask(item)} aria-label={item.done ? "Reabrir tarefa" : "Concluir tarefa"}><Check size={18} /></button>}<button className="assistant-icon" onClick={() => deleteAgendaItem(item.id)} aria-label="Excluir item"><Trash2 size={17} /></button></article>)}</div></div>}
     {view === "memory" && <div className="assistant-panel"><h3>O que o assistente pode lembrar</h3><p>Adicione preferências e objetivos. Você pode corrigir ou apagar qualquer memória.</p><form className="assistant-memory-form" onSubmit={addMemory}><input value={memoryText} onChange={(event) => setMemoryText(event.target.value)} maxLength={500} placeholder="Ex.: prefiro estudar à noite" required /><button type="submit"><Plus size={17} /> Salvar</button></form><div className="assistant-items">{memories.length === 0 && <p>Nenhuma memória salva.</p>}{memories.map((memory) => <article key={memory.id}><strong>{memory.content}</strong><button className="assistant-icon" onClick={() => editMemory(memory)} aria-label="Editar memória"><Pencil size={16} /></button><button className="assistant-icon" onClick={() => deleteMemory(memory.id)} aria-label="Apagar memória"><Trash2 size={16} /></button></article>)}</div></div>}
     {view === "integrations" && <div className="assistant-panel"><h3>Aplicativos conectados</h3><div className="assistant-integration"><div><strong>Notion</strong><p>{notion?.connected ? `Conectado ao espaço ${notion.workspaceName || "Notion"}. O assistente pode pesquisar páginas autorizadas e ler trechos do conteúdo.` : notion?.configured ? "Pronto para conectar. Você escolhe as páginas permitidas no Notion." : "Aguardando configuração OAuth no servidor."}</p>{notion?.lastSyncAt && <small>Última consulta: {new Date(notion.lastSyncAt).toLocaleString("pt-BR")}</small>}</div>{notion?.connected ? <button onClick={disconnectNotion}>Remover deste app</button> : notion?.configured ? <a href="/api/integrations/notion/start">Conectar Notion</a> : null}</div><p className="assistant-integration-note">Para ativar a conexão, configure NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, NOTION_REDIRECT_URI e INTEGRATION_ENCRYPTION_KEY na Vercel. Outros aplicativos serão adicionados após suas credenciais e permissões próprias.</p></div>}
   </div>;
 }
-

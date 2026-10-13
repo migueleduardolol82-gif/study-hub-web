@@ -70,4 +70,3 @@ export async function notionSearch(userId: string, query: string) {
   }));
   return { connected: true, pages: [...excerpts, ...pages.slice(3).map((page) => ({ ...page, excerpt: "" }))] };
 }
-

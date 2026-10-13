@@ -21,4 +21,3 @@ test("tokens de integração são criptografados e autenticados", () => {
     else process.env.INTEGRATION_ENCRYPTION_KEY = old;
   }
 });
-

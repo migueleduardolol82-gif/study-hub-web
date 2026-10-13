@@ -19,6 +19,13 @@ test("inventário exige evidência literal e rejeita fatos duplicados", () => {
   assert.throws(() => validateCardFacts({ facts: [item, item] }, "até 30 dias"));
 });
 
+test("citações de PDF aceitam pontuação e hifenização equivalentes, mas não fatos diferentes", () => {
+  const item = { category: "Regras", topic: "Prazos", objective: "Prazo", quote: "O prazo é de 30 dias" };
+  assert.equal(validateCardFacts({ facts: [item] }, "O prazo: é de 30 dias.").length, 1);
+  assert.equal(validateCardFacts({ facts: [{ ...item, quote: "empreendedorismo" }] }, "empreende-\ndorismo").length, 1);
+  assert.throws(() => validateCardFacts({ facts: [item] }, "O prazo é de 60 dias."));
+});
+
 for (const count of [80, 250, 310]) test(`${count} cartões em lotes, retomada idempotente e subdecks estudáveis`, () => {
   const facts = Array.from({ length: count }, (_, i) => ({ id: `f-${i}`, category: `Categoria ${i % 3}`, topic: `Tema ${i % 7}`, objective: `Regra ${i}`, quote: `Fato ${i}` }));
   let path: LearningPath = { id: "p", title: "Material", createdAt: "now", updatedAt: "now", units: [], cardProduction: { version: 1, status: "running", sources: [{ id: "s", reference: "Manual p.1", text: facts.map(f => f.quote).join(";"), facts, completedFactIds: [] }] } };
