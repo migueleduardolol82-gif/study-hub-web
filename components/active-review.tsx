@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { loadCardSources, produceFlashcards } from "@/lib/flashcard-production-client";
-import { appendCardSources, cardSources, productionProgress } from "@/lib/flashcard-production";
+import { appendCardSources, cardSources, productionProgress, pruneLayoutCards } from "@/lib/flashcard-production";
 import { studyMaterial } from "@/lib/study-context";
 import { validateTutorAnswer } from "@/lib/learning-tutor";
 
@@ -83,6 +83,14 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   useEffect(() => {
     if (!paths.some(path => !path.knowledgeBase)) return;
     setPaths(current => current.map(path => path.knowledgeBase ? path : syncKnowledgeBase(path, path.updatedAt)));
+  }, [paths, setPaths]);
+
+  useEffect(() => {
+    if (!paths.some(path => path.cardProduction)) return;
+    setPaths(current => {
+      const next = current.map(pruneLayoutCards);
+      return next.some((path, index) => path !== current[index]) ? next : current;
+    });
   }, [paths, setPaths]);
 
   function openScope(path: LearningPath, selectedScope: string, mode = learningMode) {

@@ -21,14 +21,15 @@ export function pruneLayoutCards(path: LearningPath): LearningPath {
   for (const exercise of path.units.flatMap(unit => unit.lessons.flatMap(lesson => lesson.exercises))) {
     if (exercise.id.startsWith("card-") && isLayoutQuestion(exercise.prompt)) removed.add(exercise.id.slice(5));
   }
+  if (!removed.size) return path;
   const sources = job.sources.map(source => ({ ...source,
     facts: source.facts?.filter(fact => !removed.has(fact.id)),
     completedFactIds: source.completedFactIds.filter(id => !removed.has(id)),
   }));
   const units = path.units.map(unit => ({ ...unit, lessons: unit.lessons.map(lesson => ({ ...lesson,
-    exercises: lesson.exercises.filter(exercise => !removed.has(exercise.id.replace(/^card-/, "")) && !isLayoutQuestion(exercise.prompt)),
+    exercises: lesson.exercises.filter(exercise => !removed.has(exercise.id.replace(/^card-/, ""))),
   })) }));
-  return { ...path, units, cardProduction: { ...job, sources } };
+  return { ...path, units, updatedAt: new Date().toISOString(), cardProduction: { ...job, sources } };
 }
 
 export function appendCardSources(path: LearningPath, additions: CardSource[]): LearningPath {

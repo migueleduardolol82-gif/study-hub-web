@@ -66,6 +66,8 @@ test("descarta pergunta sobre espaçamento do travessão e preserva conceito rea
   assert.equal(facts.length, 1);
   assert.throws(() => validateDetailedCards({ cards: [{ factId: facts[0].id, front: "Qual é o espaço do travessão para a próxima frase?", back: "Um espaço", explanation: "Um espaço", essentialCriteria: ["espaço"] }] }, facts), /formatação/);
   const path: LearningPath = { id: "p", title: "Texto", createdAt: "now", updatedAt: "now", units: [{ id: "u", title: "Texto", description: "", lessons: [{ id: "l", title: "Diálogo", description: "", difficulty: "iniciante", xp: 20, exercises: [{ id: "card-bad", type: "flashcard", prompt: "Qual é o espaço do travessão para a próxima frase?", answer: "Um espaço", explanation: "", options: [] }] }] }], cardProduction: { version: 1, status: "complete", sources: [{ id: "s", reference: "PDF", text: source, facts: [{ id: "bad", category: "Texto", topic: "Diálogo", objective: "Função do travessão no diálogo", quote: "O travessão marca" }], completedFactIds: ["bad"] }] } };
-  assert.equal(pruneLayoutCards(path).units[0].lessons[0].exercises.length, 0);
-  assert.equal(pruneLayoutCards(path).cardProduction?.sources[0].facts?.length, 0);
+  const cleaned = pruneLayoutCards(path);
+  assert.equal(cleaned.units[0].lessons[0].exercises.length, 0);
+  assert.equal(cleaned.cardProduction?.sources[0].facts?.length, 0);
+  assert.equal(pruneLayoutCards(cleaned), cleaned);
 });
