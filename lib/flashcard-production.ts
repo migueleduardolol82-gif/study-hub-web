@@ -6,6 +6,22 @@ export type CardSource = { id: string; reference: string; text: string; facts?: 
 export type CardProduction = { version: 1; sources: CardSource[]; status: "paused" | "running" | "complete" | "error"; error?: string };
 export type ProducedCard = { factId: string; front: string; back: string; explanation: string; essentialCriteria: string[] };
 
+export function appendCardSources(path: LearningPath, additions: CardSource[]): LearningPath {
+  if (!path.cardProduction) throw new Error("Geração de cartões ainda não iniciada.");
+  if (!additions.length) throw new Error("Adicione conteúdo para gerar mais cartões.");
+  const existing = new Set(path.cardProduction.sources.map(source => source.text.trim()));
+  const fresh = additions.filter(source => {
+    const key = source.text.trim();
+    if (existing.has(key)) return false;
+    existing.add(key);
+    return true;
+  });
+  if (!fresh.length) throw new Error("Esse conteúdo já foi adicionado ao baralho.");
+  return { ...path, updatedAt: new Date().toISOString(), cardProduction: {
+    ...path.cardProduction, sources: [...path.cardProduction.sources, ...fresh], status: "paused", error: undefined,
+  } };
+}
+
 // Every character is assigned to a source segment. No summarization or document truncation.
 export function cardSources(inputs: { reference: string; text: string }[]): CardSource[] {
   return inputs.flatMap(input => {

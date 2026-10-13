@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { loadCardSources, produceFlashcards } from "@/lib/flashcard-production-client";
-import { productionProgress } from "@/lib/flashcard-production";
+import { appendCardSources, cardSources, productionProgress } from "@/lib/flashcard-production";
 import { studyMaterial } from "@/lib/study-context";
 import { validateTutorAnswer } from "@/lib/learning-tutor";
 
@@ -45,6 +45,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   const [difficulty, setDifficulty] = useState<ThemeDifficulty>("iniciante");
   const [includeMaterial, setIncludeMaterial] = useState(false);
   const [sourceText, setSourceText] = useState("");
+  const [additionalCardText, setAdditionalCardText] = useState("");
   const [depth, setDepth] = useState("equilibrado");
   const [requestedUnits, setRequestedUnits] = useState(0);
   const [learningMode, setLearningMode] = useState<ReviewMode>("estudar");
@@ -173,6 +174,15 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
       await produceFlashcards(path, saved => setPaths(current => current.map(item => item.id === saved.id ? { ...item, units: saved.units, knowledgeBase: saved.knowledgeBase, cardProduction: saved.cardProduction, updatedAt: saved.updatedAt } : item)), setGenerationStage, controller.signal);
     } catch (error) { if (!controller.signal.aborted) showGenerationError(error); }
     finally { requestRef.current = null; setBackground(false); setGenerationStage(""); }
+  }
+  async function addMoreFlashcards(path: LearningPath) {
+    if (requestRef.current || !additionalCardText.trim()) return;
+    try {
+      const next = appendCardSources(path, cardSources([{ reference: `Material adicional · ${new Date().toLocaleDateString("pt-BR")}`, text: additionalCardText }]));
+      setPaths(current => current.map(item => item.id === path.id ? next : item));
+      setAdditionalCardText("");
+      await detailedFlashcards(next);
+    } catch (error) { showGenerationError(error); }
   }
 
   async function generatePath() {
@@ -390,6 +400,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
           <div><span className="eyebrow">FLASHCARDS</span><h3>Gerar cartões</h3><p>Organize o material por assunto e continue a geração quando quiser.</p></div>
           {activePath.cardProduction && (() => { const stats = productionProgress(activePath.cardProduction); return <div aria-live="polite"><strong>{stats.covered} cartões · {stats.covered}/{stats.facts} conceitos</strong><progress aria-label="Trechos analisados" value={stats.analyzed} max={stats.total || 1} /><details><summary>Detalhes da cobertura</summary><p>{stats.analyzed}/{stats.total} trechos analisados · {stats.audited}/{stats.total} verificados</p><p>{stats.complete ? "Geração concluída." : "Mantenha esta área aberta durante a geração. Os cartões prontos já podem ser estudados."} A auditoria da IA pode não identificar todas as omissões.</p></details>{activePath.cardProduction.error && <p role="alert">{activePath.cardProduction.error}</p>}</div>; })()}
           <div className="detailed-card-actions"><button className="review-primary" disabled={busy || background || (activePath.cardProduction ? productionProgress(activePath.cardProduction).complete : false)} onClick={() => void detailedFlashcards(activePath)}>{background ? "Gerando…" : activePath.cardProduction ? productionProgress(activePath.cardProduction).complete ? "Geração concluída" : "Retomar geração" : "Gerar flashcards do material"}</button>{background && <button onClick={() => requestRef.current?.abort()}>Pausar geração</button>}</div>
+          {activePath.cardProduction && <div className="detailed-card-add-more"><label htmlFor="additional-card-material">Mais material para este baralho</label><textarea id="additional-card-material" value={additionalCardText} onChange={event => setAdditionalCardText(event.target.value)} placeholder="Cole novos trechos. Os cartões anteriores continuam disponíveis durante a geração." /><button className="review-secondary" disabled={busy || background || !additionalCardText.trim()} onClick={() => void addMoreFlashcards(activePath)}><Plus /> Gerar mais cartões</button></div>}
         </div>
         <div className="section-heading"><div><span className="eyebrow">CONTEÚDO DA TRILHA</span><h3>{activePath.cardProduction ? "Decks e subdecks" : "Unidades"}</h3></div><button className="review-secondary" onClick={() => setPaths(current => current.map(path => path.id === activePath.id ? { ...path, unlockAll: !path.unlockAll } : path))}>{activePath.unlockAll ? "Usar progressão" : "Liberar todas"}</button></div>
         <div className="unit-list">{activePath.units.map((unit, unitIndex) => {

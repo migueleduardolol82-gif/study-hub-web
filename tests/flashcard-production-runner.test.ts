@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runFlashcardProduction, type CardRequester } from "../lib/flashcard-production-runner.ts";
-import { productionProgress, type CardFact } from "../lib/flashcard-production.ts";
+import { appendCardSources, cardSources, productionProgress, type CardFact } from "../lib/flashcard-production.ts";
 import type { LearningPath } from "../lib/learning.ts";
 import { ApiClientError } from "../lib/api-contract.ts";
 
@@ -93,4 +93,28 @@ test("conclusão antiga recebe nova auditoria sem regenerar cartões", async () 
   assert.equal(productionProgress(saved.cardProduction!).complete, false);
   await runFlashcardProduction(saved, path => { saved = structuredClone(path); }, () => {}, new AbortController().signal, requester(body => { assert.equal(body.stage, "audit"); return { facts: [] }; }));
   assert.equal(productionProgress(saved.cardProduction!).complete, true);
+});
+
+test("novo material amplia baralho concluído sem refazer cartões e retoma após falha", async () => {
+  let saved = initial();
+  await runFlashcardProduction(saved, path => { saved = structuredClone(path); }, () => {}, new AbortController().signal, requester(body => body.stage === "inventory" ? { facts: [fact("A")] } : body.stage === "audit" ? { facts: [] } : cards(body.facts)));
+  assert.equal(saved.cardProduction?.status, "complete");
+  saved = appendCardSources(saved, cardSources([{ reference: "Material novo", text: "Fato D." }]));
+  assert.equal(productionProgress(saved.cardProduction!).covered, 1);
+  assert.equal(productionProgress(saved.cardProduction!).complete, false);
+  assert.throws(() => appendCardSources(saved, cardSources([{ reference: "Repetição", text: "Fato D." }])), /já foi adicionado/);
+  let failed = false;
+  await assert.rejects(runFlashcardProduction(saved, path => { saved = structuredClone(path); }, () => {}, new AbortController().signal, requester(body => {
+    if (body.stage === "inventory") return { facts: [fact("D")] };
+    if (body.stage === "audit") return { facts: [] };
+    if (!failed) { failed = true; throw new Error("Falha transitória"); }
+    return cards(body.facts);
+  })), /Falha transitória/);
+  assert.equal(productionProgress(saved.cardProduction!).covered, 1);
+  await runFlashcardProduction(saved, path => { saved = structuredClone(path); }, () => {}, new AbortController().signal, requester(body => {
+    assert.notEqual(body.stage, "inventory");
+    return body.stage === "audit" ? { facts: [] } : cards(body.facts);
+  }));
+  assert.equal(productionProgress(saved.cardProduction!).covered, 2);
+  assert.equal(saved.units.flatMap(unit => unit.lessons.flatMap(lesson => lesson.exercises)).length, 2);
 });

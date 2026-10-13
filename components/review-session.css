@@ -248,6 +248,10 @@
 .detailed-card-production progress { width: 100%; accent-color: var(--accent); }
 .detailed-card-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .detailed-card-actions button { min-height: 44px; }
+.detailed-card-add-more { display: grid; gap: 9px; margin-top: 16px; }
+.detailed-card-add-more label { font-size: 13px; font-weight: 700; color: var(--review-text); }
+.detailed-card-add-more textarea { width: 100%; min-height: 100px; padding: 12px; color: var(--review-text); background: var(--review-surface); border: 1px solid var(--review-line); border-radius: 12px; resize: vertical; }
+.detailed-card-add-more button { justify-self: start; min-height: 42px; }
 .review-card-tools, .review-card-editor > div { display: flex; flex-wrap: wrap; gap: 10px; margin-block: 12px; } .review-card-editor { display: grid; gap: 14px; padding: 16px; border: 1px solid #555; border-radius: 16px; } .review-card-editor label { display: grid; gap: 6px; } .review-card-editor textarea { width: 100%; min-height: 90px; padding: 12px; border: 1px solid #555; border-radius: 8px; background: #17191d; color: #fff; resize: vertical; }
 
 .study-ai-status { padding: 12px 16px; border: 1px solid currentColor; border-radius: 14px; font-size: 13px; }
