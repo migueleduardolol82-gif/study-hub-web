@@ -92,6 +92,7 @@ export function chooseItems(path: LearningPath, progress: PathProgress, mode: Re
     }
     return true;
   });
+  if (mode === "memorizar" && !chosen.length) chosen = source.filter(({ exercise }) => exercise.options.length > 0 && ["multiple_choice", "true_false"].includes(exercise.type));
   if (mode !== "estudar") chosen = shuffle(chosen);
   chosen.sort((a, b) => {
     if (["revisao", "memorizar"].includes(mode)) {

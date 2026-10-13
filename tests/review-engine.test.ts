@@ -19,7 +19,7 @@ test("contrato binário rejeita booleano textual, resposta parcial e contradiç�
 test("trocar modo não altera a trilha e mantém identidades do banco", () => {
   const original = JSON.stringify(path);
   for (const mode of ["estudar", "flashcards", "dominio"] as const) assert.equal(chooseItems(path, emptyPathProgress, mode).length, 2);
-  assert.equal(chooseItems(path, emptyPathProgress, "memorizar").length, 0);
+  assert.equal(chooseItems(path, emptyPathProgress, "memorizar").length, 1, "trilhas sem flashcards usam questões objetivas como alternativa");
   assert.equal(JSON.stringify(path), original);
   assert.equal(chooseItems(path, emptyPathProgress, "hard")[0].exerciseId, "e2");
   assert.equal(chooseItems(path, emptyPathProgress, "speed")[0].exerciseId, "e2");
@@ -40,6 +40,16 @@ test("memorizar usa cartões e oferece alternativas distintas sem revelar a resp
   assert.deepEqual(memorizeOptions(deck, cards[0]), options);
   const single = { ...deck, units: deck.units.map(unit => ({ ...unit, lessons: unit.lessons.map(lesson => ({ ...lesson, exercises: [cards[0]] })) })) };
   assert.deepEqual(new Set(memorizeOptions(single, cards[0])), new Set(["Água", "Ainda não sei"]));
+});
+test("deck com cartões e quiz oferece sessões em todos os modos principais", () => {
+  const card = { ...exercise, id: "card-1", type: "flashcard" as const, prompt: "O que é capital?", answer: "Valor inicial", explanation: "Valor inicial", options: [] };
+  const quiz = { ...exercise, id: "quiz-1", type: "multiple_choice" as const, options: ["Valor inicial", "Taxa", "Prazo", "Juros"], answer: "Valor inicial", difficulty: "avancado" as const };
+  const deck: LearningPath = { ...path, units: path.units.map(unit => ({ ...unit, lessons: unit.lessons.map(lesson => ({ ...lesson, exercises: [card, quiz] })) })) };
+  const withError = recordAttempt(emptyPathProgress, { ...attempt, exerciseId: card.id, grade: { ...grade, correct: false } });
+  for (const mode of ["estudar", "memorizar", "flashcards", "speed", "hard", "dominio"] as const) {
+    assert.ok(newReviewSession(deck, withError, mode, "all").items.length > 0, mode);
+  }
+  assert.ok(newReviewSession(deck, withError, "revisao", "all").items.length > 0);
 });
 test("escopo por unidade e conceito", () => {
   assert.equal(chooseItems(path, emptyPathProgress, "flashcards", "u1").length, 2);

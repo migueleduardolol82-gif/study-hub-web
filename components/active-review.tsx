@@ -8,6 +8,8 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { loadCardSources, produceFlashcards } from "@/lib/flashcard-production-client";
 import { productionProgress } from "@/lib/flashcard-production";
+import { studyMaterial } from "@/lib/study-context";
+import { validateTutorAnswer } from "@/lib/learning-tutor";
 
 import { BarChart3, BookOpen, BrainCircuit, Check, ChevronRight, Clock3, FileText, Gauge, Layers3, Library, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, ShieldCheck, Sparkles, Target, Upload, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -57,6 +59,9 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
   const [deckFilter, setDeckFilter] = useState<"all" | "active" | "complete">("all");
   const [deckQuery, setDeckQuery] = useState("");
   const [deckOpen, setDeckOpen] = useState(false);
+  const [chatQuestion, setChatQuestion] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState("");
   const [todayClock] = useState(() => Date.now());
   const [retryLesson, setRetryLesson] = useState<{ path: LearningPath; lesson: LearningLesson } | null>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -98,6 +103,27 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
     const saved = progress.reviewSession;
     if (saved.mode === "speed" && !saved.deadline) setProgressByPath(all => ({ ...all, [activePath.id]: { ...all[activePath.id], reviewSession: { ...saved, deadline: Date.now() + (saved.remainingSeconds ?? 60) * 1000 } } }));
     setSessionOpen(true);
+  }
+
+  async function askStudyChat() {
+    const path = activePath;
+    const question = chatQuestion.trim();
+    if (!path || !question || chatBusy) return;
+    const { material, references } = studyMaterial(path, question);
+    if (!material) { setChatError("Adicione conteúdo a esta trilha antes de perguntar."); return; }
+    setChatBusy(true); setChatError("");
+    try {
+      const priorQuestions = (path.studyQuestions || []).slice(-8).map(item => item.question).join("\n");
+      const raw = await requestAI<unknown>("/api/learning/tutor", {
+        question, material, context: `Trilha: ${path.title}. Perguntas anteriores (interesses do estudante, não fatos):\n${priorQuestions || "Nenhuma."}`.slice(0, 9500),
+        style: "grounded",
+      });
+      const answer = validateTutorAnswer(raw);
+      const entry = { id: crypto.randomUUID(), question, answer: answer.fromMaterial, caveat: answer.caveat, references, askedAt: new Date().toISOString() };
+      setPaths(current => current.map(item => item.id === path.id ? { ...item, studyQuestions: [...(item.studyQuestions || []), entry], updatedAt: entry.askedAt } : item));
+      setChatQuestion("");
+    } catch (error) { setChatError(error instanceof Error ? error.message : "Não foi possível responder agora."); }
+    finally { setChatBusy(false); }
   }
 
   async function prepareLesson(path: LearningPath, item: LearningLesson, signal: AbortSignal, open = true, mode = learningMode) {
@@ -197,12 +223,18 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
     if (requestRef.current) return;
     const controller = new AbortController(); requestRef.current = controller; setBackground(true); setGenerationError(null);
     try {
+      const failures: string[] = [];
       for (const item of path.units.flatMap(unit => unit.lessons).filter(lesson => !lesson.exercises.length)) {
         if (controller.signal.aborted) break;
         markPreparation(path.id, item.id, "processing");
         try { await prepareLesson(path, item, controller.signal, false); }
-        catch (error) { markPreparation(path.id, item.id, "error", error instanceof Error ? error.message : "Falha nesta etapa."); throw error; }
+        catch (error) {
+          if (controller.signal.aborted) break;
+          markPreparation(path.id, item.id, "error", error instanceof Error ? error.message : "Falha nesta etapa.");
+          failures.push(item.title);
+        }
       }
+      if (failures.length) notify(`${failures.length} lição(ões) precisam ser retomadas: ${failures.slice(0, 3).join(", ")}. As demais foram preservadas.`);
     } catch (error) { showGenerationError(error); }
     finally { requestRef.current = null; setBackground(false); setGenerationStage(""); }
   }
@@ -216,7 +248,8 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
         let accumulated = lesson.exercises;
         for (let batch = 0; batch < 2; batch++) {
           setGenerationStage(`Ampliando ${lesson.title} · lote ${batch + 1} de 2`);
-          const data = await requestAI<{ exercises: LearningExercise[] }>("/api/learning/generate", { mode: "bank", theme: activePath.title, lessonTitle: lesson.title, studyNotes: lesson.studyNotes || lesson.description, lessonReferences: lesson.references, concepts: lesson.keyConcepts, existingPrompts: accumulated.map(e => e.prompt), batchKind: learningMode === "hard" ? "hard" : "mixed" }, controller.signal);
+          const cardNotes = lesson.exercises.filter(exercise => exercise.type === "flashcard").map(exercise => `[${exercise.sourceReference || lesson.title}] ${exercise.prompt}\nResposta: ${exercise.answer}`).join("\n\n");
+          const data = await requestAI<{ exercises: LearningExercise[] }>("/api/learning/generate", { mode: "bank", theme: activePath.title, lessonTitle: lesson.title, studyNotes: (cardNotes || lesson.studyNotes || lesson.description).slice(0, 20000), lessonReferences: [...new Set(lesson.exercises.map(exercise => exercise.sourceReference).filter(Boolean))], concepts: lesson.keyConcepts || lesson.exercises.map(exercise => exercise.concept).filter(Boolean), existingPrompts: accumulated.map(e => e.prompt), focusQuestions: (activePath.studyQuestions || []).slice(-12).map(item => item.question), batchKind: learningMode === "hard" ? "hard" : "mixed" }, controller.signal);
           if (!Array.isArray(data.exercises) || !data.exercises.length) throw new Error("O lote chegou vazio. O banco anterior foi preservado.");
           accumulated = mergeQuestionBank(accumulated, data.exercises);
           setPaths(all => all.map(path => path.id === activePath.id ? syncKnowledgeBase({ ...path, updatedAt: new Date().toISOString(), units: path.units.map(unit => ({ ...unit, lessons: unit.lessons.map(l => l.id === lesson.id ? { ...l, exercises: mergeQuestionBank(l.exercises, data.exercises) } : l) })) }) : path));
@@ -329,6 +362,14 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
         {progress.reviewSession && !progress.reviewSession.finished && <button className="continue-session" onClick={resumeSession}><span><small>CONTINUAR SESSÃO</small><b>{modeLabels[progress.reviewSession.mode]} · questão {progress.reviewSession.index + 1}</b></span><ChevronRight /></button>}
       </section>
 
+      <section className="study-chat" aria-label={`Perguntas sobre ${activePath.title}`}>
+        <div className="section-heading"><div><span className="eyebrow">TUTOR DA TRILHA</span><h3>Pergunte sobre este conteúdo</h3></div><span>{activePath.studyQuestions?.length || 0} perguntas</span></div>
+        <p>Respostas baseadas nos trechos desta trilha. Suas dúvidas ficam aqui e ajudam a escolher o foco das próximas questões; elas não viram fatos automaticamente.</p>
+        <div className="study-chat-history" role="log" aria-live="polite">{(activePath.studyQuestions || []).map(item => <article key={item.id}><strong>{item.question}</strong><p>{item.answer}</p>{item.caveat && <small>{item.caveat}</small>}<details><summary>Trechos enviados ao tutor</summary><ul>{item.references.map(reference => <li key={reference}>{reference}</li>)}</ul></details></article>)}{!activePath.studyQuestions?.length && <p>Faça sua primeira pergunta sobre o material deste baralho.</p>}</div>
+        <form onSubmit={event => { event.preventDefault(); void askStudyChat(); }}><label htmlFor="study-chat-question" className="sr-only">Sua pergunta sobre esta trilha</label><textarea id="study-chat-question" value={chatQuestion} onChange={event => setChatQuestion(event.target.value)} maxLength={3000} placeholder="Pergunte algo sobre o conteúdo desta trilha…" /><button className="review-primary" disabled={chatBusy || !chatQuestion.trim()} type="submit">{chatBusy ? "Consultando…" : "Perguntar"}</button></form>
+        {chatError && <p role="alert" className="review-tutor-error">{chatError}</p>}
+      </section>
+
       <section className="review-mode-picker">
         <div className="section-heading"><div><span className="eyebrow">ESCOLHA SUA EXPERIÊNCIA</span><h3>Como você quer estudar hoje?</h3></div>{background && <span className="background-status"><LoaderCircle className="spin" /> {generationStage || "Preparando conteúdo"}</span>}</div>
         <div className="review-mode-grid">{(reviewModes.filter(id => id !== "desafio") as Exclude<ReviewMode, "desafio">[]).map(id => <button key={id} className={learningMode === id ? "active" : ""} aria-pressed={learningMode === id} onClick={() => setLearningMode(id)}><span>{modeInfo[id].icon}</span><b>{modeLabels[id]}</b><small>{modeInfo[id].text}</small></button>)}</div>
@@ -360,7 +401,7 @@ export function ActiveReview({ paths, setPaths, progressByPath, setProgressByPat
             <div className="unit-lessons">{unit.lessons.map(item => <button key={item.id} disabled={!unlocked} onClick={() => void startLesson(item, unlocked)}><span className={item.exercises.length ? "ready-dot" : item.preparation === "processing" ? "processing-dot" : "waiting-dot"} /> <span><b>{item.title}</b><small>{item.exercises.length ? `${item.exercises.length} questões disponíveis` : item.preparation === "processing" ? "Processando" : item.preparation === "error" ? "Falhou — toque para tentar novamente" : "Aguardando"}</small></span><ChevronRight /></button>)}</div>
           </details>;
         })}</div>
-        <div className="processing-summary"><span>{readyLessons} lições prontas</span><span>{processingLessons} processando</span><span>{Math.max(0, flatLessons.length - readyLessons - processingLessons)} aguardando</span><button disabled={background || busy} onClick={() => void prepareRemaining(activePath)}>{background ? "Processando…" : "Continuar processamento"}</button><button disabled={background || busy} onClick={() => void expandBank()}>Gerar novas variações</button></div>
+        <div className="processing-summary"><span>{readyLessons} lições prontas</span><span>{processingLessons} processando</span><span>{Math.max(0, flatLessons.length - readyLessons - processingLessons)} aguardando</span><button disabled={background || busy} onClick={() => void prepareRemaining(activePath)}>{background ? "Processando…" : "Continuar processamento"}</button><button disabled={background || busy} onClick={() => void expandBank()}>Gerar quizzes e novas questões</button></div>
       </section>
     </> : null}
 

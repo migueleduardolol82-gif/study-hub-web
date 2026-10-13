@@ -74,6 +74,18 @@
 .review-tutor-panel article { padding: 16px; background: #171a1f; border-radius: 11px; }
 .review-tutor-panel article h4 { color: var(--study-accent); }
 .review-tutor-error { color: #ffc0b5 !important; }
+.study-chat { display: grid; gap: 14px; margin: 24px 0; padding: clamp(16px, 3vw, 28px); border: 1px solid color-mix(in srgb, var(--study-accent) 22%, #313b42); border-radius: 22px; background: color-mix(in srgb, #101920 86%, transparent); }
+.study-chat > p { margin: 0; color: #b9c5cb; }
+.study-chat-history { display: grid; gap: 10px; max-height: 360px; overflow-y: auto; }
+.study-chat-history article { padding: 14px; border: 1px solid #344149; border-radius: 14px; background: #13212a; }
+.study-chat-history article p { white-space: pre-wrap; line-height: 1.5; }
+.study-chat-history article small { color: #b9c5cb; }
+.study-chat-history details { color: #a7dce7; font-size: .85rem; }
+.study-chat-history ul { margin: 6px 0; padding-left: 18px; }
+.study-chat form { display: flex; align-items: stretch; gap: 10px; }
+.study-chat textarea { flex: 1; min-width: 0; min-height: 60px; resize: vertical; padding: 12px; border: 1px solid #46545b; border-radius: 12px; background: #0b171d; color: #f5fafb; font: inherit; }
+.study-chat form button { min-width: 110px; }
+@media (max-width: 600px) { .study-chat form { flex-direction: column; } }
 .learning-modes > div { flex-wrap: wrap; overflow-x: visible; }
 .learning-modes > label { display: grid; gap: 8px; margin: 16px 0; }
 .learning-modes select { width: 100%; min-width: 0; min-height: 48px; font-size: 16px; background: #12151a; color: #f2f4f7; padding: 12px; border-radius: 10px; }

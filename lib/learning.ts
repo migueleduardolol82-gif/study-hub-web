@@ -124,6 +124,7 @@ export type LearningUnit = {
 
 export type LearningPath = {
   cardProduction?: import("./flashcard-production.ts").CardProduction;
+  studyQuestions?: import("./study-context.ts").StudyQuestion[];
   id: string;
   title: string;
   themeId?: string;
